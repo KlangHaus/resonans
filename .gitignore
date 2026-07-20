@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+
+.env
+.env.local
+*.log
+.DS_Store
+.vscode/
+.idea/
+
+# Go
+/resonans
+coverage.out
