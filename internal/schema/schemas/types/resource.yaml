@@ -1,0 +1,6 @@
+type: resource
+fields:
+  - { name: file, type: asset, required: true }
+  - { name: description, type: text, i18n: true }
+list:
+  columns: [title, status, updatedAt]

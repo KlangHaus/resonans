@@ -1,0 +1,10 @@
+type: lesson
+fields:
+  - { name: summary, type: text, i18n: true }
+  - { name: estimatedMinutes, type: number }
+  - { name: module, type: reference, ref: module }
+  - name: body
+    type: blocks
+    allow: [rich-text, video-embed, image, callout, code, download, iframe-embed, quiz, columns]
+list:
+  columns: [title, module, status, updatedAt]

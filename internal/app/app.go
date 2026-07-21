@@ -20,6 +20,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/httpapi"
 	"github.com/KlangHaus/resonans/internal/observability"
 	"github.com/KlangHaus/resonans/internal/persistence"
+	"github.com/KlangHaus/resonans/internal/schema"
 )
 
 // version is stamped via -ldflags at build time.
@@ -123,9 +124,17 @@ func Run(ctx context.Context) error {
 		logger.Warn("RESONANS_DELIVERY_TOKEN not set — /delivery trusts X-Scope-OrgID directly (dev/test only)")
 	}
 
+	// --- Schema-registry (kode-defineret content-model, Fase 1) ---
+	registry, err := schema.DefaultRegistry()
+	if err != nil {
+		return fmt.Errorf("load schema registry: %w", err)
+	}
+	logger.Info("schema_registry_loaded", "docTypes", len(registry.DocTypes()), "blocks", len(registry.Blocks()))
+
 	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
 		Store:    store,
+		Registry: registry,
 		Verifier: verifier,
 		Logger:   logger,
 	})

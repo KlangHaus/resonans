@@ -52,11 +52,12 @@ Alle ruter kræver en tenant (fra verificeret JWT `org`-claim, eller `X-Dev-Tena
 
 | Metode | Rute                                   |
 | ------ | -------------------------------------- |
+| GET    | `/api/v1/schema` · `/api/v1/schema/{type}` (editor form/palette-kilde) |
 | GET    | `/api/v1/documents?type=&status=`      |
 | GET    | `/api/v1/documents/{id}`               |
 | GET    | `/api/v1/content/{type}/{slug}`        |
-| POST   | `/api/v1/documents`                    |
-| PUT    | `/api/v1/documents/{id}`               |
+| POST   | `/api/v1/documents` (body valideres mod schema) |
+| PUT    | `/api/v1/documents/{id}` (body valideres mod schema) |
 | POST   | `/api/v1/documents/{id}/publish`       |
 | GET    | `/healthz`, `/readyz` (uautentificeret)|
 
@@ -76,12 +77,20 @@ kun trustes når service-token matcher (aldrig fra en slutbruger/browser). Serve
 Follow-up: cursor-pagination (v1 soft-cap 200), reference-ekspansion (course→modules→lessons),
 draft-preview via preview-token (Fase 5).
 
-## Content-model
+## Content-model + schema-registry (Fase 1)
 
-Content-typer er **ikke hardcodede** — de defineres i schema-registret pr. space (Fase 1):
-`course → module → lesson`, `page`, `post`, `resource`. Et document er på storage-laget et
-typet, tenant-ejet JSONB-body valideret mod registret. Blok-biblioteket er delt på tværs af
-alle content-typer.
+Content-typer er **ikke hardcodede** — de defineres deklarativt i
+`internal/schema/schemas/` (YAML, git-versioneret): doc-typer (`course → module →
+lesson`, `page`, `post`, `resource`) i `types/*.yaml` + et delt **blok-bibliotek**
+(`blocks.yaml`, 14 blokke: indhold + marketing). Hver doc-type deklarerer på sit
+`body`-felt en **`allow`-liste** (ét bibliotek, rigtige blokke pr. domæne) + `list.columns`
+til editorens doc-liste.
+
+- Registret loades ved boot; et document-body (JSONB) **valideres mod schemaet** på
+  write (required-felter, kendte felter, blok-allowlist, field-level da/en-shape,
+  nested blokke/arrays). `title`/`slug`/`status` er metadata-kolonner (ikke body-felter).
+- `GET /api/v1/schema` serverer registret til editoren (form- + palette-generering).
+- Felt-typer: `string · text · richtext · number · boolean · asset · reference · blocks · array`.
 
 ## Deploy-kontrakt
 

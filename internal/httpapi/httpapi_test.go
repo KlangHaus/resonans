@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/schema"
 )
 
 const (
@@ -15,9 +16,18 @@ const (
 	tenantB = "22222222-2222-2222-2222-222222222222"
 )
 
+func mustRegistry(t *testing.T) *schema.Registry {
+	t.Helper()
+	r, err := schema.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	return r
+}
+
 // testRouter builds a router in dev mode (nil verifier → X-Dev-Tenant header).
-func testRouter() http.Handler {
-	return NewRouter(Deps{Store: content.NewMemoryStore()})
+func testRouter(t *testing.T) http.Handler {
+	return NewRouter(Deps{Store: content.NewMemoryStore(), Registry: mustRegistry(t)})
 }
 
 func do(t *testing.T, h http.Handler, method, path, tenant string, body any) *httptest.ResponseRecorder {
@@ -38,10 +48,13 @@ func do(t *testing.T, h http.Handler, method, path, tenant string, body any) *ht
 }
 
 func TestCreatePublishReadFlow(t *testing.T) {
-	h := testRouter()
+	h := testRouter(t)
 
 	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
-		"type": "lesson", "slug": "home", "title": "Home", "body": map[string]any{"blocks": []any{}},
+		"type": "lesson", "slug": "home", "title": "Home",
+		"body": map[string]any{
+			"body": []any{map[string]any{"_type": "rich-text", "content": map[string]any{"da": "Hej"}}},
+		},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, body=%s", rec.Code, rec.Body)
@@ -50,18 +63,14 @@ func TestCreatePublishReadFlow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// Tenant comes from the verified actor (header), never the body.
 	if created.TenantID.String() != tenantA {
 		t.Fatalf("created.TenantID = %s, want %s", created.TenantID, tenantA)
 	}
 
-	// Draft not visible on published path.
 	rec = do(t, h, http.MethodGet, "/api/v1/content/lesson/home", tenantA, nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("draft published-read = %d, want 404", rec.Code)
 	}
-
-	// Publish, then read.
 	rec = do(t, h, http.MethodPost, "/api/v1/documents/"+created.ID.String()+"/publish", tenantA, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("publish status = %d", rec.Code)
@@ -72,27 +81,72 @@ func TestCreatePublishReadFlow(t *testing.T) {
 	}
 }
 
+func TestCreateUnknownType(t *testing.T) {
+	h := testRouter(t)
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "gizmo", "slug": "x", "title": "X",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown type = %d, want 400", rec.Code)
+	}
+}
+
+func TestCreateInvalidBody(t *testing.T) {
+	h := testRouter(t)
+	// "blocks" is not a field of lesson (the field is "body") → schema rejects.
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "lesson", "slug": "x", "title": "X",
+		"body": map[string]any{"blocks": []any{}},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid body = %d, want 400", rec.Code)
+	}
+}
+
+func TestSchemaEndpoints(t *testing.T) {
+	h := testRouter(t)
+	// Schema is authenticated but not tenant-scoped — a dev tenant still works.
+	rec := do(t, h, http.MethodGet, "/api/v1/schema", tenantA, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("schema all = %d", rec.Code)
+	}
+	var all struct {
+		DocTypes []schema.DocType   `json:"docTypes"`
+		Blocks   []schema.BlockType `json:"blocks"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &all)
+	if len(all.DocTypes) != 6 || len(all.Blocks) == 0 {
+		t.Errorf("schema payload: %d types, %d blocks", len(all.DocTypes), len(all.Blocks))
+	}
+
+	if rec := do(t, h, http.MethodGet, "/api/v1/schema/lesson", tenantA, nil); rec.Code != http.StatusOK {
+		t.Fatalf("schema/lesson = %d", rec.Code)
+	}
+	if rec := do(t, h, http.MethodGet, "/api/v1/schema/gizmo", tenantA, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("schema/gizmo = %d, want 404", rec.Code)
+	}
+}
+
 func TestNoTenantForbidden(t *testing.T) {
-	h := testRouter()
-	rec := do(t, h, http.MethodGet, "/api/v1/documents", "", nil) // no X-Dev-Tenant
+	h := testRouter(t)
+	rec := do(t, h, http.MethodGet, "/api/v1/documents", "", nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
 	}
 }
 
 func TestTenantIsolation(t *testing.T) {
-	h := testRouter()
+	h := testRouter(t)
 
 	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
 		"type": "lesson", "slug": "secret", "title": "A",
 	})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("create = %d", rec.Code)
+		t.Fatalf("create = %d, body=%s", rec.Code, rec.Body)
 	}
 	var a content.Document
 	_ = json.Unmarshal(rec.Body.Bytes(), &a)
 
-	// Tenant B lists → empty.
 	rec = do(t, h, http.MethodGet, "/api/v1/documents", tenantB, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list = %d", rec.Code)
@@ -105,7 +159,6 @@ func TestTenantIsolation(t *testing.T) {
 		t.Errorf("tenant B sees %d docs, want 0", len(listResp.Documents))
 	}
 
-	// Tenant B fetches A's document by id → 404.
 	rec = do(t, h, http.MethodGet, "/api/v1/documents/"+a.ID.String(), tenantB, nil)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("cross-tenant get = %d, want 404", rec.Code)
@@ -113,7 +166,7 @@ func TestTenantIsolation(t *testing.T) {
 }
 
 func TestInvalidTenant(t *testing.T) {
-	h := testRouter()
+	h := testRouter(t)
 	rec := do(t, h, http.MethodGet, "/api/v1/documents", "not-a-uuid", nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403 (invalid tenant)", rec.Code)
@@ -121,7 +174,7 @@ func TestInvalidTenant(t *testing.T) {
 }
 
 func TestGetInvalidID(t *testing.T) {
-	h := testRouter()
+	h := testRouter(t)
 	rec := do(t, h, http.MethodGet, "/api/v1/documents/not-a-uuid", tenantA, nil)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
@@ -129,10 +182,10 @@ func TestGetInvalidID(t *testing.T) {
 }
 
 func TestSlugConflict(t *testing.T) {
-	h := testRouter()
+	h := testRouter(t)
 	payload := map[string]any{"type": "post", "slug": "dup", "title": "Dup"}
 	if rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, payload); rec.Code != http.StatusCreated {
-		t.Fatalf("first create = %d", rec.Code)
+		t.Fatalf("first create = %d, body=%s", rec.Code, rec.Body)
 	}
 	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, payload)
 	if rec.Code != http.StatusConflict {
@@ -141,7 +194,7 @@ func TestSlugConflict(t *testing.T) {
 }
 
 func TestCreateInvalidJSON(t *testing.T) {
-	h := testRouter()
+	h := testRouter(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/documents", bytes.NewBufferString("{bad"))
 	req.Header.Set("X-Dev-Tenant", tenantA)
 	rec := httptest.NewRecorder()

@@ -1,0 +1,10 @@
+type: module
+fields:
+  - { name: description, type: text, i18n: true }
+  - { name: course, type: reference, ref: course }
+  - name: lessons
+    type: array
+    of:
+      - { name: lesson, type: reference, ref: lesson, required: true }
+list:
+  columns: [title, course, status, updatedAt]

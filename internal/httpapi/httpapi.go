@@ -18,27 +18,34 @@ import (
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/schema"
 )
 
 // Deps are the collaborators the API needs.
 type Deps struct {
 	Store    content.Store
+	Registry *schema.Registry
 	Verifier auth.Verifier // nil in dev/test (X-Dev-Tenant header path)
 	Logger   *slog.Logger
 }
 
 // Handlers holds the wired dependencies for the route handlers.
 type Handlers struct {
-	store content.Store
-	log   *slog.Logger
+	store    content.Store
+	registry *schema.Registry
+	log      *slog.Logger
 }
 
 // NewRouter builds the API handler: content routes wrapped in the JWT-auth
 // middleware (which resolves the tenant onto the request context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, log: d.Logger}
 
 	mux := http.NewServeMux()
+	// Schema (editor form/palette source) — authenticated, not tenant-scoped.
+	mux.HandleFunc("GET /api/v1/schema", h.schemaAll)
+	mux.HandleFunc("GET /api/v1/schema/{type}", h.schemaOne)
+	// Documents — tenant-scoped authoring.
 	mux.HandleFunc("GET /api/v1/documents", h.listDocuments)
 	mux.HandleFunc("GET /api/v1/documents/{id}", h.getDocument)
 	mux.HandleFunc("GET /api/v1/content/{type}/{slug}", h.getPublished)
@@ -47,6 +54,34 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/documents/{id}/publish", h.publishDocument)
 
 	return auth.Middleware(d.Verifier, d.Logger)(mux)
+}
+
+// schemaAll serves the full registry (doc-types + block library) so the editor
+// can render nav, forms and the block palette.
+func (h *Handlers) schemaAll(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"docTypes": h.registry.DocTypes(),
+		"blocks":   h.registry.Blocks(),
+	})
+}
+
+func (h *Handlers) schemaOne(w http.ResponseWriter, r *http.Request) {
+	dt, ok := h.registry.DocType(r.PathValue("type"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, errBody("unknown doc-type"))
+		return
+	}
+	writeJSON(w, http.StatusOK, dt)
+}
+
+// validateBody checks a document body against its doc-type schema. Schema
+// errors (unknown type / invalid body) map to 400.
+func (h *Handlers) validateBody(w http.ResponseWriter, docType string, body []byte) bool {
+	if err := schema.ValidateDocument(h.registry, docType, body); err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody(err.Error()))
+		return false
+	}
+	return true
 }
 
 // tenant resolves the authoritative tenant from the verified actor. Missing or
@@ -123,6 +158,13 @@ func (h *Handlers) createDocument(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
+	body := in.Body
+	if len(body) == 0 {
+		body = []byte("{}")
+	}
+	if !h.validateBody(w, in.Type, body) {
+		return
+	}
 	d, err := h.store.Create(r.Context(), tid, in)
 	if err != nil {
 		h.writeErr(w, err)
@@ -144,6 +186,17 @@ func (h *Handlers) updateDocument(w http.ResponseWriter, r *http.Request) {
 	var in content.UpdateInput
 	if !decodeJSON(w, r, &in) {
 		return
+	}
+	// A replaced body must satisfy the document's doc-type schema.
+	if in.Body != nil {
+		existing, err := h.store.Get(r.Context(), tid, id)
+		if err != nil {
+			h.writeErr(w, err)
+			return
+		}
+		if !h.validateBody(w, existing.Type, *in.Body) {
+			return
+		}
 	}
 	d, err := h.store.Update(r.Context(), tid, id, in)
 	if err != nil {
