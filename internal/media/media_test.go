@@ -6,6 +6,9 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -93,7 +96,7 @@ func TestURLBuilder(t *testing.T) {
 }
 
 func TestVimeoProvider(t *testing.T) {
-	if got := (VimeoProvider{}).EmbedURL("123456"); got != "https://player.vimeo.com/video/123456" {
+	if got := NewVimeoProvider().EmbedURL("123456"); got != "https://player.vimeo.com/video/123456" {
 		t.Errorf("embed = %q", got)
 	}
 	if _, ok := ProviderByName("vimeo"); !ok {
@@ -101,5 +104,38 @@ func TestVimeoProvider(t *testing.T) {
 	}
 	if _, ok := ProviderByName("nope"); ok {
 		t.Error("unknown provider should not resolve")
+	}
+}
+
+func TestVimeoMetadata(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("url"); got != "https://vimeo.com/98765" {
+			t.Errorf("oembed url param = %q", got)
+		}
+		_, _ = io.WriteString(w, `{"title":"Organisk kemi","thumbnail_url":"https://i.vimeocdn.com/x.jpg","duration":610,"width":1920,"height":1080}`)
+	}))
+	defer srv.Close()
+
+	p := &VimeoProvider{oembedBase: srv.URL, client: srv.Client()}
+	meta, err := p.Metadata(context.Background(), "98765")
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if meta.Title != "Organisk kemi" || meta.DurationSeconds != 610 || meta.Width != 1920 {
+		t.Errorf("meta = %+v", meta)
+	}
+	if meta.ThumbnailURL == "" {
+		t.Error("thumbnail should be set")
+	}
+}
+
+func TestVimeoMetadataNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	p := &VimeoProvider{oembedBase: srv.URL, client: srv.Client()}
+	if _, err := p.Metadata(context.Background(), "private"); err == nil {
+		t.Fatal("expected error for non-200 oembed (private/not found)")
 	}
 }

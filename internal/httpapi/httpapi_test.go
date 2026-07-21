@@ -33,7 +33,7 @@ func testRouter(t *testing.T) http.Handler {
 		Store:    content.NewMemoryStore(),
 		Registry: mustRegistry(t),
 		Media:    mediaSvc,
-		Video:    media.VimeoProvider{},
+		Video:    media.NewVimeoProvider(),
 	})
 }
 

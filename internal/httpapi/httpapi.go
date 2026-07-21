@@ -67,6 +67,7 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/assets/{id}", h.getAsset)
 	// Video plugin (opt-in).
 	mux.HandleFunc("GET /api/v1/video/embed", h.videoEmbed)
+	mux.HandleFunc("GET /api/v1/video/resolve", h.videoResolve)
 
 	return auth.Middleware(d.Verifier, d.Logger)(mux)
 }
@@ -165,6 +166,32 @@ func (h *Handlers) videoEmbed(w http.ResponseWriter, r *http.Request) {
 		"provider": h.video.Name(),
 		"embedUrl": h.video.EmbedURL(id),
 	})
+}
+
+// videoResolve returns the embed URL plus best-effort public metadata (title,
+// thumbnail, duration) for the video-heavy authoring experience. If metadata
+// resolution fails (private video / provider down) it still returns the embed
+// URL so the editor degrades gracefully.
+func (h *Handlers) videoResolve(w http.ResponseWriter, r *http.Request) {
+	if h.video == nil {
+		writeJSON(w, http.StatusNotFound, errBody("video plugin not enabled"))
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, errBody("missing id"))
+		return
+	}
+	resp := map[string]any{"provider": h.video.Name(), "embedUrl": h.video.EmbedURL(id)}
+	if meta, err := h.video.Metadata(r.Context(), id); err == nil {
+		resp["meta"] = meta
+	} else {
+		resp["metaAvailable"] = false
+		if h.log != nil {
+			h.log.Warn("video_metadata_unavailable", "id", id, "err", err)
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // schemaAll serves the full registry (doc-types + block library) so the editor
