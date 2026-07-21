@@ -59,6 +59,8 @@ Alle ruter kræver en tenant (fra verificeret JWT `org`-claim, eller `X-Dev-Tena
 | POST   | `/api/v1/documents` (body valideres mod schema) |
 | PUT    | `/api/v1/documents/{id}` (body valideres mod schema) |
 | POST   | `/api/v1/documents/{id}/publish`       |
+| POST   | `/api/v1/assets` (multipart `file`) · GET `/api/v1/assets` · GET `/api/v1/assets/{id}` |
+| GET    | `/api/v1/video/embed?id=` (video-plugin, tilvælgeligt) |
 | GET    | `/healthz`, `/readyz` (uautentificeret)|
 
 ### Delivery-API (read, published-only) — Fase 2
@@ -91,6 +93,16 @@ til editorens doc-liste.
   nested blokke/arrays). `title`/`slug`/`status` er metadata-kolonner (ikke body-felter).
 - `GET /api/v1/schema` serverer registret til editoren (form- + palette-generering).
 - Felt-typer: `string · text · richtext · number · boolean · asset · reference · blocks · array`.
+
+## Media (Fase 3)
+
+Assets (billeder + filer) er tenant-scoped (RLS, som documents). Upload → **Bunny Storage**
+(config-gated backend; in-memory i dev); metadata i `assets`-tabellen (kind, mime, dimensioner,
+hotspot). Content refererer et asset via id (`asset`-felt-type); delivery/editor bygger en
+**Bunny-CDN-URL** m/ transform-params (resize på edge). **Video** = tilvælgeligt plugin
+(`RESONANS_VIDEO_PROVIDER=vimeo`) — video-embed-blok → Vimeo player-URL. Follow-up:
+hotspot/crop→transform-mapping, oEmbed-thumbnails (Vimeo public), per-tenant Vimeo-token
+(Etude-boundary), image-varianter-precompute.
 
 ## Deploy-kontrakt
 

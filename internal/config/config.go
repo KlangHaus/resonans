@@ -46,11 +46,26 @@ type Config struct {
 	// header — a cross-tenant read hole).
 	DeliveryToken string
 
+	// Media / object storage (Fase 3). Bunny Storage holds asset bytes; the CDN
+	// base is the pull-zone URL used to build public asset URLs. Empty storage
+	// config => in-memory backend (dev/test only). VideoProvider opt-in-enables a
+	// video plugin (e.g. "vimeo"); empty = disabled.
+	StorageEndpoint string
+	StorageZone     string
+	StorageKey      string
+	CDNBase         string
+	VideoProvider   string
+
 	// OTel — from day one (product brief). tenant.id is set per-request on
 	// spans, never on the resource (Beslutning J2c).
 	OTelServiceName      string
 	OTelServiceNamespace string
 	OTelEnabled          bool
+}
+
+// StorageConfigured reports whether Bunny Storage is fully configured.
+func (c *Config) StorageConfigured() bool {
+	return c.StorageEndpoint != "" && c.StorageZone != "" && c.StorageKey != ""
 }
 
 func getenv(key, def string) string {
@@ -95,6 +110,12 @@ func Load() (*Config, error) {
 		JWTIssuer:     getenvOptional("RESONANS_JWT_ISSUER"),
 		JWKSURL:       getenvOptional("RESONANS_JWKS_URL"),
 		DeliveryToken: getenvOptional("RESONANS_DELIVERY_TOKEN"),
+
+		StorageEndpoint: getenvOptional("BUNNY_STORAGE_ENDPOINT"),
+		StorageZone:     getenvOptional("BUNNY_STORAGE_ZONE"),
+		StorageKey:      getenvOptional("BUNNY_STORAGE_KEY"),
+		CDNBase:         getenv("BUNNY_CDN_BASE", "http://localhost:3000/_assets"),
+		VideoProvider:   getenvOptional("RESONANS_VIDEO_PROVIDER"),
 
 		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "klanghaus-resonans"),
 		OTelServiceNamespace: getenv("OTEL_SERVICE_NAMESPACE", "klanghaus"),

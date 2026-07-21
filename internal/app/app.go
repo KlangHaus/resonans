@@ -18,6 +18,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/content"
 	"github.com/KlangHaus/resonans/internal/delivery"
 	"github.com/KlangHaus/resonans/internal/httpapi"
+	"github.com/KlangHaus/resonans/internal/media"
 	"github.com/KlangHaus/resonans/internal/observability"
 	"github.com/KlangHaus/resonans/internal/persistence"
 	"github.com/KlangHaus/resonans/internal/schema"
@@ -131,10 +132,43 @@ func Run(ctx context.Context) error {
 	}
 	logger.Info("schema_registry_loaded", "docTypes", len(registry.DocTypes()), "blocks", len(registry.Blocks()))
 
+	// --- Media (Fase 3): asset store + storage backend + optional video plugin ---
+	var mediaStore media.Store
+	if pool != nil {
+		mediaStore = media.NewPostgresStore(pool)
+	} else {
+		mediaStore = media.NewMemoryStore()
+	}
+	var backend media.StorageBackend
+	switch {
+	case cfg.StorageConfigured():
+		backend = media.NewBunnyBackend(cfg.StorageEndpoint, cfg.StorageZone, cfg.StorageKey)
+		logger.Info("storage_backend", "backend", "bunny")
+	case cfg.IsProduction():
+		logger.Warn("BUNNY_STORAGE_* not set in production — asset bytes use non-persistent in-memory backend")
+		backend = media.NewMemoryBackend()
+	default:
+		logger.Warn("BUNNY_STORAGE_* not set — using in-memory storage backend (dev/test)")
+		backend = media.NewMemoryBackend()
+	}
+	mediaSvc := media.NewService(mediaStore, backend, media.NewURLBuilder(cfg.CDNBase))
+
+	var videoProvider media.VideoProvider
+	if cfg.VideoProvider != "" {
+		vp, ok := media.ProviderByName(cfg.VideoProvider)
+		if !ok {
+			return fmt.Errorf("unknown video provider %q", cfg.VideoProvider)
+		}
+		videoProvider = vp
+		logger.Info("video_plugin_enabled", "provider", vp.Name())
+	}
+
 	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
 		Store:    store,
 		Registry: registry,
+		Media:    mediaSvc,
+		Video:    videoProvider,
 		Verifier: verifier,
 		Logger:   logger,
 	})

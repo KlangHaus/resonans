@@ -11,6 +11,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -18,14 +19,20 @@ import (
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/media"
 	"github.com/KlangHaus/resonans/internal/schema"
 )
+
+// maxUploadBytes caps an asset upload (25 MiB).
+const maxUploadBytes = 25 << 20
 
 // Deps are the collaborators the API needs.
 type Deps struct {
 	Store    content.Store
 	Registry *schema.Registry
-	Verifier auth.Verifier // nil in dev/test (X-Dev-Tenant header path)
+	Media    *media.Service
+	Video    media.VideoProvider // nil when no video plugin is configured
+	Verifier auth.Verifier       // nil in dev/test (X-Dev-Tenant header path)
 	Logger   *slog.Logger
 }
 
@@ -33,13 +40,15 @@ type Deps struct {
 type Handlers struct {
 	store    content.Store
 	registry *schema.Registry
+	media    *media.Service
+	video    media.VideoProvider
 	log      *slog.Logger
 }
 
 // NewRouter builds the API handler: content routes wrapped in the JWT-auth
 // middleware (which resolves the tenant onto the request context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, registry: d.Registry, log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, log: d.Logger}
 
 	mux := http.NewServeMux()
 	// Schema (editor form/palette source) — authenticated, not tenant-scoped.
@@ -52,8 +61,110 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/documents", h.createDocument)
 	mux.HandleFunc("PUT /api/v1/documents/{id}", h.updateDocument)
 	mux.HandleFunc("POST /api/v1/documents/{id}/publish", h.publishDocument)
+	// Media assets — tenant-scoped.
+	mux.HandleFunc("POST /api/v1/assets", h.uploadAsset)
+	mux.HandleFunc("GET /api/v1/assets", h.listAssets)
+	mux.HandleFunc("GET /api/v1/assets/{id}", h.getAsset)
+	// Video plugin (opt-in).
+	mux.HandleFunc("GET /api/v1/video/embed", h.videoEmbed)
 
 	return auth.Middleware(d.Verifier, d.Logger)(mux)
+}
+
+type assetResponse struct {
+	media.Asset
+	URL string `json:"url"`
+}
+
+func (h *Handlers) assetWithURL(a media.Asset) assetResponse {
+	return assetResponse{Asset: a, URL: h.media.URL(a, media.Transform{})}
+}
+
+func (h *Handlers) uploadAsset(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("expected multipart form field 'file'"))
+		return
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("could not read upload"))
+		return
+	}
+	mime := header.Header.Get("Content-Type")
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	a, err := h.media.Upload(r.Context(), tid, header.Filename, mime, data)
+	if err != nil {
+		if h.log != nil {
+			h.log.Error("asset_upload_error", "err", err)
+		}
+		writeJSON(w, http.StatusInternalServerError, errBody("upload failed"))
+		return
+	}
+	writeJSON(w, http.StatusCreated, h.assetWithURL(a))
+}
+
+func (h *Handlers) listAssets(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	assets, err := h.media.List(r.Context(), tid)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
+		return
+	}
+	out := make([]assetResponse, 0, len(assets))
+	for _, a := range assets {
+		out = append(out, h.assetWithURL(a))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"assets": out})
+}
+
+func (h *Handlers) getAsset(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	a, err := h.media.Get(r.Context(), tid, id)
+	if err != nil {
+		if errors.Is(err, media.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, errBody("not found"))
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
+		return
+	}
+	writeJSON(w, http.StatusOK, h.assetWithURL(a))
+}
+
+func (h *Handlers) videoEmbed(w http.ResponseWriter, r *http.Request) {
+	if h.video == nil {
+		writeJSON(w, http.StatusNotFound, errBody("video plugin not enabled"))
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, errBody("missing id"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"provider": h.video.Name(),
+		"embedUrl": h.video.EmbedURL(id),
+	})
 }
 
 // schemaAll serves the full registry (doc-types + block library) so the editor

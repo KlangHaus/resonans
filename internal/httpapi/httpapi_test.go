@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/media"
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
@@ -27,7 +28,13 @@ func mustRegistry(t *testing.T) *schema.Registry {
 
 // testRouter builds a router in dev mode (nil verifier → X-Dev-Tenant header).
 func testRouter(t *testing.T) http.Handler {
-	return NewRouter(Deps{Store: content.NewMemoryStore(), Registry: mustRegistry(t)})
+	mediaSvc := media.NewService(media.NewMemoryStore(), media.NewMemoryBackend(), media.NewURLBuilder("https://cdn.test"))
+	return NewRouter(Deps{
+		Store:    content.NewMemoryStore(),
+		Registry: mustRegistry(t),
+		Media:    mediaSvc,
+		Video:    media.VimeoProvider{},
+	})
 }
 
 func do(t *testing.T, h http.Handler, method, path, tenant string, body any) *httptest.ResponseRecorder {
