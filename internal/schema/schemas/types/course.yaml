@@ -1,0 +1,14 @@
+# Schema `fields` describe the document BODY (JSONB) content. title/slug/status
+# are metadata columns (managed by the store), not body fields; list.columns may
+# still reference them for the editor's document list.
+type: course
+fields:
+  - { name: description, type: text, i18n: true }
+  - { name: coverImage, type: asset }
+  - { name: subject, type: string }
+  - name: modules
+    type: array
+    of:
+      - { name: module, type: reference, ref: module, required: true }
+list:
+  columns: [title, subject, status, updatedAt]

@@ -1,0 +1,12 @@
+# Keep the Go build context lean (multi-stage Go-only build).
+node_modules
+dist
+coverage
+coverage.out
+.git
+.github
+
+.env
+.env.local
+*.log
+.DS_Store

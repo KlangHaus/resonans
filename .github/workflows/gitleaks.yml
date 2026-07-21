@@ -1,0 +1,28 @@
+name: Gitleaks
+
+# Kun pull_request — pre-merge secret-scan fanger secrets før de når main
+# (ingen duplicate push-scan; [review] systemic fund 06-18).
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Scan repo history
+        run: gitleaks detect --redact --verbose --exit-code 1
