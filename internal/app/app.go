@@ -16,6 +16,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/config"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/delivery"
 	"github.com/KlangHaus/resonans/internal/httpapi"
 	"github.com/KlangHaus/resonans/internal/observability"
 	"github.com/KlangHaus/resonans/internal/persistence"
@@ -110,15 +111,35 @@ func Run(ctx context.Context) error {
 		store = content.NewMemoryStore()
 	}
 
-	// --- REST router (tenant-scoped, JWT-gated) ---
+	// --- Delivery service-auth (Beslutning: trusted service-to-service) ---
+	if cfg.DeliveryToken == "" && cfg.IsProduction() {
+		// Without a service token the /delivery endpoints would trust an
+		// unauthenticated X-Scope-OrgID header — a cross-tenant read hole.
+		return errors.New(
+			"RESONANS_DELIVERY_TOKEN not set in production — refusing to start with an unauthenticated content-delivery surface",
+		)
+	}
+	if cfg.DeliveryToken == "" {
+		logger.Warn("RESONANS_DELIVERY_TOKEN not set — /delivery trusts X-Scope-OrgID directly (dev/test only)")
+	}
+
+	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
 		Store:    store,
 		Verifier: verifier,
 		Logger:   logger,
 	})
 
+	// --- Delivery read router (published-only, service-auth'd) ---
+	deliveryRouter := delivery.NewRouter(delivery.Deps{
+		Store:        store,
+		ServiceToken: cfg.DeliveryToken,
+		Logger:       logger,
+	})
+
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiRouter)
+	mux.Handle("/delivery/", deliveryRouter)
 
 	// HTTP probes used by the Docker HEALTHCHECK + Caddy (unauthenticated).
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {

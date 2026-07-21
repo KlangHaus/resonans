@@ -60,6 +60,22 @@ Alle ruter kræver en tenant (fra verificeret JWT `org`-claim, eller `X-Dev-Tena
 | POST   | `/api/v1/documents/{id}/publish`       |
 | GET    | `/healthz`, `/readyz` (uautentificeret)|
 
+### Delivery-API (read, published-only) — Fase 2
+
+Tenant-scoped read/leverings-flade konsumeret **server-side** af vores Nuxt-sites
+(Etude-Nitro + klanghaus.dk). **Betroet service-til-service:** kalderen autentificerer
+med `RESONANS_DELIVERY_TOKEN` (bearer) og sender tenant via **`X-Scope-OrgID`** — som
+kun trustes når service-token matcher (aldrig fra en slutbruger/browser). Serverer KUN
+`published` indhold; RLS håndhæver isolationen uanset.
+
+| Metode | Rute                                    | Formål |
+| ------ | --------------------------------------- | ------ |
+| GET    | `/delivery/v1/{type}`                   | katalog (published docs af type, fx `course`) |
+| GET    | `/delivery/v1/{type}/{slug}`            | ét published document (lesson/page/…) |
+
+Follow-up: cursor-pagination (v1 soft-cap 200), reference-ekspansion (course→modules→lessons),
+draft-preview via preview-token (Fase 5).
+
 ## Content-model
 
 Content-typer er **ikke hardcodede** — de defineres i schema-registret pr. space (Fase 1):

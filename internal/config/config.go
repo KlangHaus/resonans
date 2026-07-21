@@ -39,6 +39,13 @@ type Config struct {
 	JWTIssuer string
 	JWKSURL   string
 
+	// DeliveryToken authenticates the trusted delivery path (server-side Nuxt
+	// consumers). When set, the /delivery endpoints require it and read the
+	// tenant from X-Scope-OrgID. In production it MUST be set or boot fails
+	// (otherwise the delivery surface would trust an unauthenticated tenant
+	// header — a cross-tenant read hole).
+	DeliveryToken string
+
 	// OTel — from day one (product brief). tenant.id is set per-request on
 	// spans, never on the resource (Beslutning J2c).
 	OTelServiceName      string
@@ -85,8 +92,9 @@ func Load() (*Config, error) {
 		PublicURL:   getenv("PUBLIC_URL", "http://localhost:3000"),
 		DatabaseURL: getenvOptional("DATABASE_URL"),
 
-		JWTIssuer: getenvOptional("RESONANS_JWT_ISSUER"),
-		JWKSURL:   getenvOptional("RESONANS_JWKS_URL"),
+		JWTIssuer:     getenvOptional("RESONANS_JWT_ISSUER"),
+		JWKSURL:       getenvOptional("RESONANS_JWKS_URL"),
+		DeliveryToken: getenvOptional("RESONANS_DELIVERY_TOKEN"),
 
 		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "klanghaus-resonans"),
 		OTelServiceNamespace: getenv("OTEL_SERVICE_NAMESPACE", "klanghaus"),
