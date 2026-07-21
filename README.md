@@ -1,72 +1,88 @@
 # Resonans
 
-KlangHaus' eget self-hostede **headless CMS** (Go). Intern dogfood — dogfooder
-KlangHaus' eget marketing-indhold (`klanghaus.dk`) + Ethical Board-referater —
-frem for et proprietært SaaS-CMS. Anti-lock-in (Manifest §13), EU-residens.
-Erstatter Sanity/Contentful i stakken. **Ikke offentligt OSS-released.**
+KlangHaus' eget self-hostede **headless CMS** (Go) — bredt og content-type-agnostisk.
+Ét system for hele KlangHaus: **Etude-læringsindhold** (multi-tenant LMS) + **blog** +
+**marketingssider** (+ senere governance-referater + kundeservice-KB). Anti-lock-in
+(Manifest §13), EU-residens. Erstatter Sanity/Contentful. **Ikke offentligt OSS-released.**
 
 Produkt-brief: `klanghaus/docs/product-briefs/resonans/index.md`.
 
 ## Stack
 
-- **Go** content-API (REST — Beslutning W: content-API til egne Nuxt-sites).
-- **Postgres** (Beslutning K, self-host). Migrations køres ved boot (embedded).
-- **OTel** fra dag ét (traces + metrics + logs, OTLP/HTTP; no-op uden endpoint).
-- Distroless-image, kører som Compose-workload på **VM2 (ops)** bag Caddy
-  (`indhold.klanghaus.dk`).
+- **Go** content-API (REST — Beslutning W).
+- **Postgres + RLS**, **multi-tenant fra dag 1** (tenant_id ≡ org_id, pool+silo,
+  Beslutning K). Egen content-DB (adskilt fra Etudes money-tier-DB). Migrations køres
+  ved boot (embedded).
+- **BetterAuth-JWT** verificeret lokalt mod cached JWKS; tenant = `org`-claim.
+- **OTel** fra dag ét (traces+metrics+logs; tenant.id per-span).
+- Distroless-image, Compose-workload på **VM2** bag Caddy (`indhold.klanghaus.dk`).
+
+## Multi-tenancy + auth
+
+- Hvert **document** er tenant-scoped (`tenant_id`) + `dataset` (default `production`).
+- Redaktører logger ind via delt auth (BetterAuth-JWT). Middlewaren udleder tenant fra
+  det **verificerede `org`-claim** — aldrig fra request-body/header (anti-spoof). Postgres
+  **RLS** håndhæver isolationen i databasen (fail-closed: GUC `app.tenant_id` sat pr.
+  transaktion).
+- **Dev uden JWT:** sæt tenant via `X-Dev-Tenant`-header (KUN når auth er deaktiveret).
+- **Prod:** boot-fejler uden `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` (ingen åbne endpoints)
+  og uden `DATABASE_URL` (ingen ikke-persistent/uisoleret store).
 
 ## Kør lokalt
 
 ```bash
-# Uden DB (in-memory content-store, dev only):
+# Uden DB (in-memory store, dev only) — tenant via X-Dev-Tenant:
 go run ./cmd/resonans
 
-# Med Postgres + boot-migrations via Compose:
+# Med Postgres + boot-migrations + RLS via Compose:
 docker compose -f docker-compose.tilt.yml up --build
 ```
 
-| Action    | Kommando               |
-| --------- | ---------------------- |
-| Lint      | `golangci-lint run`    |
-| Format    | `gofumpt -w .`         |
-| Vet       | `go vet ./...`         |
-| Test      | `go test -race ./...`  |
-| Build     | `go build ./...`       |
+| Action | Kommando               |
+| ------ | ---------------------- |
+| Lint   | `golangci-lint run`    |
+| Format | `gofumpt -w .`         |
+| Vet    | `go vet ./...`         |
+| Test   | `go test -race ./...`  |
+| Build  | `go build ./...`       |
 
-## API (v1)
+## API (v1) — tenant-scoped
 
-Læse-flader er **offentlige** (published-indhold serveres til vores Nuxt-sites).
-Skrive-flader (editor) er gated (se nedenfor).
+Alle ruter kræver en tenant (fra verificeret JWT `org`-claim, eller `X-Dev-Tenant` i dev).
 
-| Metode | Rute                                   | Adgang  |
-| ------ | -------------------------------------- | ------- |
-| GET    | `/api/v1/entries?site=&type=&status=`  | public  |
-| GET    | `/api/v1/entries/{id}`                 | public  |
-| GET    | `/api/v1/content/{site}/{slug}`        | public  |
-| POST   | `/api/v1/entries`                      | editor  |
-| PUT    | `/api/v1/entries/{id}`                 | editor  |
-| POST   | `/api/v1/entries/{id}/publish`         | editor  |
-| GET    | `/healthz`, `/readyz`                  | probes  |
+| Metode | Rute                                   |
+| ------ | -------------------------------------- |
+| GET    | `/api/v1/documents?type=&status=`      |
+| GET    | `/api/v1/documents/{id}`               |
+| GET    | `/api/v1/content/{type}/{slug}`        |
+| POST   | `/api/v1/documents`                    |
+| PUT    | `/api/v1/documents/{id}`               |
+| POST   | `/api/v1/documents/{id}/publish`       |
+| GET    | `/healthz`, `/readyz` (uautentificeret)|
 
-## Editor-auth (placeholder)
+## Content-model
 
-Skrive-endpoints gates i dag af en shared-secret bearer (`EDITOR_API_TOKEN`).
-Det er **midlertidigt**: den kanoniske editor-login er BetterAuth-JWT + PDP-gating
-via [auth]/[permissions] (follow-up issue). Fail-closed: i `production` nægter
-serveren at boote uden token.
+Content-typer er **ikke hardcodede** — de defineres i schema-registret pr. space (Fase 1):
+`course → module → lesson`, `page`, `post`, `resource`. Et document er på storage-laget et
+typet, tenant-ejet JSONB-body valideret mod registret. Blok-biblioteket er delt på tværs af
+alle content-typer.
 
 ## Deploy-kontrakt
 
 Honoreres af scaffoldet — ændr ikke uden en samtidig `infra/compose`-ændring:
 
-- `DATABASE_URL=postgres://resonans:…@postgres:5432/resonans`
-- `PUBLIC_URL=https://indhold.klanghaus.dk`
-- lyt på `:3000` (Caddy `reverse_proxy resonans:3000`)
+- `DATABASE_URL` (egen content-DB) · `PUBLIC_URL=https://indhold.klanghaus.dk` · lyt på `:3000`
 
-## Åbne punkter
+## Faser (roadmap)
 
-- Redaktør-UI (Nuxt/Vue + grundtone-komponenter) — ikke i dette repo endnu.
-- Multi-site + Postgres RLS — udskudt (Beslutning B); `entries.site` findes fra
-  dag ét så det kan landes uden migrations-rewrite.
-- BetterAuth-JWT + PDP editor-login — erstatter shared-secret-gaten.
-- PostgresStore integrations-tests (kræver kørende Postgres).
+Fase 0 multi-tenant foundation (**denne**) → Fase 1 schema-registry + authoring → **Fase 2
+read/delivery-API (Etude M5)** → Fase 3 media (billed-pipeline + Vimeo-plugin) → Fase 4
+editor-UI (grundtone) → Fase 5 workflow + preview → Fase 6 GROQ + SCORM.
+
+## Åbne punkter / follow-ups
+
+- Schema-registry + rig content-model (course/lesson-felter, blokke) — Fase 1.
+- `PostgresStore` RLS-integrations-tests (kræver kørende Postgres — som permissions'
+  `internal/assertions`-job).
+- PDP-gating (author/publish pr. tenant) via [permissions].
+- Redaktør-UI (Nuxt/Vue + grundtone-komponenter).

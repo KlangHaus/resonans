@@ -29,10 +29,9 @@ services:
       NODE_ENV: development
       PORT: "3000"
       PUBLIC_URL: http://localhost:3000
-      RESONANS_DEFAULT_SITE: klanghaus.dk
       DATABASE_URL: postgres://resonans:resonans@postgres:5432/resonans
-      # Dev-only editor token; prod uses BetterAuth-JWT (follow-up).
-      EDITOR_API_TOKEN: dev-editor-token
+      # Dev: auth deaktiveret (JWT-vars unset) → tenant sættes pr. request via
+      # X-Dev-Tenant-header. Prod bruger BetterAuth-JWT (RESONANS_JWT_ISSUER/JWKS_URL).
       LOG_LEVEL: debug
     ports:
       - "3000:3000"

@@ -16,10 +16,14 @@ Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
 
 - **Stack = Go + go-starter** (Allan 2026-07-20; Go-everywhere).
 - **API = REST** (Beslutning W: content-API til egne Nuxt-sites).
-- **Single-site nu, multi-site + RLS senere** (Beslutning B) — `entries.site`
-  findes fra dag ét; ingen migrations-rewrite ved multi-site.
+- **Multi-tenant + RLS fra dag 1** (tenant_id ≡ org_id, pool+silo, Beslutning K)
+  — vendte den oprindelige single-site-Beslutning B (Etude = primær forbruger;
+  klanghaus.dk-marketing = tenant med count=1).
+- **Bredt, content-type-agnostisk CMS** (Etude-læring + blog + marketing) via
+  schema-registry.
+- **Egen content-DB** (adskilt fra Etudes money-tier-DB).
 - **Redaktør-UI genbruger grundtone-komponenter** (afklares m/ [grundtone]).
-- **OTel fra dag ét** — site/tenant.id pr. request på spans, ikke på resource.
+- **OTel fra dag ét** — tenant.id pr. request på spans, ikke på resource.
 
 ## Standing rules (link, ikke duplikat)
 
@@ -47,11 +51,11 @@ Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
 ## Layout
 
 - `cmd/resonans/` — entrypoint (run + healthcheck + version).
-- `internal/app/` — boot-wiring (config → otel → db/migrate → router → shutdown).
+- `internal/app/` — boot-wiring (config → otel → jwt → db/migrate → router → shutdown).
 - `internal/config/` — env-config (honorér VM2 deploy-kontrakt).
-- `internal/content/` — domæne: Entry + Store (Postgres + in-memory).
-- `internal/httpapi/` — REST-adaptering (ingen forretningslogik).
-- `internal/editorauth/` — write-gate (shared-secret bearer; JWT-placeholder).
+- `internal/content/` — domæne: Document + tenant-scoped Store (Postgres+RLS + in-memory).
+- `internal/httpapi/` — REST-adaptering, tenant fra actor (ingen forretningslogik).
+- `internal/auth/` — BetterAuth-JWT/JWKS-verifier + Actor + net/http-middleware (porteret fra permissions).
 - `internal/observability/` — OTel-setup (kopieret fra permissions/notifications).
 - `internal/persistence/` — pgx-pool + boot-migrations.
 - `migrations/` — embedded *.sql (køres ved boot).
@@ -64,6 +68,7 @@ port `:3000`. Secrets via SOPS+age ([infra]).
 
 ## Coverage-tier (Beslutning L2)
 
-Default = 70% branch. `PostgresStore` kræver en kørende Postgres →
-integrations-tests er en follow-up (som permissions' `internal/assertions`-job);
-in-memory-store + config + httpapi + editorauth er unit-dækket.
+Default = 70% branch (90% på tenant-isolations-kode — sikkerhedskritisk).
+`PostgresStore` + RLS kræver en kørende Postgres → integrations-tests er en
+follow-up (som permissions' `internal/assertions`-job); in-memory-store + config +
+httpapi + auth (JWT/middleware) er unit-dækket.

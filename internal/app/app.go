@@ -1,6 +1,6 @@
-// Package app wires the Resonans CMS: config -> otel -> db/migrate -> content
-// store -> REST router -> graceful shutdown. It mirrors the boot structure of
-// the permissions/notifications Go services.
+// Package app wires the Resonans CMS: config -> otel -> jwt -> db/migrate ->
+// content store -> REST router -> graceful shutdown. It mirrors the boot
+// structure of the permissions/notifications Go services.
 package app
 
 import (
@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/config"
 	"github.com/KlangHaus/resonans/internal/content"
 	"github.com/KlangHaus/resonans/internal/httpapi"
@@ -55,7 +56,29 @@ func Run(ctx context.Context) error {
 	}()
 	logger.Info("observability_initialized", "otel", cfg.OTelEnabled || observability.Enabled())
 
-	// --- Content store (Beslutning K) ---
+	// --- JWT verifier (Beslutning D + K) ---
+	var verifier auth.Verifier
+	switch {
+	case cfg.AuthEnabled():
+		verifier, err = auth.NewVerifier(ctx, auth.VerifierConfig{
+			Issuer:  cfg.JWTIssuer,
+			JWKSURL: cfg.JWKSURL,
+		})
+		if err != nil {
+			return fmt.Errorf("jwt verifier: %w", err)
+		}
+		logger.Info("jwt_verifier_active", "issuer", cfg.JWTIssuer)
+	case cfg.IsProduction():
+		// Serving content without verifying the tenant claim would break tenant
+		// isolation (Beslutning K) — refuse to boot with open endpoints.
+		return errors.New(
+			"RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set in production — refusing to start with unauthenticated endpoints",
+		)
+	default:
+		logger.Warn("RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set — JWT auth DISABLED; tenant via X-Dev-Tenant header (dev/test only)")
+	}
+
+	// --- Content store (Beslutning K — own content-DB, multi-tenant + RLS) ---
 	var (
 		store content.Store
 		pool  *pgxpool.Pool
@@ -77,8 +100,8 @@ func Run(ctx context.Context) error {
 		}
 		store = content.NewPostgresStore(pool)
 	case cfg.IsProduction():
-		// The in-memory store loses all content on restart — silent data loss in
-		// prod. Refuse to boot rather than degrade quietly (mirrors permissions).
+		// The in-memory store loses all content on restart AND does not enforce
+		// RLS — refuse to boot rather than degrade tenant isolation silently.
 		return errors.New(
 			"DATABASE_URL not set in production — refusing to start with a non-persistent in-memory content store",
 		)
@@ -87,28 +110,17 @@ func Run(ctx context.Context) error {
 		store = content.NewMemoryStore()
 	}
 
-	// --- Editor-auth gate (placeholder for BetterAuth-JWT + PDP) ---
-	if cfg.EditorToken == "" {
-		if cfg.IsProduction() {
-			return errors.New(
-				"EDITOR_API_TOKEN not set in production — refusing to start with an unauthenticated write surface",
-			)
-		}
-		logger.Warn("EDITOR_API_TOKEN not set — editor write endpoints are UNGUARDED (dev/test only)")
-	}
-
-	// --- REST router ---
-	apiMux := httpapi.NewRouter(httpapi.Deps{
-		Store:       store,
-		DefaultSite: cfg.DefaultSite,
-		EditorToken: cfg.EditorToken,
-		Logger:      logger,
+	// --- REST router (tenant-scoped, JWT-gated) ---
+	apiRouter := httpapi.NewRouter(httpapi.Deps{
+		Store:    store,
+		Verifier: verifier,
+		Logger:   logger,
 	})
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/", apiMux)
+	mux.Handle("/api/", apiRouter)
 
-	// HTTP probes used by the Docker HEALTHCHECK + Caddy.
+	// HTTP probes used by the Docker HEALTHCHECK + Caddy (unauthenticated).
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))

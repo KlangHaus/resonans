@@ -10,12 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// MemoryStore is an in-memory Store for dev/test only. It is NOT persistent —
-// content is lost on restart — so app.Run refuses to use it in production
-// (mirrors the permissions in-memory-audit invariant).
+// MemoryStore is an in-memory Store for dev/test only. It is NOT persistent, so
+// app.Run refuses to use it in production. It simulates RLS by filtering every
+// operation on tenantID.
 type MemoryStore struct {
 	mu      sync.RWMutex
-	byID    map[uuid.UUID]Entry
+	byID    map[uuid.UUID]Document
 	now     func() time.Time
 	newUUID func() uuid.UUID
 }
@@ -23,7 +23,7 @@ type MemoryStore struct {
 // NewMemoryStore constructs an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		byID:    make(map[uuid.UUID]Entry),
+		byID:    make(map[uuid.UUID]Document),
 		now:     time.Now,
 		newUUID: uuid.New,
 	}
@@ -31,24 +31,23 @@ func NewMemoryStore() *MemoryStore {
 
 var _ Store = (*MemoryStore)(nil)
 
-func (s *MemoryStore) List(_ context.Context, f ListFilter) ([]Entry, error) {
+func (s *MemoryStore) List(_ context.Context, tenantID uuid.UUID, f ListFilter) ([]Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	out := make([]Entry, 0, len(s.byID))
-	for _, e := range s.byID {
-		if f.Site != "" && e.Site != f.Site {
+	out := make([]Document, 0)
+	for _, d := range s.byID {
+		if d.TenantID != tenantID {
 			continue
 		}
-		if f.Type != "" && e.Type != f.Type {
+		if f.Type != "" && d.Type != f.Type {
 			continue
 		}
-		if f.Status != "" && e.Status != f.Status {
+		if f.Status != "" && d.Status != f.Status {
 			continue
 		}
-		out = append(out, cloneEntry(e))
+		out = append(out, cloneDoc(d))
 	}
-	// Newest first, stable by ID for equal timestamps (deterministic tests).
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
 			return out[i].ID.String() < out[j].ID.String()
@@ -58,44 +57,45 @@ func (s *MemoryStore) List(_ context.Context, f ListFilter) ([]Entry, error) {
 	return out, nil
 }
 
-func (s *MemoryStore) Get(_ context.Context, id uuid.UUID) (Entry, error) {
+func (s *MemoryStore) Get(_ context.Context, tenantID, id uuid.UUID) (Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	e, ok := s.byID[id]
-	if !ok {
-		return Entry{}, ErrNotFound
+	d, ok := s.byID[id]
+	if !ok || d.TenantID != tenantID {
+		return Document{}, ErrNotFound
 	}
-	return cloneEntry(e), nil
+	return cloneDoc(d), nil
 }
 
-func (s *MemoryStore) GetPublished(_ context.Context, site, slug string) (Entry, error) {
+func (s *MemoryStore) GetPublished(_ context.Context, tenantID uuid.UUID, typ, slug string) (Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, e := range s.byID {
-		if e.Site == site && e.Slug == slug && e.Status == StatusPublished {
-			return cloneEntry(e), nil
+	for _, d := range s.byID {
+		if d.TenantID == tenantID && d.Type == typ && d.Slug == slug && d.Status == StatusPublished {
+			return cloneDoc(d), nil
 		}
 	}
-	return Entry{}, ErrNotFound
+	return Document{}, ErrNotFound
 }
 
-func (s *MemoryStore) Create(_ context.Context, in CreateInput) (Entry, error) {
+func (s *MemoryStore) Create(_ context.Context, tenantID uuid.UUID, in CreateInput) (Document, error) {
 	if err := in.Validate(); err != nil {
-		return Entry{}, err
+		return Document{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, e := range s.byID {
-		if e.Site == in.Site && e.Slug == in.Slug {
-			return Entry{}, ErrSlugConflict
+	for _, d := range s.byID {
+		if d.TenantID == tenantID && d.Dataset == DefaultDataset && d.Type == in.Type && d.Slug == in.Slug {
+			return Document{}, ErrSlugConflict
 		}
 	}
 
 	now := s.now().UTC()
-	e := Entry{
+	d := Document{
 		ID:        s.newUUID(),
-		Site:      in.Site,
+		TenantID:  tenantID,
+		Dataset:   DefaultDataset,
 		Type:      in.Type,
 		Slug:      in.Slug,
 		Title:     in.Title,
@@ -104,58 +104,58 @@ func (s *MemoryStore) Create(_ context.Context, in CreateInput) (Entry, error) {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	s.byID[e.ID] = e
-	return cloneEntry(e), nil
+	s.byID[d.ID] = d
+	return cloneDoc(d), nil
 }
 
-func (s *MemoryStore) Update(_ context.Context, id uuid.UUID, in UpdateInput) (Entry, error) {
+func (s *MemoryStore) Update(_ context.Context, tenantID, id uuid.UUID, in UpdateInput) (Document, error) {
 	if err := in.Validate(); err != nil {
-		return Entry{}, err
+		return Document{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	e, ok := s.byID[id]
-	if !ok {
-		return Entry{}, ErrNotFound
+	d, ok := s.byID[id]
+	if !ok || d.TenantID != tenantID {
+		return Document{}, ErrNotFound
 	}
 	if in.Type != nil {
-		e.Type = *in.Type
+		d.Type = *in.Type
 	}
 	if in.Title != nil {
-		e.Title = *in.Title
+		d.Title = *in.Title
 	}
 	if in.Body != nil {
-		e.Body = append(json.RawMessage(nil), (*in.Body)...)
+		d.Body = append(json.RawMessage(nil), (*in.Body)...)
 	}
-	e.UpdatedAt = s.now().UTC()
-	s.byID[id] = e
-	return cloneEntry(e), nil
+	d.UpdatedAt = s.now().UTC()
+	s.byID[id] = d
+	return cloneDoc(d), nil
 }
 
-func (s *MemoryStore) Publish(_ context.Context, id uuid.UUID) (Entry, error) {
+func (s *MemoryStore) Publish(_ context.Context, tenantID, id uuid.UUID) (Document, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	e, ok := s.byID[id]
-	if !ok {
-		return Entry{}, ErrNotFound
+	d, ok := s.byID[id]
+	if !ok || d.TenantID != tenantID {
+		return Document{}, ErrNotFound
 	}
 	now := s.now().UTC()
-	e.Status = StatusPublished
-	e.PublishedAt = &now
-	e.UpdatedAt = now
-	s.byID[id] = e
-	return cloneEntry(e), nil
+	d.Status = StatusPublished
+	d.PublishedAt = &now
+	d.UpdatedAt = now
+	s.byID[id] = d
+	return cloneDoc(d), nil
 }
 
-// cloneEntry deep-copies the mutable Body slice and PublishedAt pointer so
-// callers can't mutate stored state through a returned Entry.
-func cloneEntry(e Entry) Entry {
-	c := e
-	c.Body = append(json.RawMessage(nil), e.Body...)
-	if e.PublishedAt != nil {
-		t := *e.PublishedAt
+// cloneDoc deep-copies the mutable Body slice and PublishedAt pointer so callers
+// cannot mutate stored state through a returned Document.
+func cloneDoc(d Document) Document {
+	c := d
+	c.Body = append(json.RawMessage(nil), d.Body...)
+	if d.PublishedAt != nil {
+		t := *d.PublishedAt
 		c.PublishedAt = &t
 	}
 	return c

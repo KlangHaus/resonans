@@ -15,7 +15,13 @@ import (
 // uniqueViolation is the Postgres SQLSTATE for a unique-constraint breach.
 const uniqueViolation = "23505"
 
-// PostgresStore is the persistent Store backed by resonans_app.entries.
+const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, published_at, created_at, updated_at`
+
+// PostgresStore is the persistent, RLS-backed Store. Every operation runs in a
+// transaction that first sets the tenant GUC (set_config('app.tenant_id', …,
+// is_local=true)), so the documents_tenant_isolation RLS policy scopes all rows
+// to the caller's tenant. The GUC is transaction-local and never leaks to other
+// pooled connections. Pattern ported from permissions/internal/persistence/audit.go.
 type PostgresStore struct {
 	pool *pgxpool.Pool
 }
@@ -27,137 +33,181 @@ func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 
 var _ Store = (*PostgresStore)(nil)
 
-const entryColumns = `id, site, type, slug, title, body, status, published_at, created_at, updated_at`
+// inTx runs fn inside a transaction with app.tenant_id set to tenantID for the
+// duration of the transaction (drives RLS).
+func (s *PostgresStore) inTx(ctx context.Context, tenantID uuid.UUID, fn func(pgx.Tx) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("content: begin tx: %w", err)
+	}
+	if _, err := tx.Exec(ctx, "select set_config('app.tenant_id', $1, true)", tenantID.String()); err != nil {
+		_ = tx.Rollback(ctx)
+		return fmt.Errorf("content: set tenant guc: %w", err)
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("content: commit tx: %w", err)
+	}
+	return nil
+}
 
-func (s *PostgresStore) List(ctx context.Context, f ListFilter) ([]Entry, error) {
+func (s *PostgresStore) List(ctx context.Context, tenantID uuid.UUID, f ListFilter) ([]Document, error) {
 	var (
-		conds []string
+		conds = []string{"dataset = '" + DefaultDataset + "'"}
 		args  []any
 	)
-	add := func(col, val string) {
-		if val != "" {
-			args = append(args, val)
-			conds = append(conds, fmt.Sprintf("%s = $%d", col, len(args)))
-		}
+	if f.Type != "" {
+		args = append(args, f.Type)
+		conds = append(conds, fmt.Sprintf("type = $%d", len(args)))
 	}
-	add("site", f.Site)
-	add("type", f.Type)
-	add("status", f.Status)
-
-	q := "select " + entryColumns + " from resonans_app.entries"
-	if len(conds) > 0 {
-		q += " where " + strings.Join(conds, " and ")
+	if f.Status != "" {
+		args = append(args, f.Status)
+		conds = append(conds, fmt.Sprintf("status = $%d", len(args)))
 	}
-	q += " order by created_at desc, id asc"
+	q := "select " + documentColumns + " from resonans_app.documents where " +
+		strings.Join(conds, " and ") + " order by created_at desc, id asc"
 
-	rows, err := s.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, fmt.Errorf("content: list: %w", err)
-	}
-	defer rows.Close()
-
-	out := make([]Entry, 0)
-	for rows.Next() {
-		e, err := scanEntry(rows)
+	out := make([]Document, 0)
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, q, args...)
 		if err != nil {
-			return nil, fmt.Errorf("content: list scan: %w", err)
+			return fmt.Errorf("content: list: %w", err)
 		}
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("content: list rows: %w", err)
+		defer rows.Close()
+		for rows.Next() {
+			d, err := scanDoc(rows)
+			if err != nil {
+				return fmt.Errorf("content: list scan: %w", err)
+			}
+			out = append(out, d)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
 
-func (s *PostgresStore) Get(ctx context.Context, id uuid.UUID) (Entry, error) {
-	row := s.pool.QueryRow(ctx,
-		"select "+entryColumns+" from resonans_app.entries where id = $1", id)
-	return scanEntryRow(row)
+func (s *PostgresStore) Get(ctx context.Context, tenantID, id uuid.UUID) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx,
+			"select "+documentColumns+" from resonans_app.documents where id = $1", id)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		return scanErr
+	})
+	return d, err
 }
 
-func (s *PostgresStore) GetPublished(ctx context.Context, site, slug string) (Entry, error) {
-	row := s.pool.QueryRow(ctx,
-		"select "+entryColumns+" from resonans_app.entries "+
-			"where site = $1 and slug = $2 and status = 'published'", site, slug)
-	return scanEntryRow(row)
+func (s *PostgresStore) GetPublished(ctx context.Context, tenantID uuid.UUID, typ, slug string) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx,
+			"select "+documentColumns+" from resonans_app.documents "+
+				"where dataset = $1 and type = $2 and slug = $3 and status = 'published'",
+			DefaultDataset, typ, slug)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		return scanErr
+	})
+	return d, err
 }
 
-func (s *PostgresStore) Create(ctx context.Context, in CreateInput) (Entry, error) {
+func (s *PostgresStore) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput) (Document, error) {
 	if err := in.Validate(); err != nil {
-		return Entry{}, err
+		return Document{}, err
 	}
-	row := s.pool.QueryRow(ctx, `
-		insert into resonans_app.entries (site, type, slug, title, body, status)
-		values ($1, $2, $3, $4, $5, 'draft')
-		returning `+entryColumns,
-		in.Site, in.Type, in.Slug, in.Title, []byte(in.Body))
-	e, err := scanEntryRow(row)
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			insert into resonans_app.documents (tenant_id, dataset, type, slug, title, body, status)
+			values ($1, $2, $3, $4, $5, $6, 'draft')
+			returning `+documentColumns,
+			tenantID, DefaultDataset, in.Type, in.Slug, in.Title, []byte(in.Body))
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		return scanErr
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
-			return Entry{}, ErrSlugConflict
+			return Document{}, ErrSlugConflict
 		}
-		return Entry{}, err
+		return Document{}, err
 	}
-	return e, nil
+	return d, nil
 }
 
-func (s *PostgresStore) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (Entry, error) {
+func (s *PostgresStore) Update(ctx context.Context, tenantID, id uuid.UUID, in UpdateInput) (Document, error) {
 	if err := in.Validate(); err != nil {
-		return Entry{}, err
+		return Document{}, err
 	}
-	// coalesce($n, col) leaves a column unchanged when the argument is nil.
 	var body any
 	if in.Body != nil {
 		body = []byte(*in.Body)
 	}
-	row := s.pool.QueryRow(ctx, `
-		update resonans_app.entries set
-		  type       = coalesce($2, type),
-		  title      = coalesce($3, title),
-		  body       = coalesce($4, body),
-		  updated_at = now()
-		where id = $1
-		returning `+entryColumns,
-		id, in.Type, in.Title, body)
-	return scanEntryRow(row)
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			update resonans_app.documents set
+			  type       = coalesce($2, type),
+			  title      = coalesce($3, title),
+			  body       = coalesce($4, body),
+			  updated_at = now()
+			where id = $1
+			returning `+documentColumns,
+			id, in.Type, in.Title, body)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		return scanErr
+	})
+	return d, err
 }
 
-func (s *PostgresStore) Publish(ctx context.Context, id uuid.UUID) (Entry, error) {
-	row := s.pool.QueryRow(ctx, `
-		update resonans_app.entries set
-		  status       = 'published',
-		  published_at = now(),
-		  updated_at   = now()
-		where id = $1
-		returning `+entryColumns, id)
-	return scanEntryRow(row)
+func (s *PostgresStore) Publish(ctx context.Context, tenantID, id uuid.UUID) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			update resonans_app.documents set
+			  status       = 'published',
+			  published_at = now(),
+			  updated_at   = now()
+			where id = $1
+			returning `+documentColumns, id)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		return scanErr
+	})
+	return d, err
 }
 
-// scanner is satisfied by both pgx.Row and pgx.Rows.
 type scanner interface {
 	Scan(dest ...any) error
 }
 
-func scanEntry(sc scanner) (Entry, error) {
-	var e Entry
+func scanDoc(sc scanner) (Document, error) {
+	var d Document
 	if err := sc.Scan(
-		&e.ID, &e.Site, &e.Type, &e.Slug, &e.Title,
-		&e.Body, &e.Status, &e.PublishedAt, &e.CreatedAt, &e.UpdatedAt,
+		&d.ID, &d.TenantID, &d.Dataset, &d.Type, &d.Slug, &d.Title,
+		&d.Body, &d.Status, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt,
 	); err != nil {
-		return Entry{}, err
+		return Document{}, err
 	}
-	return e, nil
+	return d, nil
 }
 
-func scanEntryRow(row pgx.Row) (Entry, error) {
-	e, err := scanEntry(row)
+func scanDocRow(row pgx.Row) (Document, error) {
+	d, err := scanDoc(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Entry{}, ErrNotFound
+			return Document{}, ErrNotFound
 		}
-		return Entry{}, fmt.Errorf("content: scan: %w", err)
+		return Document{}, fmt.Errorf("content: scan: %w", err)
 	}
-	return e, nil
+	return d, nil
 }

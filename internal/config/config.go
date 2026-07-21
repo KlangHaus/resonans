@@ -1,12 +1,11 @@
 // Package config loads the Resonans CMS configuration from the process
 // environment. It mirrors the hand-rolled pattern used across the KlangHaus Go
-// services (permissions/notifications): same "empty string means unset"
-// coercion, same return-error-not-os.Exit policy so tests decide behavior.
+// services (permissions/notifications): "empty string means unset" coercion,
+// return-error-not-os.Exit so tests decide behavior.
 //
-// The env-var names honor the VM2 deploy contract in
-// infra/compose/prod/vm2-ops/compose.yml: DATABASE_URL + PUBLIC_URL are set by
-// Compose, and Caddy reverse-proxies to resonans:3000 — so the server MUST
-// default to port 3000 when PORT is unset.
+// Deploy contract (infra/compose/prod/vm2-ops): DATABASE_URL + PUBLIC_URL are
+// set by Compose, Caddy reverse-proxies to resonans:3000 — so PORT defaults to
+// 3000. Resonans uses its OWN content-DB (separate from Etude's money-tier-DB).
 package config
 
 import (
@@ -25,29 +24,23 @@ type Config struct {
 	LogLevel string
 
 	// PublicURL is the canonical externally-reachable base URL of this CMS
-	// (https://indhold.klanghaus.dk in prod). Surfaced in API responses so
-	// consumers can build absolute links. Deploy contract: PUBLIC_URL.
+	// (https://indhold.klanghaus.dk in prod). Deploy contract: PUBLIC_URL.
 	PublicURL string
 
-	// DefaultSite scopes content when a request omits an explicit site. Beslutning
-	// B (this session): single-site now — klanghaus.dk — but the content model
-	// carries a `site` column so multi-site + RLS can land later without a
-	// migration rewrite.
-	DefaultSite string
-
-	// DatabaseURL is the Postgres DSN for content storage (Beslutning K,
-	// self-host). Empty => in-memory fallback (dev/test only). Migrations run at
-	// boot. Deploy contract: DATABASE_URL.
+	// DatabaseURL is the Postgres DSN for the content-DB (Beslutning K,
+	// self-host). Empty => in-memory fallback (dev/test only). Deploy contract:
+	// DATABASE_URL. The app connects as a non-BYPASSRLS role; migrations run as
+	// a BYPASSRLS role.
 	DatabaseURL string
 
-	// EditorToken is a shared-secret bearer guarding write endpoints until the
-	// BetterAuth-JWT + PDP editor-login lands (follow-up issue). Empty in dev =>
-	// writes allowed with a boot-warning; empty in prod => boot fails
-	// (fail-closed, mirrors the permissions JWT invariant).
-	EditorToken string
+	// JWT / JWKS (Beslutning D + K). Redaktør-login = BetterAuth-JWT verified
+	// locally against the cached JWKS; tenant = the `org` claim. Both required
+	// to enable auth; in production both MUST be set or boot fails.
+	JWTIssuer string
+	JWKSURL   string
 
-	// OTel — emitted from day one (product brief). tenant.id/site is set
-	// per-request on spans, never on the resource (high cardinality).
+	// OTel — from day one (product brief). tenant.id is set per-request on
+	// spans, never on the resource (Beslutning J2c).
 	OTelServiceName      string
 	OTelServiceNamespace string
 	OTelEnabled          bool
@@ -90,9 +83,10 @@ func Load() (*Config, error) {
 		LogLevel: getenv("LOG_LEVEL", "info"),
 
 		PublicURL:   getenv("PUBLIC_URL", "http://localhost:3000"),
-		DefaultSite: getenv("RESONANS_DEFAULT_SITE", "klanghaus.dk"),
 		DatabaseURL: getenvOptional("DATABASE_URL"),
-		EditorToken: getenvOptional("EDITOR_API_TOKEN"),
+
+		JWTIssuer: getenvOptional("RESONANS_JWT_ISSUER"),
+		JWKSURL:   getenvOptional("RESONANS_JWKS_URL"),
 
 		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "klanghaus-resonans"),
 		OTelServiceNamespace: getenv("OTEL_SERVICE_NAMESPACE", "klanghaus"),
@@ -113,8 +107,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("PUBLIC_URL: must be a valid URL: %w", err)
 	}
 
-	if cfg.DefaultSite == "" {
-		return nil, fmt.Errorf("RESONANS_DEFAULT_SITE: must not be empty")
+	if cfg.JWTIssuer != "" {
+		if _, err := url.ParseRequestURI(cfg.JWTIssuer); err != nil {
+			return nil, fmt.Errorf("RESONANS_JWT_ISSUER: must be a valid URL: %w", err)
+		}
+	}
+	if cfg.JWKSURL != "" {
+		if _, err := url.ParseRequestURI(cfg.JWKSURL); err != nil {
+			return nil, fmt.Errorf("RESONANS_JWKS_URL: must be a valid URL: %w", err)
+		}
 	}
 
 	return cfg, nil
@@ -122,6 +123,10 @@ func Load() (*Config, error) {
 
 // IsProduction reports whether NODE_ENV == "production".
 func (c *Config) IsProduction() bool { return c.NodeEnv == "production" }
+
+// AuthEnabled reports whether the JWT middleware should be wired (both issuer
+// and JWKS URL present).
+func (c *Config) AuthEnabled() bool { return c.JWTIssuer != "" && c.JWKSURL != "" }
 
 // ListenAddr returns the host:port the HTTP server binds to.
 func (c *Config) ListenAddr() string {

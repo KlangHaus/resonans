@@ -10,15 +10,17 @@ import (
 	"github.com/KlangHaus/resonans/internal/content"
 )
 
-func testRouter(token string) http.Handler {
-	return NewRouter(Deps{
-		Store:       content.NewMemoryStore(),
-		DefaultSite: "klanghaus.dk",
-		EditorToken: token,
-	})
+const (
+	tenantA = "11111111-1111-1111-1111-111111111111"
+	tenantB = "22222222-2222-2222-2222-222222222222"
+)
+
+// testRouter builds a router in dev mode (nil verifier → X-Dev-Tenant header).
+func testRouter() http.Handler {
+	return NewRouter(Deps{Store: content.NewMemoryStore()})
 }
 
-func do(t *testing.T, h http.Handler, method, path, token string, body any) *httptest.ResponseRecorder {
+func do(t *testing.T, h http.Handler, method, path, tenant string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
 	if body != nil {
@@ -27,8 +29,8 @@ func do(t *testing.T, h http.Handler, method, path, token string, body any) *htt
 		}
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if tenant != "" {
+		req.Header.Set("X-Dev-Tenant", tenant)
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -36,92 +38,112 @@ func do(t *testing.T, h http.Handler, method, path, token string, body any) *htt
 }
 
 func TestCreatePublishReadFlow(t *testing.T) {
-	h := testRouter("s3cret")
+	h := testRouter()
 
-	// Create (draft).
-	rec := do(t, h, http.MethodPost, "/api/v1/entries", "s3cret", map[string]any{
-		"site": "klanghaus.dk", "type": "page", "slug": "home", "title": "Home",
-		"body": map[string]any{"blocks": []any{}},
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "lesson", "slug": "home", "title": "Home", "body": map[string]any{"blocks": []any{}},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, body=%s", rec.Code, rec.Body)
 	}
-	var created content.Entry
+	var created content.Document
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode created: %v", err)
+		t.Fatalf("decode: %v", err)
+	}
+	// Tenant comes from the verified actor (header), never the body.
+	if created.TenantID.String() != tenantA {
+		t.Fatalf("created.TenantID = %s, want %s", created.TenantID, tenantA)
 	}
 
-	// Published read path returns 404 while still a draft.
-	rec = do(t, h, http.MethodGet, "/api/v1/content/klanghaus.dk/home", "", nil)
+	// Draft not visible on published path.
+	rec = do(t, h, http.MethodGet, "/api/v1/content/lesson/home", tenantA, nil)
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("draft published-read status = %d, want 404", rec.Code)
+		t.Fatalf("draft published-read = %d, want 404", rec.Code)
 	}
 
-	// Publish.
-	rec = do(t, h, http.MethodPost, "/api/v1/entries/"+created.ID.String()+"/publish", "s3cret", nil)
+	// Publish, then read.
+	rec = do(t, h, http.MethodPost, "/api/v1/documents/"+created.ID.String()+"/publish", tenantA, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("publish status = %d", rec.Code)
 	}
-
-	// Now visible on the public read path.
-	rec = do(t, h, http.MethodGet, "/api/v1/content/klanghaus.dk/home", "", nil)
+	rec = do(t, h, http.MethodGet, "/api/v1/content/lesson/home", tenantA, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("published read status = %d", rec.Code)
+		t.Fatalf("published read = %d", rec.Code)
 	}
 }
 
-func TestWriteRequiresToken(t *testing.T) {
-	h := testRouter("s3cret")
-
-	// No token → 401.
-	rec := do(t, h, http.MethodPost, "/api/v1/entries", "", map[string]any{
-		"type": "page", "slug": "x", "title": "X",
-	})
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("no-token status = %d, want 401", rec.Code)
-	}
-
-	// Wrong token → 401.
-	rec = do(t, h, http.MethodPost, "/api/v1/entries", "wrong", map[string]any{
-		"type": "page", "slug": "x", "title": "X",
-	})
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong-token status = %d, want 401", rec.Code)
+func TestNoTenantForbidden(t *testing.T) {
+	h := testRouter()
+	rec := do(t, h, http.MethodGet, "/api/v1/documents", "", nil) // no X-Dev-Tenant
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
 	}
 }
 
-func TestReadIsPublic(t *testing.T) {
-	h := testRouter("s3cret")
-	rec := do(t, h, http.MethodGet, "/api/v1/entries", "", nil)
+func TestTenantIsolation(t *testing.T) {
+	h := testRouter()
+
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "lesson", "slug": "secret", "title": "A",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	var a content.Document
+	_ = json.Unmarshal(rec.Body.Bytes(), &a)
+
+	// Tenant B lists → empty.
+	rec = do(t, h, http.MethodGet, "/api/v1/documents", tenantB, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("list status = %d, want 200 (public)", rec.Code)
+		t.Fatalf("list = %d", rec.Code)
+	}
+	var listResp struct {
+		Documents []content.Document `json:"documents"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &listResp)
+	if len(listResp.Documents) != 0 {
+		t.Errorf("tenant B sees %d docs, want 0", len(listResp.Documents))
+	}
+
+	// Tenant B fetches A's document by id → 404.
+	rec = do(t, h, http.MethodGet, "/api/v1/documents/"+a.ID.String(), tenantB, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("cross-tenant get = %d, want 404", rec.Code)
+	}
+}
+
+func TestInvalidTenant(t *testing.T) {
+	h := testRouter()
+	rec := do(t, h, http.MethodGet, "/api/v1/documents", "not-a-uuid", nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (invalid tenant)", rec.Code)
 	}
 }
 
 func TestGetInvalidID(t *testing.T) {
-	h := testRouter("")
-	rec := do(t, h, http.MethodGet, "/api/v1/entries/not-a-uuid", "", nil)
+	h := testRouter()
+	rec := do(t, h, http.MethodGet, "/api/v1/documents/not-a-uuid", tenantA, nil)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
 
-func TestCreateSlugConflict(t *testing.T) {
-	h := testRouter("") // empty token => unguarded (dev)
-
-	payload := map[string]any{"type": "page", "slug": "dup", "title": "Dup"}
-	if rec := do(t, h, http.MethodPost, "/api/v1/entries", "", payload); rec.Code != http.StatusCreated {
-		t.Fatalf("first create status = %d", rec.Code)
+func TestSlugConflict(t *testing.T) {
+	h := testRouter()
+	payload := map[string]any{"type": "post", "slug": "dup", "title": "Dup"}
+	if rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, payload); rec.Code != http.StatusCreated {
+		t.Fatalf("first create = %d", rec.Code)
 	}
-	rec := do(t, h, http.MethodPost, "/api/v1/entries", "", payload)
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, payload)
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("duplicate create status = %d, want 409", rec.Code)
+		t.Fatalf("dup create = %d, want 409", rec.Code)
 	}
 }
 
 func TestCreateInvalidJSON(t *testing.T) {
-	h := testRouter("")
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/entries", bytes.NewBufferString("{bad"))
+	h := testRouter()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/documents", bytes.NewBufferString("{bad"))
+	req.Header.Set("X-Dev-Tenant", tenantA)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
