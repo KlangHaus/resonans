@@ -94,12 +94,20 @@ func Run(ctx context.Context) error {
 		}
 		defer pool.Close()
 
-		applied, err := persistence.Migrate(ctx, pool)
-		if err != nil {
-			return fmt.Errorf("migrate: %w", err)
-		}
-		if len(applied) > 0 {
-			logger.Info("migrations_applied", "migrations", applied)
+		// In production the server connects as the NOBYPASSRLS app-role, which
+		// has no DDL privileges — migrations run via the `resonans migrate`
+		// one-shot as the BYPASSRLS migrator-role (CTO deploy-wiring, Option A).
+		// In dev the single role owns the schema, so auto-migrate for convenience.
+		if cfg.IsProduction() {
+			logger.Info("boot migrations skipped in production — run `resonans migrate` (migrator role) before deploy")
+		} else {
+			applied, err := persistence.Migrate(ctx, pool)
+			if err != nil {
+				return fmt.Errorf("migrate: %w", err)
+			}
+			if len(applied) > 0 {
+				logger.Info("migrations_applied", "migrations", applied)
+			}
 		}
 		store = content.NewPostgresStore(pool)
 	case cfg.IsProduction():
@@ -223,6 +231,33 @@ func Run(ctx context.Context) error {
 		logger.Error("http_shutdown_error", "err", err)
 	}
 	logger.Info("stopped")
+	return nil
+}
+
+// Migrate runs pending migrations and returns. Used by the `resonans migrate`
+// one-shot deploy service, which connects as the BYPASSRLS migrator-role (via
+// DATABASE_URL) so the long-running server (NOBYPASSRLS app-role) never needs
+// DDL privileges (CTO deploy-wiring, Option A).
+func Migrate(ctx context.Context) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required for migrate")
+	}
+	pool, err := persistence.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect db: %w", err)
+	}
+	defer pool.Close()
+
+	applied, err := persistence.Migrate(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).
+		Info("migrations_complete", "applied", applied)
 	return nil
 }
 
