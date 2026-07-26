@@ -1,0 +1,117 @@
+/*
+ * Theming seam. The Studio is styled entirely through these CSS custom
+ * properties, so a brand (grundtone, or any external org's design system) can
+ * be swapped in by overriding this file / injecting variables — without
+ * touching a single component. Product-grade requirement for the external-CMS
+ * track (swappable theming). grundtone tokens map onto these variables.
+ */
+:root {
+  --rz-bg: #ffffff;
+  --rz-bg-subtle: #f6f7f9;
+  --rz-surface: #ffffff;
+  --rz-border: #e3e6ea;
+  --rz-text: #1c2024;
+  --rz-text-muted: #6b7280;
+  --rz-primary: #3b5bdb;
+  --rz-primary-contrast: #ffffff;
+  --rz-danger: #e03131;
+  --rz-radius: 8px;
+  --rz-radius-sm: 5px;
+  --rz-space: 16px;
+  --rz-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --rz-sidebar-w: 240px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rz-bg: #16181c;
+    --rz-bg-subtle: #1c1f24;
+    --rz-surface: #1c1f24;
+    --rz-border: #2a2f36;
+    --rz-text: #e7e9ec;
+    --rz-text-muted: #9aa2ad;
+    --rz-primary: #5c7cfa;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#__nuxt {
+  margin: 0;
+  height: 100%;
+  background: var(--rz-bg);
+  color: var(--rz-text);
+  font-family: var(--rz-font);
+  font-size: 14px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.rz-btn {
+  border: 1px solid var(--rz-border);
+  background: var(--rz-surface);
+  color: var(--rz-text);
+  border-radius: var(--rz-radius-sm);
+  padding: 7px 12px;
+}
+
+.rz-btn--primary {
+  background: var(--rz-primary);
+  color: var(--rz-primary-contrast);
+  border-color: var(--rz-primary);
+}
+
+.rz-input,
+.rz-textarea,
+.rz-select {
+  width: 100%;
+  border: 1px solid var(--rz-border);
+  background: var(--rz-bg);
+  color: var(--rz-text);
+  border-radius: var(--rz-radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.rz-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.rz-field {
+  margin-bottom: var(--rz-space);
+}
+
+.rz-field__label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.rz-field__hint {
+  color: var(--rz-text-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.rz-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--rz-border);
+  background: var(--rz-bg-subtle);
+  color: var(--rz-text-muted);
+}
