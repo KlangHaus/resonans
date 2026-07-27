@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/KlangHaus/resonans/compare/v1.0.0...v1.0.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* sort delivery catalog by publishedAt desc ([#10](https://github.com/KlangHaus/resonans/issues/10)) ([b61410c](https://github.com/KlangHaus/resonans/commit/b61410c5409f121f6add81381cc8be06ecfd2bca)), closes [#9](https://github.com/KlangHaus/resonans/issues/9)
+
 # 1.0.0 (2026-07-27)
 
 
