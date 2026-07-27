@@ -1,0 +1,82 @@
+name: Semantic Release
+
+# §A prod-sporbarhed: udleder semver fra conventional commits (håndhævet af
+# commitlint) → opretter git-tag vX.Y.Z + GitHub Release + CHANGELOG.md.
+# Tag-pushet trigger repoets eksisterende release.yml → semver-tagget image.
+# Changesets-ækvivalenten for ikke-npm-services (auth/permissions/notifications/...).
+#
+# Krav pr. repo: en `.releaserc.json` i roden (distribueres sammen med denne fil).
+# Go-services har ingen package.json → tilføj en minimal én (se docs), ellers
+# fejler semantic-release med ENOPKG.
+#
+# GitHub App-token (graceful): et GITHUB_TOKEN-pushet tag trigger IKKE release.yml
+# (GitHubs recursion-prevention) → semver-imaget bygges ikke. Med et GitHub App-
+# token DER pushet tag trigger release.yml. App-step'et er best-effort: uden
+# org-secrets (SEMANTIC_RELEASE_APP_ID/_PRIVATE_KEY) falder vi tilbage til
+# GITHUB_TOKEN (tag/release/CHANGELOG virker; image bygges når App er provisioneret).
+
+on:
+  # workflow_run (ikke push): release skal ALDRIG tagge/publicere før CI (Go)
+  # har verificeret commit'et på main. `branches: [main]` filtrerer på den
+  # trigger-branch workflow_run rapporterer (push til develop/PR-runs mod
+  # main matcher ikke). Bugbot-fund PR #57: push-trigger kørte uafhængigt af
+  # CI (Go) og kunne tagge/publicere et image FØR lint/test/integration var
+  # bekræftet grønt.
+  workflow_run:
+    workflows: ['CI (Go)']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # opret tags + commit CHANGELOG
+  issues: write # kommentér på released issues
+  pull-requests: write # kommentér på released PRs
+
+concurrency:
+  group: semantic-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    # workflow_dispatch har intet workflow_run-payload (manuel nødbremse,
+    # kør altid); workflow_run skal have et succesfuldt CI (Go)-run bagved.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Mint GitHub App-token (best-effort — trigger release.yml på tag-push)
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
+          private-key: ${{ secrets.SEMANTIC_RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          # fetch-depth:0 = fuld historik til semantic-release. ref pinner til
+          # det NETOP CI-verificerede commit (workflow_run's egen github.ref er
+          # branch-HEAD ved trigger-tid, ikke nødvendigvis samme commit som
+          # CI-runnet — head_sha undgår racet mod commits landet i mellemtiden).
+          # token = App-token når tilgængeligt (så tag-pushet trigger
+          # release.yml), ellers GITHUB_TOKEN.
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run semantic-release
+        # -p installerer plugin-pakkerne; uden -p ville de blot være CLI-args
+        # (ikke installeret) → semantic-release fejler ved at loade changelog/git.
+        run: >
+          npx --yes
+          -p semantic-release@24
+          -p @semantic-release/changelog@6
+          -p @semantic-release/git@10
+          semantic-release
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
