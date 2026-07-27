@@ -75,14 +75,14 @@ func TestDeliveryPublishedOnly(t *testing.T) {
 		t.Fatalf("list = %d", rec.Code)
 	}
 	var resp struct {
-		Items []Envelope `json:"items"`
+		Items []map[string]any `json:"items"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	if len(resp.Items) != 1 || resp.Items[0].Slug != "intro" {
-		t.Fatalf("catalog = %+v, want only published intro", resp.Items)
+	if len(resp.Items) != 1 || resp.Items[0]["slug"] != "intro" {
+		t.Fatalf("catalog = %+v, want only published intro summary", resp.Items)
 	}
-	if resp.Items[0].Version < 1 || resp.Items[0].Data["title"] != "intro" {
-		t.Errorf("envelope shape: version=%d data=%v", resp.Items[0].Version, resp.Items[0].Data)
+	if resp.Items[0]["title"] != "intro" || resp.Items[0]["type"] != "course" {
+		t.Errorf("summary shape: %v", resp.Items[0])
 	}
 
 	// A draft is not deliverable.

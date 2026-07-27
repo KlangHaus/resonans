@@ -1,42 +1,40 @@
 # Resonans shared block library. Defined once; each doc-type's `body` field
-# declares an `allow` subset. i18n:true = field-level translated (value keyed by
-# locale). Content blocks + marketing blocks live here together — one library,
-# right blocks per domain via the per-doc-type allowlist.
+# declares an `allow` subset. i18n:true = field-level translated. Field names
+# align to the [etude]-locked delivery contract (§F) so delivery is passthrough
+# (image/download/quiz get small delivery-side shaping — see internal/delivery).
 blocks:
   # ── Content blocks ──────────────────────────────────────
   - name: rich_text
     fields:
-      - { name: content, type: richtext, i18n: true, required: true }
+      - { name: value, type: richtext, i18n: true, required: true }
+      - { name: format, type: string } # "portable_text" (default) | "html"
 
-  - name: video_embed # references a Vimeo video (video-hosting stays in Vimeo)
+  - name: video_embed # references a Vimeo video; player-resolution is Etude's
     fields:
-      - { name: provider, type: string } # default "vimeo"
+      - { name: provider, type: string } # "vimeo" | "bunny"
       - { name: videoId, type: string, required: true }
       - { name: title, type: string, i18n: true }
-      - { name: caption, type: string, i18n: true }
-      - { name: autoplay, type: boolean }
 
   - name: image
     fields:
       - { name: asset, type: asset, required: true }
-      - { name: alt, type: string, i18n: true }
+      - { name: alt, type: string, i18n: true } # delivery moves this into `asset`
       - { name: caption, type: string, i18n: true }
 
   - name: callout
     fields:
-      - { name: variant, type: string } # info | warning | tip | note
-      - { name: title, type: string, i18n: true }
-      - { name: body, type: richtext, i18n: true }
+      - { name: variant, type: string } # info | warn | tip
+      - { name: value, type: richtext, i18n: true }
 
   - name: code
     fields:
       - { name: language, type: string }
-      - { name: code, type: text, required: true }
+      - { name: value, type: text, required: true }
       - { name: filename, type: string }
 
   - name: download
     fields:
-      - { name: file, type: asset, required: true }
+      - { name: asset, type: asset, required: true }
       - { name: label, type: string, i18n: true }
       - { name: description, type: string, i18n: true }
 
@@ -46,16 +44,11 @@ blocks:
       - { name: title, type: string, i18n: true }
       - { name: aspectRatio, type: string }
 
-  - name: quiz # question authored here; answering/scoring/progress lives in Etude
+  # quiz block references a quiz document; the quiz content (question + answer
+  # key) lives in the `quiz` doc-type, delivered server-side-only (Etude redacts).
+  - name: quiz
     fields:
-      - { name: question, type: string, i18n: true, required: true }
-      - { name: type, type: string } # single | multiple
-      - name: options
-        type: array
-        of:
-          - { name: text, type: string, i18n: true, required: true }
-          - { name: correct, type: boolean }
-      - { name: explanation, type: string, i18n: true }
+      - { name: quizRef, type: reference, ref: quiz, required: true }
 
   # ── Marketing blocks (Page/Post) ────────────────────────
   - name: hero

@@ -73,8 +73,50 @@ func BuildEnvelope(ctx context.Context, tenantID uuid.UUID, doc content.Document
 	if _, exists := env.Data["title"]; !exists {
 		env.Data["title"] = doc.Title
 	}
+	// Quiz docs: derive the answer key. correctOptionIds is INCLUDED in delivery
+	// (the consumer redacts server-side, §F security note); per-option `correct`
+	// is folded into it.
+	if doc.Type == "quiz" {
+		shapeQuizData(env.Data)
+	}
 	env.LocaleFallback = rc.fellBack
 	return env
+}
+
+// shapeQuizData folds options[].correct into a top-level correctOptionIds array
+// and strips `correct` from each option (§F quiz shape).
+func shapeQuizData(data map[string]any) {
+	opts, ok := data["options"].([]any)
+	if !ok {
+		return
+	}
+	correct := make([]any, 0)
+	for _, o := range opts {
+		om, ok := o.(map[string]any)
+		if !ok {
+			continue
+		}
+		if c, _ := om["correct"].(bool); c {
+			if id, ok := om["id"]; ok {
+				correct = append(correct, id)
+			}
+		}
+		delete(om, "correct")
+	}
+	data["correctOptionIds"] = correct
+}
+
+// shapeImageBlock moves a resolved image block's `alt` inside its `asset` object
+// to match §F (`image → {asset:{url,alt,width?,height?}, caption?}`).
+func shapeImageBlock(m map[string]any) {
+	asset, ok := m["asset"].(map[string]any)
+	if !ok {
+		return
+	}
+	if alt, ok := m["alt"]; ok {
+		asset["alt"] = alt
+		delete(m, "alt")
+	}
 }
 
 type resolveCtx struct {
@@ -165,7 +207,11 @@ func (rc *resolveCtx) resolveBlocks(v any) []map[string]any {
 			out = append(out, blk) // unknown block → raw passthrough (Etude renders a graceful fallback)
 			continue
 		}
-		out = append(out, rc.resolveFields(def.Fields, blk))
+		resolved := rc.resolveFields(def.Fields, blk)
+		if bt == "image" {
+			shapeImageBlock(resolved)
+		}
+		out = append(out, resolved)
 	}
 	return out
 }

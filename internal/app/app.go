@@ -285,6 +285,9 @@ func (m *mediaAssetResolver) ResolveAsset(ctx context.Context, tenantID uuid.UUI
 	if a.Height != nil {
 		out["height"] = *a.Height
 	}
+	if a.SizeBytes > 0 {
+		out["sizeBytes"] = a.SizeBytes
+	}
 	return out, true
 }
 

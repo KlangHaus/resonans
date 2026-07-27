@@ -25,7 +25,7 @@ func lessonDoc(t *testing.T) content.Document {
 		"summary": {"da": "Om kemi", "en": "About chemistry"},
 		"estimatedMinutes": 20,
 		"body": [
-			{"_type": "rich_text", "_key": "a", "content": {"da": "Hej", "en": "Hi"}},
+			{"_type": "rich_text", "_key": "a", "value": {"da": "Hej", "en": "Hi"}},
 			{"_type": "image", "asset": "asset-1", "alt": {"da": "Diagram"}}
 		]
 	}`
@@ -55,15 +55,16 @@ func TestBuildEnvelopeLocaleAndAssets(t *testing.T) {
 	if len(env.Components) != 2 {
 		t.Fatalf("components = %d, want 2", len(env.Components))
 	}
-	if env.Components[0]["_type"] != "rich_text" || env.Components[0]["content"] != "Hej" {
-		t.Errorf("rich_text component = %+v", env.Components[0])
+	if env.Components[0]["_type"] != "rich_text" || env.Components[0]["value"] != "Hej" {
+		t.Errorf("rich_text = %+v", env.Components[0])
 	}
 	asset, ok := env.Components[1]["asset"].(map[string]any)
 	if !ok || asset["url"] != "https://cdn.test/x.jpg" {
 		t.Errorf("image asset not expanded: %+v", env.Components[1])
 	}
-	if env.Components[1]["alt"] != "Diagram" {
-		t.Errorf("image alt = %v (want da resolution)", env.Components[1]["alt"])
+	// §F: image alt is moved INTO the asset object.
+	if asset["alt"] != "Diagram" {
+		t.Errorf("image asset.alt = %v (want da resolution)", asset["alt"])
 	}
 }
 
@@ -74,14 +75,47 @@ func TestBuildEnvelopeFallbackFlag(t *testing.T) {
 	if env.Data["summary"] != "About chemistry" {
 		t.Errorf("summary = %v (want en)", env.Data["summary"])
 	}
-	if env.Components[0]["content"] != "Hi" {
-		t.Errorf("rich_text = %v (want en)", env.Components[0]["content"])
+	if env.Components[0]["value"] != "Hi" {
+		t.Errorf("rich_text = %v (want en)", env.Components[0]["value"])
 	}
-	if env.Components[1]["alt"] != "Diagram" {
-		t.Errorf("alt = %v (want da fallback)", env.Components[1]["alt"])
+	asset, _ := env.Components[1]["asset"].(map[string]any)
+	if asset["alt"] != "Diagram" {
+		t.Errorf("asset.alt = %v (want da fallback)", asset["alt"])
 	}
 	if !env.LocaleFallback {
 		t.Error("expected LocaleFallback=true (alt fell back to da)")
+	}
+}
+
+func TestBuildEnvelopeQuizAnswerKey(t *testing.T) {
+	doc := content.Document{
+		ID: uuid.New(), Type: "quiz", Slug: "q1", Title: "Q1", Version: 1,
+		Body: json.RawMessage(`{
+			"question": {"da": "Hvor mange?"},
+			"type": "single",
+			"options": [{"id":"a","label":{"da":"4"},"correct":true},
+			            {"id":"b","label":{"da":"2"},"correct":false}],
+			"explanation": {"da": "Fire."}
+		}`),
+	}
+	env := BuildEnvelope(context.Background(), uuid.New(), doc, reg(t), "da", "da", fakeAssets{})
+
+	// correctOptionIds is derived + INCLUDED (Etude redacts server-side, §F).
+	cids, _ := env.Data["correctOptionIds"].([]any)
+	if len(cids) != 1 || cids[0] != "a" {
+		t.Fatalf("correctOptionIds = %v, want [a]", env.Data["correctOptionIds"])
+	}
+	// per-option `correct` is folded away.
+	opts, _ := env.Data["options"].([]any)
+	first, _ := opts[0].(map[string]any)
+	if _, has := first["correct"]; has {
+		t.Error("option.correct should be stripped into correctOptionIds")
+	}
+	if first["label"] != "4" {
+		t.Errorf("option label not i18n-resolved: %v", first)
+	}
+	if env.Data["explanation"] != "Fire." {
+		t.Errorf("explanation = %v", env.Data["explanation"])
 	}
 }
 
