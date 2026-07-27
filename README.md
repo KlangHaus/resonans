@@ -60,7 +60,7 @@ Alle ruter kræver en tenant (fra verificeret JWT `org`-claim, eller `X-Dev-Tena
 | PUT    | `/api/v1/documents/{id}` (body valideres mod schema) |
 | POST   | `/api/v1/documents/{id}/publish`       |
 | POST   | `/api/v1/assets` (multipart `file`) · GET `/api/v1/assets` · GET `/api/v1/assets/{id}` |
-| GET    | `/api/v1/video/embed?id=` (video-plugin, tilvælgeligt) |
+| GET    | `/api/v1/video/embed?id=` · `/api/v1/video/resolve?id=` (embed + oEmbed-metadata) |
 | GET    | `/healthz`, `/readyz` (uautentificeret)|
 
 ### Delivery-API (read, published-only) — Fase 2
@@ -99,10 +99,11 @@ til editorens doc-liste.
 Assets (billeder + filer) er tenant-scoped (RLS, som documents). Upload → **Bunny Storage**
 (config-gated backend; in-memory i dev); metadata i `assets`-tabellen (kind, mime, dimensioner,
 hotspot). Content refererer et asset via id (`asset`-felt-type); delivery/editor bygger en
-**Bunny-CDN-URL** m/ transform-params (resize på edge). **Video** = tilvælgeligt plugin
-(`RESONANS_VIDEO_PROVIDER=vimeo`) — video-embed-blok → Vimeo player-URL. Follow-up:
-hotspot/crop→transform-mapping, oEmbed-thumbnails (Vimeo public), per-tenant Vimeo-token
-(Etude-boundary), image-varianter-precompute.
+**Bunny-CDN-URL** m/ transform-params (resize på edge). **Video** = tilvælgeligt plugin (`RESONANS_VIDEO_PROVIDER=vimeo`) — video-embed-blok →
+Vimeo player-URL + **oEmbed-metadata** (titel/thumbnail/varighed via public oEmbed, ingen
+token) til den video-tunge authoring-oplevelse (explainers). Follow-up: hotspot/crop→
+transform-mapping (kræver Bunny-Optimizer-param-verifikation), per-tenant Vimeo-token til
+private videoer (Etude-boundary), image-varianter-precompute.
 
 ## Deploy-kontrakt
 
