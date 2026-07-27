@@ -17,11 +17,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/preview"
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
@@ -33,30 +35,35 @@ const defaultLocale = "da"
 
 // Deps are the collaborators the delivery API needs.
 type Deps struct {
-	Store        content.Store
-	Registry     *schema.Registry
-	Assets       AssetResolver // may be nil (asset ids then pass through unresolved)
-	ServiceToken string        // "" in dev/test (X-Scope-OrgID trusted directly)
-	Logger       *slog.Logger
+	Store         content.Store
+	Registry      *schema.Registry
+	Assets        AssetResolver // may be nil (asset ids then pass through unresolved)
+	ServiceToken  string        // "" in dev/test (X-Scope-OrgID trusted directly)
+	PreviewSecret string        // verifies preview tokens; empty disables preview
+	Logger        *slog.Logger
 }
 
 // Handlers holds the wired dependencies.
 type Handlers struct {
-	store    content.Store
-	registry *schema.Registry
-	assets   AssetResolver
-	log      *slog.Logger
+	store         content.Store
+	registry      *schema.Registry
+	assets        AssetResolver
+	previewSecret []byte
+	log           *slog.Logger
 }
 
 // NewRouter builds the delivery handler: published-only read routes wrapped in
 // the service-auth middleware (which resolves the tenant onto the context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, registry: d.Registry, assets: d.Assets, log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, assets: d.Assets, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
 
 	mux := http.NewServeMux()
 	// Published block-schema + per-doc-type allowlists (consumer validation /
 	// graceful-unknown / forward-compat). More specific than /{type}, so wins.
 	mux.HandleFunc("GET /delivery/v1/schema", h.deliverySchema)
+	// Draft preview by preview-token (editor preview-mode). More specific than
+	// /{type}/{slug}, so wins.
+	mux.HandleFunc("GET /delivery/v1/preview/{type}/{slug}", h.previewDraft)
 	// Catalog: published documents of a type (e.g. /delivery/v1/course).
 	mux.HandleFunc("GET /delivery/v1/{type}", h.listPublished)
 	// A single published document by type + slug (e.g. a lesson/page).
@@ -261,6 +268,39 @@ func summarize(d content.Document, env Envelope) map[string]any {
 		s["moduleCount"] = len(mods)
 	}
 	return s
+}
+
+// previewDraft serves a DRAFT document, authorized by a preview token (which
+// carries the tenant + doc scope). Unlike the published paths, the tenant comes
+// from the verified token, not X-Scope-OrgID.
+func (h *Handlers) previewDraft(w http.ResponseWriter, r *http.Request) {
+	if len(h.previewSecret) == 0 {
+		writeJSON(w, http.StatusNotFound, errBody("preview not enabled"))
+		return
+	}
+	claims, err := preview.Verify(h.previewSecret, r.URL.Query().Get("token"), time.Now())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errBody("invalid or expired preview token"))
+		return
+	}
+	typ, slug := r.PathValue("type"), r.PathValue("slug")
+	if claims.Type != typ || claims.Slug != slug {
+		writeJSON(w, http.StatusForbidden, errBody("token scope mismatch"))
+		return
+	}
+	tid, err := uuid.Parse(claims.Tenant)
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, errBody("invalid tenant in token"))
+		return
+	}
+	d, err := h.store.GetBySlug(r.Context(), tid, typ, slug)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, h.locale(r), defaultLocale, h.assets)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, env)
 }
 
 // locale returns the requested locale, defaulting when absent.

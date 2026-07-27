@@ -168,6 +168,51 @@ func TestMemoryListFilters(t *testing.T) {
 	}
 }
 
+func TestMemoryVersionsAndRollback(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+	d := newDraft(t, s, tenantA, "post", "v")
+
+	if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+		t.Fatalf("publish 1: %v", err)
+	}
+	nt, nb := "Second", json.RawMessage(`{"blocks":[{"_type":"x"}]}`)
+	if _, err := s.Update(ctx, tenantA, d.ID, UpdateInput{Title: &nt, Body: &nb}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+		t.Fatalf("publish 2: %v", err)
+	}
+
+	vs, err := s.ListVersions(ctx, tenantA, d.ID)
+	if err != nil {
+		t.Fatalf("ListVersions: %v", err)
+	}
+	if len(vs) != 2 {
+		t.Fatalf("versions = %d, want 2", len(vs))
+	}
+	if vs[0].Title != "Second" { // newest first
+		t.Errorf("newest version title = %q", vs[0].Title)
+	}
+
+	// Roll back to the older snapshot → new draft with that content.
+	rb, err := s.Rollback(ctx, tenantA, d.ID, vs[1].Version)
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if rb.Status != StatusDraft {
+		t.Errorf("rollback status = %q, want draft", rb.Status)
+	}
+	if rb.Title != vs[1].Title {
+		t.Errorf("rollback title = %q, want %q", rb.Title, vs[1].Title)
+	}
+
+	// Cross-tenant rollback is not found (isolation).
+	if _, err := s.Rollback(ctx, tenantB, d.ID, vs[1].Version); !errors.Is(err, ErrNotFound) {
+		t.Errorf("cross-tenant rollback err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestMemoryReturnsCopies(t *testing.T) {
 	s := NewMemoryStore()
 	d := newDraft(t, s, tenantA, "lesson", "iso")

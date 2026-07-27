@@ -177,21 +177,23 @@ func Run(ctx context.Context) error {
 
 	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
-		Store:    store,
-		Registry: registry,
-		Media:    mediaSvc,
-		Video:    videoProvider,
-		Verifier: verifier,
-		Logger:   logger,
+		Store:         store,
+		Registry:      registry,
+		Media:         mediaSvc,
+		Video:         videoProvider,
+		Verifier:      verifier,
+		PreviewSecret: cfg.PreviewSecret,
+		Logger:        logger,
 	})
 
 	// --- Delivery read router (published-only, service-auth'd) ---
 	deliveryRouter := delivery.NewRouter(delivery.Deps{
-		Store:        store,
-		Registry:     registry,
-		Assets:       &mediaAssetResolver{media: mediaSvc},
-		ServiceToken: cfg.DeliveryToken,
-		Logger:       logger,
+		Store:         store,
+		Registry:      registry,
+		Assets:        &mediaAssetResolver{media: mediaSvc},
+		ServiceToken:  cfg.DeliveryToken,
+		PreviewSecret: cfg.PreviewSecret,
+		Logger:        logger,
 	})
 
 	mux := http.NewServeMux()

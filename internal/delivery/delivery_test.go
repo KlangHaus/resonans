@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/preview"
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
@@ -154,6 +156,43 @@ func TestDeliveryExpandCourseTree(t *testing.T) {
 	l0, _ := lessons[0].(map[string]any)
 	if l0["title"] != "Lektion 1" || l0["durationEstimate"] != float64(15) {
 		t.Errorf("lesson node = %v", l0)
+	}
+}
+
+func TestDeliveryPreviewDraft(t *testing.T) {
+	s := content.NewMemoryStore()
+	ctx := context.Background()
+	if _, err := s.Create(ctx, tenantA, content.CreateInput{Type: "page", Slug: "draft-page", Title: "Udkast"}); err != nil {
+		t.Fatalf("create draft: %v", err)
+	}
+	secret := "preview-secret"
+	h := NewRouter(Deps{Store: s, Registry: reg(t), PreviewSecret: secret})
+
+	// Draft is NOT on the published path.
+	if rec := get(h, "/delivery/v1/page/draft-page", "", tenantA.String()); rec.Code != http.StatusNotFound {
+		t.Fatalf("published draft = %d, want 404", rec.Code)
+	}
+	// A valid preview token renders the draft (tenant comes from the token).
+	tok := preview.Sign([]byte(secret), preview.Claims{
+		Tenant: tenantA.String(), Type: "page", Slug: "draft-page", Exp: time.Now().Add(time.Minute).Unix(),
+	})
+	rec := get(h, "/delivery/v1/preview/page/draft-page?token="+tok, "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview = %d, body=%s", rec.Code, rec.Body)
+	}
+	var env Envelope
+	_ = json.Unmarshal(rec.Body.Bytes(), &env)
+	if env.Slug != "draft-page" || env.Data["title"] != "Udkast" {
+		t.Errorf("preview envelope = %+v", env)
+	}
+	// No token → 401.
+	if rec := get(h, "/delivery/v1/preview/page/draft-page", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token = %d, want 401", rec.Code)
+	}
+	// Token for a different slug → 403 scope mismatch.
+	bad := preview.Sign([]byte(secret), preview.Claims{Tenant: tenantA.String(), Type: "page", Slug: "other", Exp: time.Now().Add(time.Minute).Unix()})
+	if rec := get(h, "/delivery/v1/preview/page/draft-page?token="+bad, "", ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("scope mismatch = %d, want 403", rec.Code)
 	}
 }
 
