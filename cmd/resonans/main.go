@@ -29,6 +29,8 @@ func main() {
 			os.Exit(healthcheck())
 		case "migrate":
 			os.Exit(runMigrate())
+		case "seed":
+			os.Exit(runSeed())
 		case "help", "-h", "--help":
 			usage(os.Stdout)
 			return
@@ -101,12 +103,24 @@ func runMigrate() int {
 	return 0
 }
 
+// runSeed inserts the explainers demo dataset (RESONANS_SEED_TENANT) and exits.
+func runSeed() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := app.Seed(ctx); err != nil {
+		slog.Error("seed failed", "error", err)
+		return 1
+	}
+	return 0
+}
+
 func usage(w *os.File) {
 	_, _ = fmt.Fprintln(w, `resonans — KlangHaus headless CMS server
 
 Usage:
   resonans              run the server
   resonans migrate      run pending DB migrations and exit (as migrator role)
+  resonans seed         insert the explainers demo dataset (RESONANS_SEED_TENANT) and exit
   resonans healthcheck  probe /healthz on $PORT and exit 0 (ok) / 1 (fail)
   resonans version      print the build version
   resonans help         show this message`)

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +25,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/observability"
 	"github.com/KlangHaus/resonans/internal/persistence"
 	"github.com/KlangHaus/resonans/internal/schema"
+	"github.com/KlangHaus/resonans/internal/seed"
 )
 
 // version is stamped via -ldflags at build time.
@@ -234,6 +237,37 @@ func Run(ctx context.Context) error {
 		logger.Error("http_shutdown_error", "err", err)
 	}
 	logger.Info("stopped")
+	return nil
+}
+
+// Seed inserts the explainers demo dataset for the tenant in RESONANS_SEED_TENANT.
+// Run as a one-shot (`resonans seed`) against staging so consumers (Etude M5) can
+// render real content. Connects as the app role; the stores set the tenant GUC.
+func Seed(ctx context.Context) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required for seed")
+	}
+	tenantID, err := uuid.Parse(strings.TrimSpace(os.Getenv("RESONANS_SEED_TENANT")))
+	if err != nil {
+		return fmt.Errorf("RESONANS_SEED_TENANT must be a tenant uuid: %w", err)
+	}
+	pool, err := persistence.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect db: %w", err)
+	}
+	defer pool.Close()
+	reg, err := schema.DefaultRegistry()
+	if err != nil {
+		return fmt.Errorf("load schema: %w", err)
+	}
+	if err := seed.Run(ctx, content.NewPostgresStore(pool), media.NewPostgresStore(pool), reg, tenantID); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).Info("seed_complete", "tenant", tenantID)
 	return nil
 }
 

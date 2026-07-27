@@ -10,6 +10,13 @@ linters:
     - errorlint # correct errors.Is/As usage and %w wrapping
     - misspell
     - unconvert # redundant type conversions
+  exclusions:
+    rules:
+      # The seed package embeds Danish demo content (da strings); misspell is an
+      # English spellchecker and false-flags Danish words. Skip misspell there.
+      - path: internal/seed/
+        linters:
+          - misspell
   settings:
     misspell:
       locale: US
