@@ -25,7 +25,7 @@ func TestValidateValidLesson(t *testing.T) {
 		"summary": {"da": "Om alkaner", "en": "About alkanes"},
 		"estimatedMinutes": 20,
 		"body": [
-			{"_type": "rich-text", "_key": "a", "content": {"da": "Hej"}},
+			{"_type": "rich_text", "_key": "a", "content": {"da": "Hej"}},
 			{"_type": "quiz", "question": {"da": "Hvor mange?"}, "type": "single",
 			 "options": [{"text": {"da": "4"}, "correct": true}]}
 		]
@@ -73,7 +73,7 @@ func TestValidateI18nShape(t *testing.T) {
 func TestValidateNestedColumns(t *testing.T) {
 	body := `{"body": [
 		{"_type": "columns", "columns": [
-			{"content": [{"_type": "rich-text", "content": {"da": "A"}}]},
+			{"content": [{"_type": "rich_text", "content": {"da": "A"}}]},
 			{"content": [{"_type": "cta", "label": {"da": "Køb"}, "href": "/x"}]}
 		]}
 	]}`
@@ -85,7 +85,7 @@ func TestValidateNestedColumns(t *testing.T) {
 func TestValidatePageMarketingBlocks(t *testing.T) {
 	body := `{"body": [
 		{"_type": "hero", "heading": {"da": "Velkommen"}},
-		{"_type": "feature-grid", "features": [{"title": {"da": "Hurtig"}}]}
+		{"_type": "feature_grid", "features": [{"title": {"da": "Hurtig"}}]}
 	]}`
 	if err := validate(t, "page", body); err != nil {
 		t.Fatalf("valid page rejected: %v", err)

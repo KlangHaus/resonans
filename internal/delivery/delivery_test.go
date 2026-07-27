@@ -10,7 +10,17 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/schema"
 )
+
+func reg(t *testing.T) *schema.Registry {
+	t.Helper()
+	r, err := schema.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	return r
+}
 
 var (
 	tenantA = uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -40,7 +50,7 @@ func seeded(t *testing.T, serviceToken string) http.Handler {
 	}
 	pub(tenantB, "course", "intro")
 
-	return NewRouter(Deps{Store: s, ServiceToken: serviceToken})
+	return NewRouter(Deps{Store: s, Registry: reg(t), ServiceToken: serviceToken})
 }
 
 func get(h http.Handler, path, token, scope string) *httptest.ResponseRecorder {
@@ -65,11 +75,14 @@ func TestDeliveryPublishedOnly(t *testing.T) {
 		t.Fatalf("list = %d", rec.Code)
 	}
 	var resp struct {
-		Documents []content.Document `json:"documents"`
+		Items []Envelope `json:"items"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	if len(resp.Documents) != 1 || resp.Documents[0].Slug != "intro" {
-		t.Fatalf("catalog = %+v, want only published intro", resp.Documents)
+	if len(resp.Items) != 1 || resp.Items[0].Slug != "intro" {
+		t.Fatalf("catalog = %+v, want only published intro", resp.Items)
+	}
+	if resp.Items[0].Version < 1 || resp.Items[0].Data["title"] != "intro" {
+		t.Errorf("envelope shape: version=%d data=%v", resp.Items[0].Version, resp.Items[0].Data)
 	}
 
 	// A draft is not deliverable.
@@ -91,14 +104,14 @@ func TestDeliveryTenantIsolation(t *testing.T) {
 	if recA.Code != http.StatusOK || recB.Code != http.StatusOK {
 		t.Fatalf("expected both tenants to see their own intro: A=%d B=%d", recA.Code, recB.Code)
 	}
-	var a, b content.Document
+	var a, b Envelope
 	_ = json.Unmarshal(recA.Body.Bytes(), &a)
 	_ = json.Unmarshal(recB.Body.Bytes(), &b)
-	if a.TenantID != tenantA || b.TenantID != tenantB {
-		t.Fatalf("tenant scoping leaked: A=%s B=%s", a.TenantID, b.TenantID)
+	if a.Slug != "intro" || b.Slug != "intro" {
+		t.Fatalf("expected both intro: A=%s B=%s", a.Slug, b.Slug)
 	}
 	if a.ID == b.ID {
-		t.Fatal("different tenants returned the same document")
+		t.Fatal("different tenants returned the same document (tenant scoping leaked)")
 	}
 }
 

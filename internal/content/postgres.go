@@ -15,7 +15,7 @@ import (
 // uniqueViolation is the Postgres SQLSTATE for a unique-constraint breach.
 const uniqueViolation = "23505"
 
-const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, published_at, created_at, updated_at`
+const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, version, published_at, created_at, updated_at`
 
 // PostgresStore is the persistent, RLS-backed Store. Every operation runs in a
 // transaction that first sets the tenant GUC (set_config('app.tenant_id', …,
@@ -158,6 +158,7 @@ func (s *PostgresStore) Update(ctx context.Context, tenantID, id uuid.UUID, in U
 			  type       = coalesce($2, type),
 			  title      = coalesce($3, title),
 			  body       = coalesce($4, body),
+			  version    = version + 1,
 			  updated_at = now()
 			where id = $1
 			returning `+documentColumns,
@@ -176,6 +177,7 @@ func (s *PostgresStore) Publish(ctx context.Context, tenantID, id uuid.UUID) (Do
 			update resonans_app.documents set
 			  status       = 'published',
 			  published_at = now(),
+			  version      = version + 1,
 			  updated_at   = now()
 			where id = $1
 			returning `+documentColumns, id)
@@ -194,7 +196,7 @@ func scanDoc(sc scanner) (Document, error) {
 	var d Document
 	if err := sc.Scan(
 		&d.ID, &d.TenantID, &d.Dataset, &d.Type, &d.Slug, &d.Title,
-		&d.Body, &d.Status, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt,
+		&d.Body, &d.Status, &d.Version, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt,
 	); err != nil {
 		return Document{}, err
 	}

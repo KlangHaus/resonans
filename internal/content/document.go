@@ -46,6 +46,7 @@ type Document struct {
 	Title       string          `json:"title"`
 	Body        json.RawMessage `json:"body"`
 	Status      string          `json:"status"`
+	Version     int             `json:"version"`
 	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`

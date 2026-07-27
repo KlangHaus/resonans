@@ -101,6 +101,7 @@ func (s *MemoryStore) Create(_ context.Context, tenantID uuid.UUID, in CreateInp
 		Title:     in.Title,
 		Body:      append(json.RawMessage(nil), in.Body...),
 		Status:    StatusDraft,
+		Version:   1,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -128,6 +129,7 @@ func (s *MemoryStore) Update(_ context.Context, tenantID, id uuid.UUID, in Updat
 	if in.Body != nil {
 		d.Body = append(json.RawMessage(nil), (*in.Body)...)
 	}
+	d.Version++
 	d.UpdatedAt = s.now().UTC()
 	s.byID[id] = d
 	return cloneDoc(d), nil
@@ -144,6 +146,7 @@ func (s *MemoryStore) Publish(_ context.Context, tenantID, id uuid.UUID) (Docume
 	now := s.now().UTC()
 	d.Status = StatusPublished
 	d.PublishedAt = &now
+	d.Version++
 	d.UpdatedAt = now
 	s.byID[id] = d
 	return cloneDoc(d), nil

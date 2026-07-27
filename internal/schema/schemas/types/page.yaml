@@ -2,7 +2,7 @@ type: page
 fields:
   - name: body
     type: blocks
-    allow: [rich-text, image, hero, feature-grid, cta, testimonial, callout, iframe-embed, video-embed, columns]
+    allow: [rich_text, image, hero, feature_grid, cta, quote, callout, iframe_embed, video_embed, columns]
   - { name: seoTitle, type: string, i18n: true }
   - { name: seoDescription, type: string, i18n: true }
 list:

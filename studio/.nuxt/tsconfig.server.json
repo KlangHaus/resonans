@@ -1,0 +1,143 @@
+{
+  "compilerOptions": {
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "allowSyntheticDefaultImports": true,
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    "paths": {
+      "#imports": [
+        "./types/nitro-imports"
+      ],
+      "~/*": [
+        "../app/*"
+      ],
+      "@/*": [
+        "../app/*"
+      ],
+      "~~/*": [
+        "../*"
+      ],
+      "@@/*": [
+        "../*"
+      ],
+      "@unhead/vue": [
+        "../node_modules/.pnpm/@unhead+vue@3.2.3_esbuild@0.28.1_lightningcss@1.33.0_rolldown@1.2.0_rollup@4.62.2_srvx@_e86e4feefbd3e6af44bb51f1f9fa6073/node_modules/@unhead/vue"
+      ],
+      "@nuxt/devtools": [
+        "../node_modules/.pnpm/@nuxt+devtools@3.3.1_db0@0.3.4_ioredis@5.11.1_magic-string@1.1.0_oxc-parser@0.140.0_rol_b6a49981db6fc22a30a35d28821243be/node_modules/@nuxt/devtools"
+      ],
+      "vue": [
+        "../node_modules/.pnpm/vue@3.5.40_typescript@5.9.3/node_modules/vue"
+      ],
+      "@vue/runtime-core": [
+        "../node_modules/.pnpm/@vue+runtime-core@3.5.40/node_modules/@vue/runtime-core"
+      ],
+      "@vue/compiler-sfc": [
+        "../node_modules/.pnpm/@vue+compiler-sfc@3.5.40/node_modules/@vue/compiler-sfc"
+      ],
+      "vue-router": [
+        "../node_modules/.pnpm/vue-router@5.2.0_@vue+compiler-sfc@3.5.40_esbuild@0.28.1_rolldown@1.2.0_rollup@4.62.2_v_fece80ab4729e9ab6a8e3925d9331e55/node_modules/vue-router"
+      ],
+      "vue-router/auto-routes": [
+        "../node_modules/.pnpm/vue-router@5.2.0_@vue+compiler-sfc@3.5.40_esbuild@0.28.1_rolldown@1.2.0_rollup@4.62.2_v_fece80ab4729e9ab6a8e3925d9331e55/node_modules/vue-router/vue-router-auto-routes.d"
+      ],
+      "@nuxt/schema": [
+        "../node_modules/.pnpm/@nuxt+schema@4.5.0/node_modules/@nuxt/schema"
+      ],
+      "nuxt": [
+        "../node_modules/.pnpm/nuxt@4.5.0_@babel+plugin-syntax-jsx@7.29.7_@babel+core@7.29.7__@babel+plugin-syntax-typ_be65d01d812887b3ac5cabc457b39f62/node_modules/nuxt"
+      ],
+      "vite/client": [
+        "../node_modules/.pnpm/vite@8.1.5_esbuild@0.28.1_jiti@2.7.0_terser@5.49.0_yaml@2.9.0/node_modules/vite/client"
+      ],
+      "nitropack/types": [
+        "../node_modules/.pnpm/nitropack@2.13.4_oxc-parser@0.140.0_rolldown@1.2.0_srvx@0.11.22_vite@8.1.5_esbuild@0.28_cd238af0f8577e752eb96957dcf3dfd5/node_modules/nitropack/types"
+      ],
+      "nitropack/runtime": [
+        "../node_modules/.pnpm/nitropack@2.13.4_oxc-parser@0.140.0_rolldown@1.2.0_srvx@0.11.22_vite@8.1.5_esbuild@0.28_cd238af0f8577e752eb96957dcf3dfd5/node_modules/nitropack/runtime"
+      ],
+      "nitropack": [
+        "../node_modules/.pnpm/nitropack@2.13.4_oxc-parser@0.140.0_rolldown@1.2.0_srvx@0.11.22_vite@8.1.5_esbuild@0.28_cd238af0f8577e752eb96957dcf3dfd5/node_modules/nitropack"
+      ],
+      "defu": [
+        "../node_modules/.pnpm/defu@6.1.7/node_modules/defu"
+      ],
+      "h3": [
+        "../node_modules/.pnpm/h3@1.15.11/node_modules/h3"
+      ],
+      "consola": [
+        "../node_modules/.pnpm/consola@3.4.2/node_modules/consola"
+      ],
+      "ofetch": [
+        "../node_modules/.pnpm/ofetch@1.5.1/node_modules/ofetch"
+      ],
+      "crossws": [
+        "../node_modules/.pnpm/crossws@0.3.5/node_modules/crossws"
+      ],
+      "#shared": [
+        "../shared"
+      ],
+      "#shared/*": [
+        "../shared/*"
+      ],
+      "#server": [
+        "../server"
+      ],
+      "#server/*": [
+        "../server/*"
+      ],
+      "#build": [
+        "./"
+      ],
+      "#build/*": [
+        "./*"
+      ],
+      "#internal/nuxt/paths": [
+        "../node_modules/.pnpm/@nuxt+nitro-server@4.5.0_@babel+plugin-syntax-typescript@7.29.7_@babel+core@7.29.7__db0_7a22738cb06b9c10bf58940db7783661/node_modules/@nuxt/nitro-server/dist/runtime/utils/paths"
+      ],
+      "#unhead/composables": [
+        "../node_modules/.pnpm/nuxt@4.5.0_@babel+plugin-syntax-jsx@7.29.7_@babel+core@7.29.7__@babel+plugin-syntax-typ_be65d01d812887b3ac5cabc457b39f62/node_modules/nuxt/dist/head/runtime/composables"
+      ],
+      "#app/island-hash": [
+        "../node_modules/.pnpm/nuxt@4.5.0_@babel+plugin-syntax-jsx@7.29.7_@babel+core@7.29.7__@babel+plugin-syntax-typ_be65d01d812887b3ac5cabc457b39f62/node_modules/nuxt/dist/app/island-hash"
+      ],
+      "#app/internal/*": [
+        "../node_modules/.pnpm/nuxt@4.5.0_@babel+plugin-syntax-jsx@7.29.7_@babel+core@7.29.7__@babel+plugin-syntax-typ_be65d01d812887b3ac5cabc457b39f62/node_modules/nuxt/dist/app/internal/*"
+      ],
+      "#app/types": [
+        "../node_modules/.pnpm/nuxt@4.5.0_@babel+plugin-syntax-jsx@7.29.7_@babel+core@7.29.7__@babel+plugin-syntax-typ_be65d01d812887b3ac5cabc457b39f62/node_modules/nuxt/dist/app/types"
+      ]
+    },
+    "lib": [
+      "esnext",
+      "webworker",
+      "dom.iterable"
+    ],
+    "noUncheckedIndexedAccess": true,
+    "allowArbitraryExtensions": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "./types/nitro-nuxt.d.ts",
+    "../node_modules/.pnpm/@nuxt+telemetry@2.8.0_@nuxt+kit@4.5.0_magic-string@1.1.0_magicast@0.5.3_oxc-parser@0.14_2275320db178c563336922fdf5785c29/node_modules/runtime/server",
+    "../node_modules/.pnpm/@nuxt+telemetry@2.8.0_@nuxt+kit@4.5.0_magic-string@1.1.0_magicast@0.5.3_oxc-parser@0.14_2275320db178c563336922fdf5785c29/node_modules/dist/runtime/server",
+    "../server/**/*",
+    "../shared/**/*.d.ts",
+    "./types/nitro.d.ts"
+  ],
+  "exclude": [
+    "../node_modules",
+    "../node_modules/.pnpm/nuxt@4.5.0_@babel+plugin-syntax-jsx@7.29.7_@babel+core@7.29.7__@babel+plugin-syntax-typ_be65d01d812887b3ac5cabc457b39f62/node_modules/nuxt/node_modules",
+    "../node_modules/.pnpm/@nuxt+telemetry@2.8.0_@nuxt+kit@4.5.0_magic-string@1.1.0_magicast@0.5.3_oxc-parser@0.14_2275320db178c563336922fdf5785c29/node_modules/@nuxt/telemetry/node_modules",
+    "../dist"
+  ]
+}

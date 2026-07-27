@@ -19,28 +19,36 @@ import (
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/schema"
 )
 
 // maxList caps a catalog response until cursor pagination lands (follow-up).
 const maxList = 200
 
+// defaultLocale is used when a request omits ?locale and as the i18n fallback.
+const defaultLocale = "da"
+
 // Deps are the collaborators the delivery API needs.
 type Deps struct {
 	Store        content.Store
-	ServiceToken string // "" in dev/test (X-Scope-OrgID trusted directly)
+	Registry     *schema.Registry
+	Assets       AssetResolver // may be nil (asset ids then pass through unresolved)
+	ServiceToken string        // "" in dev/test (X-Scope-OrgID trusted directly)
 	Logger       *slog.Logger
 }
 
 // Handlers holds the wired dependencies.
 type Handlers struct {
-	store content.Store
-	log   *slog.Logger
+	store    content.Store
+	registry *schema.Registry
+	assets   AssetResolver
+	log      *slog.Logger
 }
 
 // NewRouter builds the delivery handler: published-only read routes wrapped in
 // the service-auth middleware (which resolves the tenant onto the context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, assets: d.Assets, log: d.Logger}
 
 	mux := http.NewServeMux()
 	// Catalog: published documents of a type (e.g. /delivery/v1/course).
@@ -84,7 +92,12 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 		docs = docs[:maxList]
 		truncated = true
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"documents": docs, "truncated": truncated})
+	locale := h.locale(r)
+	items := make([]Envelope, 0, len(docs))
+	for _, d := range docs {
+		items = append(items, BuildEnvelope(r.Context(), tid, d, h.registry, locale, defaultLocale, h.assets))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "truncated": truncated})
 }
 
 func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +110,16 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, d)
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, h.locale(r), defaultLocale, h.assets)
+	writeJSON(w, http.StatusOK, env)
+}
+
+// locale returns the requested locale, defaulting when absent.
+func (h *Handlers) locale(r *http.Request) string {
+	if l := r.URL.Query().Get("locale"); l != "" {
+		return l
+	}
+	return defaultLocale
 }
 
 func (h *Handlers) writeErr(w http.ResponseWriter, err error) {

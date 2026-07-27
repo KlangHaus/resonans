@@ -4,11 +4,11 @@
 # right blocks per domain via the per-doc-type allowlist.
 blocks:
   # ── Content blocks ──────────────────────────────────────
-  - name: rich-text
+  - name: rich_text
     fields:
       - { name: content, type: richtext, i18n: true, required: true }
 
-  - name: video-embed # references a Vimeo video (video-hosting stays in Vimeo)
+  - name: video_embed # references a Vimeo video (video-hosting stays in Vimeo)
     fields:
       - { name: provider, type: string } # default "vimeo"
       - { name: videoId, type: string, required: true }
@@ -40,7 +40,7 @@ blocks:
       - { name: label, type: string, i18n: true }
       - { name: description, type: string, i18n: true }
 
-  - name: iframe-embed
+  - name: iframe_embed
     fields:
       - { name: url, type: string, required: true }
       - { name: title, type: string, i18n: true }
@@ -66,7 +66,7 @@ blocks:
       - { name: ctaLabel, type: string, i18n: true }
       - { name: ctaHref, type: string }
 
-  - name: feature-grid
+  - name: feature_grid
     fields:
       - name: features
         type: array
@@ -81,7 +81,7 @@ blocks:
       - { name: label, type: string, i18n: true, required: true }
       - { name: href, type: string, required: true }
 
-  - name: testimonial
+  - name: quote
     fields:
       - { name: quote, type: string, i18n: true, required: true }
       - { name: author, type: string }
@@ -95,4 +95,4 @@ blocks:
         of:
           - name: content
             type: blocks
-            allow: [rich-text, image, callout, code, download, iframe-embed, video-embed, quiz, cta]
+            allow: [rich_text, image, callout, code, download, iframe_embed, video_embed, quiz, cta]

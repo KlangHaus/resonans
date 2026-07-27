@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
@@ -184,6 +185,8 @@ func Run(ctx context.Context) error {
 	// --- Delivery read router (published-only, service-auth'd) ---
 	deliveryRouter := delivery.NewRouter(delivery.Deps{
 		Store:        store,
+		Registry:     registry,
+		Assets:       &mediaAssetResolver{media: mediaSvc},
 		ServiceToken: cfg.DeliveryToken,
 		Logger:       logger,
 	})
@@ -259,6 +262,30 @@ func Migrate(ctx context.Context) error {
 	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).
 		Info("migrations_complete", "applied", applied)
 	return nil
+}
+
+// mediaAssetResolver adapts the media service to delivery.AssetResolver: it
+// expands a stored asset id to `{url, width?, height?}` (Bunny CDN URL) so the
+// delivery envelope carries ready-to-render assets.
+type mediaAssetResolver struct{ media *media.Service }
+
+func (m *mediaAssetResolver) ResolveAsset(ctx context.Context, tenantID uuid.UUID, assetID string) (map[string]any, bool) {
+	id, err := uuid.Parse(assetID)
+	if err != nil {
+		return nil, false
+	}
+	a, err := m.media.Get(ctx, tenantID, id)
+	if err != nil {
+		return nil, false
+	}
+	out := map[string]any{"url": m.media.URL(a, media.Transform{})}
+	if a.Width != nil {
+		out["width"] = *a.Width
+	}
+	if a.Height != nil {
+		out["height"] = *a.Height
+	}
+	return out, true
 }
 
 // Version returns the build-stamped version (exposed for the healthcheck cmd).

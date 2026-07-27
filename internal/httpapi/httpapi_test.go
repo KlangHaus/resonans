@@ -60,7 +60,7 @@ func TestCreatePublishReadFlow(t *testing.T) {
 	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
 		"type": "lesson", "slug": "home", "title": "Home",
 		"body": map[string]any{
-			"body": []any{map[string]any{"_type": "rich-text", "content": map[string]any{"da": "Hej"}}},
+			"body": []any{map[string]any{"_type": "rich_text", "content": map[string]any{"da": "Hej"}}},
 		},
 	})
 	if rec.Code != http.StatusCreated {
