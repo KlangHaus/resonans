@@ -115,6 +115,48 @@ func TestDeliveryTenantIsolation(t *testing.T) {
 	}
 }
 
+func TestDeliveryExpandCourseTree(t *testing.T) {
+	s := content.NewMemoryStore()
+	ctx := context.Background()
+	mk := func(typ, slug, title, body string) content.Document {
+		d, err := s.Create(ctx, tenantA, content.CreateInput{Type: typ, Slug: slug, Title: title, Body: json.RawMessage(body)})
+		if err != nil {
+			t.Fatalf("create %s: %v", slug, err)
+		}
+		if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+			t.Fatalf("publish %s: %v", slug, err)
+		}
+		return d
+	}
+	lesson := mk("lesson", "l1", "Lektion 1", `{"estimatedMinutes":15}`)
+	module := mk("module", "m1", "Modul 1", `{"lessons":[{"lesson":"`+lesson.ID.String()+`"}]}`)
+	mk("course", "c1", "Kursus 1", `{"modules":[{"module":"`+module.ID.String()+`"}]}`)
+
+	h := NewRouter(Deps{Store: s, Registry: reg(t)})
+	rec := get(h, "/delivery/v1/course/c1?expand=modules.lessons", "", tenantA.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expand = %d", rec.Code)
+	}
+	var env Envelope
+	_ = json.Unmarshal(rec.Body.Bytes(), &env)
+	mods, _ := env.Data["modules"].([]any)
+	if len(mods) != 1 {
+		t.Fatalf("modules = %d, want 1 (tree): %v", len(mods), env.Data["modules"])
+	}
+	m0, _ := mods[0].(map[string]any)
+	if m0["title"] != "Modul 1" || m0["slug"] != "m1" {
+		t.Errorf("module node = %v", m0)
+	}
+	lessons, _ := m0["lessons"].([]any)
+	if len(lessons) != 1 {
+		t.Fatalf("lessons = %d, want 1", len(lessons))
+	}
+	l0, _ := lessons[0].(map[string]any)
+	if l0["title"] != "Lektion 1" || l0["durationEstimate"] != float64(15) {
+		t.Errorf("lesson node = %v", l0)
+	}
+}
+
 func TestDeliveryNoScopeForbidden(t *testing.T) {
 	h := seeded(t, "")
 	if rec := get(h, "/delivery/v1/course", "", ""); rec.Code != http.StatusForbidden {

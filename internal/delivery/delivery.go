@@ -10,11 +10,13 @@
 package delivery
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -149,10 +151,91 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	env := BuildEnvelope(r.Context(), tid, d, h.registry, h.locale(r), defaultLocale, h.assets)
+	locale := h.locale(r)
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, defaultLocale, h.assets)
+	// ?expand=modules.lessons: replace a course's module refs with a nested tree
+	// (module → lesson metadata) resolved in one call (no N+1 in SSR).
+	if d.Type == "course" && strings.Contains(r.URL.Query().Get("expand"), "modules") {
+		h.expandCourseTree(r.Context(), tid, env, locale)
+	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 	writeJSON(w, http.StatusOK, env)
+}
+
+// expandCourseTree replaces course.data.modules (an array of module refs) with
+// resolved nodes {id,slug,title,order,lessons:[{id,slug,title,order,durationEstimate}]}.
+// Unpublished / missing refs are skipped. Mutates env.Data in place.
+func (h *Handlers) expandCourseTree(ctx context.Context, tid uuid.UUID, env Envelope, locale string) {
+	rawModules, ok := env.Data["modules"].([]any)
+	if !ok {
+		return
+	}
+	modules := make([]any, 0, len(rawModules))
+	for i, el := range rawModules {
+		modDoc, err := h.publishedByID(ctx, tid, extractRefID(el))
+		if err != nil {
+			continue
+		}
+		modEnv := BuildEnvelope(ctx, tid, modDoc, h.registry, locale, defaultLocale, h.assets)
+		node := map[string]any{"id": modEnv.ID, "slug": modEnv.Slug, "title": modEnv.Data["title"], "order": i}
+
+		rawLessons, _ := modEnv.Data["lessons"].([]any)
+		lessons := make([]any, 0, len(rawLessons))
+		for j, lel := range rawLessons {
+			lesDoc, err := h.publishedByID(ctx, tid, extractRefID(lel))
+			if err != nil {
+				continue
+			}
+			lesEnv := BuildEnvelope(ctx, tid, lesDoc, h.registry, locale, defaultLocale, h.assets)
+			lesson := map[string]any{"id": lesEnv.ID, "slug": lesEnv.Slug, "title": lesEnv.Data["title"], "order": j}
+			if dur, ok := lesEnv.Data["estimatedMinutes"]; ok {
+				lesson["durationEstimate"] = dur
+			}
+			lessons = append(lessons, lesson)
+		}
+		node["lessons"] = lessons
+		modules = append(modules, node)
+	}
+	env.Data["modules"] = modules
+}
+
+// publishedByID fetches a published document by id (tenant-scoped). Non-published
+// or malformed ids yield ErrNotFound so the tree simply omits them.
+func (h *Handlers) publishedByID(ctx context.Context, tid uuid.UUID, idStr string) (content.Document, error) {
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return content.Document{}, content.ErrNotFound
+	}
+	d, err := h.store.Get(ctx, tid, id)
+	if err != nil {
+		return content.Document{}, err
+	}
+	if d.Status != content.StatusPublished {
+		return content.Document{}, content.ErrNotFound
+	}
+	return d, nil
+}
+
+// extractRefID pulls the referenced doc id out of a resolved array element such
+// as {"module": {"ref": {"type","id"}}} (the wrapper key varies: module/lesson).
+func extractRefID(el any) string {
+	m, ok := el.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, v := range m {
+		ref, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		if r, ok := ref["ref"].(map[string]any); ok {
+			if id, ok := r["id"].(string); ok {
+				return id
+			}
+		}
+	}
+	return ""
 }
 
 // summarize builds the catalog summary (§D courseSummary shape) from a document
