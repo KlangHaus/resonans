@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -126,6 +127,24 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
+	// Editorial order: most recently published first, so a re-published draft
+	// rises to the top (publishedAt = what the reader sees). The shared store
+	// List returns created_at desc (right for the editor doc-list); the catalog
+	// re-sorts here. Sort BEFORE truncation so the top-N is by publish date, not
+	// creation date. Published docs always carry PublishedAt; nil sorts last.
+	sort.SliceStable(docs, func(i, j int) bool {
+		pi, pj := docs[i].PublishedAt, docs[j].PublishedAt
+		switch {
+		case pi != nil && pj != nil && !pi.Equal(*pj):
+			return pi.After(*pj)
+		case (pi == nil) != (pj == nil):
+			return pj == nil // a document with a publish date precedes one without
+		case !docs[i].CreatedAt.Equal(docs[j].CreatedAt):
+			return docs[i].CreatedAt.After(docs[j].CreatedAt)
+		default:
+			return docs[i].ID.String() < docs[j].ID.String()
+		}
+	})
 	truncated := false
 	if len(docs) > maxList {
 		docs = docs[:maxList]
