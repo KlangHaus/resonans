@@ -117,6 +117,50 @@ func TestDeliveryTenantIsolation(t *testing.T) {
 	}
 }
 
+func TestDeliveryCatalogPublishedAtDesc(t *testing.T) {
+	s := content.NewMemoryStore()
+	ctx := context.Background()
+
+	// "early-created" is created first but published LAST; "late-created" is
+	// created second but published FIRST. Creation order and publish order thus
+	// disagree — so the resulting catalog order proves the sort key is
+	// publishedAt (not created_at).
+	early, err := s.Create(ctx, tenantA, content.CreateInput{Type: "post", Slug: "early-created", Title: "early"})
+	if err != nil {
+		t.Fatalf("create early: %v", err)
+	}
+	late, err := s.Create(ctx, tenantA, content.CreateInput{Type: "post", Slug: "late-created", Title: "late"})
+	if err != nil {
+		t.Fatalf("create late: %v", err)
+	}
+	if _, err := s.Publish(ctx, tenantA, late.ID); err != nil {
+		t.Fatalf("publish late: %v", err)
+	}
+	time.Sleep(2 * time.Millisecond) // guarantee distinct publishedAt timestamps
+	if _, err := s.Publish(ctx, tenantA, early.ID); err != nil {
+		t.Fatalf("publish early: %v", err)
+	}
+
+	h := NewRouter(Deps{Store: s, Registry: reg(t), ServiceToken: ""})
+	rec := get(h, "/delivery/v1/post", "", tenantA.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("catalog = %d", rec.Code)
+	}
+	var resp struct {
+		Items []map[string]any `json:"items"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if len(resp.Items) != 2 {
+		t.Fatalf("want 2 items, got %d: %+v", len(resp.Items), resp.Items)
+	}
+	// Most recently published leads: "early-created" was published last, so it
+	// comes first even though it was created first (created_at desc would invert).
+	if resp.Items[0]["slug"] != "early-created" || resp.Items[1]["slug"] != "late-created" {
+		t.Errorf("catalog order = [%v, %v], want [early-created, late-created] (publishedAt desc)",
+			resp.Items[0]["slug"], resp.Items[1]["slug"])
+	}
+}
+
 func TestDeliveryExpandCourseTree(t *testing.T) {
 	s := content.NewMemoryStore()
 	ctx := context.Background()
