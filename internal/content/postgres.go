@@ -15,7 +15,7 @@ import (
 // uniqueViolation is the Postgres SQLSTATE for a unique-constraint breach.
 const uniqueViolation = "23505"
 
-const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, published_at, created_at, updated_at`
+const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, version, published_at, created_at, updated_at`
 
 // PostgresStore is the persistent, RLS-backed Store. Every operation runs in a
 // transaction that first sets the tenant GUC (set_config('app.tenant_id', …,
@@ -118,6 +118,19 @@ func (s *PostgresStore) GetPublished(ctx context.Context, tenantID uuid.UUID, ty
 	return d, err
 }
 
+func (s *PostgresStore) GetBySlug(ctx context.Context, tenantID uuid.UUID, typ, slug string) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx,
+			"select "+documentColumns+" from resonans_app.documents "+
+				"where dataset = $1 and type = $2 and slug = $3", DefaultDataset, typ, slug)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		return scanErr
+	})
+	return d, err
+}
+
 func (s *PostgresStore) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput) (Document, error) {
 	if err := in.Validate(); err != nil {
 		return Document{}, err
@@ -158,6 +171,7 @@ func (s *PostgresStore) Update(ctx context.Context, tenantID, id uuid.UUID, in U
 			  type       = coalesce($2, type),
 			  title      = coalesce($3, title),
 			  body       = coalesce($4, body),
+			  version    = version + 1,
 			  updated_at = now()
 			where id = $1
 			returning `+documentColumns,
@@ -176,11 +190,70 @@ func (s *PostgresStore) Publish(ctx context.Context, tenantID, id uuid.UUID) (Do
 			update resonans_app.documents set
 			  status       = 'published',
 			  published_at = now(),
+			  version      = version + 1,
 			  updated_at   = now()
 			where id = $1
 			returning `+documentColumns, id)
 		var scanErr error
 		d, scanErr = scanDocRow(row)
+		if scanErr != nil {
+			return scanErr
+		}
+		// Append a version snapshot (history + rollback).
+		_, err := tx.Exec(ctx, `
+			insert into resonans_app.document_versions (tenant_id, document_id, version, title, body, status)
+			values ($1, $2, $3, $4, $5, $6)`,
+			tenantID, d.ID, d.Version, d.Title, []byte(d.Body), d.Status)
+		return err
+	})
+	return d, err
+}
+
+func (s *PostgresStore) ListVersions(ctx context.Context, tenantID, docID uuid.UUID) ([]Version, error) {
+	out := make([]Version, 0)
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			select id, document_id, version, title, body, status, created_at
+			from resonans_app.document_versions
+			where document_id = $1 order by version desc`, docID)
+		if err != nil {
+			return fmt.Errorf("content: list versions: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var v Version
+			if err := rows.Scan(&v.ID, &v.DocumentID, &v.Version, &v.Title, &v.Body, &v.Status, &v.CreatedAt); err != nil {
+				return fmt.Errorf("content: scan version: %w", err)
+			}
+			out = append(out, v)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+func (s *PostgresStore) Rollback(ctx context.Context, tenantID, docID uuid.UUID, version int) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		var title string
+		var body []byte
+		row := tx.QueryRow(ctx,
+			`select title, body from resonans_app.document_versions where document_id = $1 and version = $2`,
+			docID, version)
+		if err := row.Scan(&title, &body); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("content: read version: %w", err)
+		}
+		// Restore the snapshot as a new draft.
+		row2 := tx.QueryRow(ctx, `
+			update resonans_app.documents set
+			  title = $2, body = $3, status = 'draft', version = version + 1, updated_at = now()
+			where id = $1
+			returning `+documentColumns, docID, title, body)
+		var scanErr error
+		d, scanErr = scanDocRow(row2)
 		return scanErr
 	})
 	return d, err
@@ -194,7 +267,7 @@ func scanDoc(sc scanner) (Document, error) {
 	var d Document
 	if err := sc.Scan(
 		&d.ID, &d.TenantID, &d.Dataset, &d.Type, &d.Slug, &d.Title,
-		&d.Body, &d.Status, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt,
+		&d.Body, &d.Status, &d.Version, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt,
 	); err != nil {
 		return Document{}, err
 	}

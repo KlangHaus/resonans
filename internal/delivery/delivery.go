@@ -10,45 +10,92 @@
 package delivery
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/preview"
+	"github.com/KlangHaus/resonans/internal/schema"
 )
 
 // maxList caps a catalog response until cursor pagination lands (follow-up).
 const maxList = 200
 
+// defaultLocale is used when a request omits ?locale and as the i18n fallback.
+const defaultLocale = "da"
+
 // Deps are the collaborators the delivery API needs.
 type Deps struct {
-	Store        content.Store
-	ServiceToken string // "" in dev/test (X-Scope-OrgID trusted directly)
-	Logger       *slog.Logger
+	Store         content.Store
+	Registry      *schema.Registry
+	Assets        AssetResolver // may be nil (asset ids then pass through unresolved)
+	ServiceToken  string        // "" in dev/test (X-Scope-OrgID trusted directly)
+	PreviewSecret string        // verifies preview tokens; empty disables preview
+	Logger        *slog.Logger
 }
 
 // Handlers holds the wired dependencies.
 type Handlers struct {
-	store content.Store
-	log   *slog.Logger
+	store         content.Store
+	registry      *schema.Registry
+	assets        AssetResolver
+	previewSecret []byte
+	log           *slog.Logger
 }
 
 // NewRouter builds the delivery handler: published-only read routes wrapped in
 // the service-auth middleware (which resolves the tenant onto the context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, assets: d.Assets, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
 
 	mux := http.NewServeMux()
+	// Published block-schema + per-doc-type allowlists (consumer validation /
+	// graceful-unknown / forward-compat). More specific than /{type}, so wins.
+	mux.HandleFunc("GET /delivery/v1/schema", h.deliverySchema)
+	// Draft preview by preview-token (editor preview-mode). More specific than
+	// /{type}/{slug}, so wins.
+	mux.HandleFunc("GET /delivery/v1/preview/{type}/{slug}", h.previewDraft)
 	// Catalog: published documents of a type (e.g. /delivery/v1/course).
 	mux.HandleFunc("GET /delivery/v1/{type}", h.listPublished)
 	// A single published document by type + slug (e.g. a lesson/page).
 	mux.HandleFunc("GET /delivery/v1/{type}/{slug}", h.getPublished)
 
 	return auth.ServiceMiddleware(d.ServiceToken, d.Logger)(mux)
+}
+
+// deliverySchema exposes the block library + per-doc-type allowlists so
+// consumers can validate + gracefully handle unknown block types. Not
+// tenant-scoped (the schema is global/code-defined).
+func (h *Handlers) deliverySchema(w http.ResponseWriter, _ *http.Request) {
+	docTypes := map[string]any{}
+	for _, dt := range h.registry.DocTypes() {
+		var allowed []string
+		for _, f := range dt.Fields {
+			if f.Type == schema.TypeBlocks {
+				allowed = f.Allow
+			}
+		}
+		entry := map[string]any{"allowedBlocks": allowed}
+		if dt.Type == "quiz" {
+			entry["serverSideOnly"] = true
+			entry["note"] = "contains answer key (correctOptionIds, explanation) — redact server-side before the browser"
+		}
+		docTypes[dt.Type] = entry
+	}
+	blocks := map[string]any{}
+	for _, b := range h.registry.Blocks() {
+		blocks[b.Name] = map[string]any{"fields": b.Fields}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"docTypes": docTypes, "blocks": blocks})
 }
 
 // tenant resolves the authoritative tenant from the service-auth'd actor.
@@ -84,7 +131,14 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 		docs = docs[:maxList]
 		truncated = true
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"documents": docs, "truncated": truncated})
+	locale := h.locale(r)
+	items := make([]map[string]any, 0, len(docs))
+	for _, d := range docs {
+		env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, defaultLocale, h.assets)
+		items = append(items, summarize(d, env))
+	}
+	// nextCursor omitted in v1 (single page up to maxList); `truncated` signals more.
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "truncated": truncated})
 }
 
 func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +151,164 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, d)
+	// ETag from the revision counter — Etude caches per tenant/doc/locale/version.
+	etag := fmt.Sprintf(`"%s.v%d"`, h.locale(r), d.Version)
+	if r.Header.Get("If-None-Match") == etag {
+		w.Header().Set("ETag", etag)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	locale := h.locale(r)
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, defaultLocale, h.assets)
+	// ?expand=modules.lessons: replace a course's module refs with a nested tree
+	// (module → lesson metadata) resolved in one call (no N+1 in SSR).
+	if d.Type == "course" && strings.Contains(r.URL.Query().Get("expand"), "modules") {
+		h.expandCourseTree(r.Context(), tid, env, locale)
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	writeJSON(w, http.StatusOK, env)
+}
+
+// expandCourseTree replaces course.data.modules (an array of module refs) with
+// resolved nodes {id,slug,title,order,lessons:[{id,slug,title,order,durationEstimate}]}.
+// Unpublished / missing refs are skipped. Mutates env.Data in place.
+func (h *Handlers) expandCourseTree(ctx context.Context, tid uuid.UUID, env Envelope, locale string) {
+	rawModules, ok := env.Data["modules"].([]any)
+	if !ok {
+		return
+	}
+	modules := make([]any, 0, len(rawModules))
+	for i, el := range rawModules {
+		modDoc, err := h.publishedByID(ctx, tid, extractRefID(el))
+		if err != nil {
+			continue
+		}
+		modEnv := BuildEnvelope(ctx, tid, modDoc, h.registry, locale, defaultLocale, h.assets)
+		node := map[string]any{"id": modEnv.ID, "slug": modEnv.Slug, "title": modEnv.Data["title"], "order": i}
+
+		rawLessons, _ := modEnv.Data["lessons"].([]any)
+		lessons := make([]any, 0, len(rawLessons))
+		for j, lel := range rawLessons {
+			lesDoc, err := h.publishedByID(ctx, tid, extractRefID(lel))
+			if err != nil {
+				continue
+			}
+			lesEnv := BuildEnvelope(ctx, tid, lesDoc, h.registry, locale, defaultLocale, h.assets)
+			lesson := map[string]any{"id": lesEnv.ID, "slug": lesEnv.Slug, "title": lesEnv.Data["title"], "order": j}
+			if dur, ok := lesEnv.Data["estimatedMinutes"]; ok {
+				lesson["durationEstimate"] = dur
+			}
+			lessons = append(lessons, lesson)
+		}
+		node["lessons"] = lessons
+		modules = append(modules, node)
+	}
+	env.Data["modules"] = modules
+}
+
+// publishedByID fetches a published document by id (tenant-scoped). Non-published
+// or malformed ids yield ErrNotFound so the tree simply omits them.
+func (h *Handlers) publishedByID(ctx context.Context, tid uuid.UUID, idStr string) (content.Document, error) {
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return content.Document{}, content.ErrNotFound
+	}
+	d, err := h.store.Get(ctx, tid, id)
+	if err != nil {
+		return content.Document{}, err
+	}
+	if d.Status != content.StatusPublished {
+		return content.Document{}, content.ErrNotFound
+	}
+	return d, nil
+}
+
+// extractRefID pulls the referenced doc id out of a resolved array element such
+// as {"module": {"ref": {"type","id"}}} (the wrapper key varies: module/lesson).
+func extractRefID(el any) string {
+	m, ok := el.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, v := range m {
+		ref, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		if r, ok := ref["ref"].(map[string]any); ok {
+			if id, ok := r["id"].(string); ok {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+// summarize builds the catalog summary (§D courseSummary shape) from a document
+// + its envelope.
+func summarize(d content.Document, env Envelope) map[string]any {
+	s := map[string]any{
+		"id": env.ID, "slug": env.Slug, "type": env.Type,
+		"title": env.Data["title"], "updatedAt": d.UpdatedAt,
+	}
+	if v, ok := env.Data["summary"]; ok {
+		s["summary"] = v
+	} else if v, ok := env.Data["description"]; ok {
+		s["summary"] = v
+	}
+	if cover, ok := env.Data["coverImage"].(map[string]any); ok {
+		thumb := map[string]any{"url": cover["url"]}
+		if alt, ok := cover["alt"]; ok {
+			thumb["alt"] = alt
+		}
+		s["thumbnail"] = thumb
+	}
+	if mods, ok := env.Data["modules"].([]any); ok {
+		s["moduleCount"] = len(mods)
+	}
+	return s
+}
+
+// previewDraft serves a DRAFT document, authorized by a preview token (which
+// carries the tenant + doc scope). Unlike the published paths, the tenant comes
+// from the verified token, not X-Scope-OrgID.
+func (h *Handlers) previewDraft(w http.ResponseWriter, r *http.Request) {
+	if len(h.previewSecret) == 0 {
+		writeJSON(w, http.StatusNotFound, errBody("preview not enabled"))
+		return
+	}
+	claims, err := preview.Verify(h.previewSecret, r.URL.Query().Get("token"), time.Now())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errBody("invalid or expired preview token"))
+		return
+	}
+	typ, slug := r.PathValue("type"), r.PathValue("slug")
+	if claims.Type != typ || claims.Slug != slug {
+		writeJSON(w, http.StatusForbidden, errBody("token scope mismatch"))
+		return
+	}
+	tid, err := uuid.Parse(claims.Tenant)
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, errBody("invalid tenant in token"))
+		return
+	}
+	d, err := h.store.GetBySlug(r.Context(), tid, typ, slug)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, h.locale(r), defaultLocale, h.assets)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, env)
+}
+
+// locale returns the requested locale, defaulting when absent.
+func (h *Handlers) locale(r *http.Request) string {
+	if l := r.URL.Query().Get("locale"); l != "" {
+		return l
+	}
+	return defaultLocale
 }
 
 func (h *Handlers) writeErr(w http.ResponseWriter, err error) {

@@ -3,7 +3,7 @@ fields:
   - { name: excerpt, type: text, i18n: true }
   - name: body
     type: blocks
-    allow: [rich-text, image, callout, code, iframe-embed, video-embed, cta, columns]
+    allow: [rich_text, image, callout, code, iframe_embed, video_embed, cta, columns]
   - { name: author, type: string }
   - { name: category, type: string }
   - { name: coverImage, type: asset }

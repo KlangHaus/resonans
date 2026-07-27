@@ -25,13 +25,25 @@ func TestValidateValidLesson(t *testing.T) {
 		"summary": {"da": "Om alkaner", "en": "About alkanes"},
 		"estimatedMinutes": 20,
 		"body": [
-			{"_type": "rich-text", "_key": "a", "content": {"da": "Hej"}},
-			{"_type": "quiz", "question": {"da": "Hvor mange?"}, "type": "single",
-			 "options": [{"text": {"da": "4"}, "correct": true}]}
+			{"_type": "rich_text", "_key": "a", "value": {"da": "Hej"}},
+			{"_type": "quiz", "quizRef": "11111111-1111-1111-1111-111111111111"}
 		]
 	}`
 	if err := validate(t, "lesson", body); err != nil {
 		t.Fatalf("valid lesson rejected: %v", err)
+	}
+}
+
+func TestValidateQuizDocType(t *testing.T) {
+	body := `{
+		"question": {"da": "Hvor mange bindinger?"},
+		"type": "single",
+		"options": [{"id": "a", "label": {"da": "4"}, "correct": true},
+		            {"id": "b", "label": {"da": "2"}, "correct": false}],
+		"explanation": {"da": "Kulstof har 4."}
+	}`
+	if err := validate(t, "quiz", body); err != nil {
+		t.Fatalf("valid quiz rejected: %v", err)
 	}
 }
 
@@ -48,10 +60,10 @@ func TestValidateUnknownField(t *testing.T) {
 }
 
 func TestValidateMissingRequiredInBlock(t *testing.T) {
-	// quiz.question is required.
-	body := `{"body": [{"_type": "quiz", "type": "single"}]}`
+	// quiz block requires quizRef.
+	body := `{"body": [{"_type": "quiz"}]}`
 	if err := validate(t, "lesson", body); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("err = %v, want ErrInvalid (missing quiz.question)", err)
+		t.Fatalf("err = %v, want ErrInvalid (missing quiz.quizRef)", err)
 	}
 }
 
@@ -73,7 +85,7 @@ func TestValidateI18nShape(t *testing.T) {
 func TestValidateNestedColumns(t *testing.T) {
 	body := `{"body": [
 		{"_type": "columns", "columns": [
-			{"content": [{"_type": "rich-text", "content": {"da": "A"}}]},
+			{"content": [{"_type": "rich_text", "value": {"da": "A"}}]},
 			{"content": [{"_type": "cta", "label": {"da": "Køb"}, "href": "/x"}]}
 		]}
 	]}`
@@ -85,7 +97,7 @@ func TestValidateNestedColumns(t *testing.T) {
 func TestValidatePageMarketingBlocks(t *testing.T) {
 	body := `{"body": [
 		{"_type": "hero", "heading": {"da": "Velkommen"}},
-		{"_type": "feature-grid", "features": [{"title": {"da": "Hurtig"}}]}
+		{"_type": "feature_grid", "features": [{"title": {"da": "Hurtig"}}]}
 	]}`
 	if err := validate(t, "page", body); err != nil {
 		t.Fatalf("valid page rejected: %v", err)

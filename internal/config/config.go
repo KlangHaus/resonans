@@ -39,6 +39,10 @@ type Config struct {
 	JWTIssuer string
 	JWKSURL   string
 
+	// PreviewSecret signs short-lived preview tokens (editor draft-preview). Empty
+	// disables the preview endpoints. In production it should be set (SOPS).
+	PreviewSecret string
+
 	// DeliveryToken authenticates the trusted delivery path (server-side Nuxt
 	// consumers). When set, the /delivery endpoints require it and read the
 	// tenant from X-Scope-OrgID. In production it MUST be set or boot fails
@@ -110,6 +114,7 @@ func Load() (*Config, error) {
 		JWTIssuer:     getenvOptional("RESONANS_JWT_ISSUER"),
 		JWKSURL:       getenvOptional("RESONANS_JWKS_URL"),
 		DeliveryToken: getenvOptional("RESONANS_DELIVERY_TOKEN"),
+		PreviewSecret: getenvOptional("RESONANS_PREVIEW_SECRET"),
 
 		StorageEndpoint: getenvOptional("BUNNY_STORAGE_ENDPOINT"),
 		StorageZone:     getenvOptional("BUNNY_STORAGE_ZONE"),

@@ -14,12 +14,15 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
 	"github.com/KlangHaus/resonans/internal/media"
+	"github.com/KlangHaus/resonans/internal/preview"
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
@@ -28,27 +31,29 @@ const maxUploadBytes = 25 << 20
 
 // Deps are the collaborators the API needs.
 type Deps struct {
-	Store    content.Store
-	Registry *schema.Registry
-	Media    *media.Service
-	Video    media.VideoProvider // nil when no video plugin is configured
-	Verifier auth.Verifier       // nil in dev/test (X-Dev-Tenant header path)
-	Logger   *slog.Logger
+	Store         content.Store
+	Registry      *schema.Registry
+	Media         *media.Service
+	Video         media.VideoProvider // nil when no video plugin is configured
+	Verifier      auth.Verifier       // nil in dev/test (X-Dev-Tenant header path)
+	PreviewSecret string              // signs preview tokens; empty disables preview
+	Logger        *slog.Logger
 }
 
 // Handlers holds the wired dependencies for the route handlers.
 type Handlers struct {
-	store    content.Store
-	registry *schema.Registry
-	media    *media.Service
-	video    media.VideoProvider
-	log      *slog.Logger
+	store         content.Store
+	registry      *schema.Registry
+	media         *media.Service
+	video         media.VideoProvider
+	previewSecret []byte
+	log           *slog.Logger
 }
 
 // NewRouter builds the API handler: content routes wrapped in the JWT-auth
 // middleware (which resolves the tenant onto the request context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
 
 	mux := http.NewServeMux()
 	// Schema (editor form/palette source) — authenticated, not tenant-scoped.
@@ -67,8 +72,84 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/assets/{id}", h.getAsset)
 	// Video plugin (opt-in).
 	mux.HandleFunc("GET /api/v1/video/embed", h.videoEmbed)
+	// Version history + rollback (Fase 5 workflow).
+	mux.HandleFunc("GET /api/v1/documents/{id}/versions", h.listVersions)
+	mux.HandleFunc("POST /api/v1/documents/{id}/rollback/{version}", h.rollbackDocument)
+	// Preview token issuance (Fase 5 preview).
+	mux.HandleFunc("POST /api/v1/preview-token", h.previewToken)
 
 	return auth.Middleware(d.Verifier, d.Logger)(mux)
+}
+
+// previewToken issues a short-lived signed token granting draft-read for one
+// (type, slug) in the caller's tenant — used by the editor to render drafts in
+// the frontend preview mode.
+func (h *Handlers) previewToken(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	if len(h.previewSecret) == 0 {
+		writeJSON(w, http.StatusNotFound, errBody("preview not enabled"))
+		return
+	}
+	var in struct {
+		Type string `json:"type"`
+		Slug string `json:"slug"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.Type == "" || in.Slug == "" {
+		writeJSON(w, http.StatusBadRequest, errBody("type and slug required"))
+		return
+	}
+	exp := time.Now().Add(15 * time.Minute)
+	tok := preview.Sign(h.previewSecret, preview.Claims{
+		Tenant: tid.String(), Type: in.Type, Slug: in.Slug, Exp: exp.Unix(),
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"token": tok, "expiresInSeconds": 900})
+}
+
+func (h *Handlers) listVersions(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	vs, err := h.store.ListVersions(r.Context(), tid, id)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"versions": vs})
+}
+
+func (h *Handlers) rollbackDocument(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	version, err := strconv.Atoi(r.PathValue("version"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid version"))
+		return
+	}
+	d, err := h.store.Rollback(r.Context(), tid, id, version)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 type assetResponse struct {

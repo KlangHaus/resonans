@@ -46,6 +46,7 @@ type Document struct {
 	Title       string          `json:"title"`
 	Body        json.RawMessage `json:"body"`
 	Status      string          `json:"status"`
+	Version     int             `json:"version"`
 	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
@@ -94,6 +95,18 @@ func (in *UpdateInput) Validate() error {
 	return nil
 }
 
+// Version is an append-only snapshot of a document (written on publish) for
+// history + rollback (Fase 5 workflow).
+type Version struct {
+	ID         uuid.UUID       `json:"id"`
+	DocumentID uuid.UUID       `json:"documentId"`
+	Version    int             `json:"version"`
+	Title      string          `json:"title"`
+	Body       json.RawMessage `json:"body"`
+	Status     string          `json:"status"`
+	CreatedAt  time.Time       `json:"createdAt"`
+}
+
 // Store is the persistence contract. Every method is tenant-scoped: tenantID is
 // the authoritative tenant (from the verified actor) and callers must never
 // pass a tenant sourced from request input.
@@ -103,7 +116,15 @@ type Store interface {
 	// GetPublished returns the published document for (type, slug) in the
 	// tenant's default dataset — the read path consumed by our Nuxt sites.
 	GetPublished(ctx context.Context, tenantID uuid.UUID, typ, slug string) (Document, error)
+	// GetBySlug returns the document for (type, slug) regardless of status — the
+	// preview (draft-read) path.
+	GetBySlug(ctx context.Context, tenantID uuid.UUID, typ, slug string) (Document, error)
 	Create(ctx context.Context, tenantID uuid.UUID, in CreateInput) (Document, error)
 	Update(ctx context.Context, tenantID, id uuid.UUID, in UpdateInput) (Document, error)
 	Publish(ctx context.Context, tenantID, id uuid.UUID) (Document, error)
+
+	// ListVersions returns a document's snapshots, newest first.
+	ListVersions(ctx context.Context, tenantID, docID uuid.UUID) ([]Version, error)
+	// Rollback restores a prior version's content as a new draft.
+	Rollback(ctx context.Context, tenantID, docID uuid.UUID, version int) (Document, error)
 }

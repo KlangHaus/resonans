@@ -1,7 +1,11 @@
 # Local dev stack for Resonans (Beslutning P — Tilt-on-Compose).
-# Brings up Postgres + the CMS with migrations run at boot.
+# Brings up Postgres + the CMS (migrations run at boot in dev). Dev-mode needs
+# NO secrets: tenant via X-Dev-Tenant (editor) / X-Scope-OrgID (delivery),
+# in-memory storage backend, boot auto-migrate.
 #
 #   docker compose -f docker-compose.tilt.yml up --build
+#   # seed the explainers demo (once, after it's up):
+#   docker compose -f docker-compose.tilt.yml --profile seed run --rm resonans-seed
 #
 # Prod runs as a workload in infra/compose/prod/vm2-ops/ against the shared
 # ops-Postgres — this file is dev-only and does NOT model that topology.
@@ -30,11 +34,34 @@ services:
       PORT: "3000"
       PUBLIC_URL: http://localhost:3000
       DATABASE_URL: postgres://resonans:resonans@postgres:5432/resonans
-      # Dev: auth deaktiveret (JWT-vars unset) → tenant sættes pr. request via
-      # X-Dev-Tenant-header. Prod bruger BetterAuth-JWT (RESONANS_JWT_ISSUER/JWKS_URL).
       LOG_LEVEL: debug
+      # Dev-only conveniences (prod sets these via SOPS):
+      RESONANS_VIDEO_PROVIDER: vimeo # enables /api/v1/video/embed
+      RESONANS_PREVIEW_SECRET: dev-preview-secret # enables preview endpoints
+      # Auth + delivery-token intentionally UNSET in dev → tenant via
+      # X-Dev-Tenant (editor) / X-Scope-OrgID (delivery) headers.
     ports:
       - "3000:3000"
     depends_on:
       postgres:
+        condition: service_healthy
+
+  # One-shot: seed the explainers demo course for the dev tenant. Opt-in via the
+  # `seed` profile so a normal `up` doesn't re-seed (slugs conflict on re-run).
+  #   test after seeding, e.g.:
+  #   curl -H 'X-Scope-OrgID: 11111111-1111-1111-1111-111111111111' \
+  #        'http://localhost:3000/delivery/v1/course?locale=da'
+  resonans-seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      args:
+        VERSION: dev
+    command: ["seed"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://resonans:resonans@postgres:5432/resonans
+      RESONANS_SEED_TENANT: "11111111-1111-1111-1111-111111111111"
+    depends_on:
+      resonans:
         condition: service_healthy

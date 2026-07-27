@@ -15,7 +15,7 @@ func TestDefaultRegistryLoads(t *testing.T) {
 			t.Errorf("missing doc-type %q", typ)
 		}
 	}
-	for _, blk := range []string{"rich-text", "video-embed", "quiz", "hero", "cta", "columns"} {
+	for _, blk := range []string{"rich_text", "video_embed", "quiz", "hero", "cta", "columns"} {
 		if _, ok := r.Block(blk); !ok {
 			t.Errorf("missing block %q", blk)
 		}
@@ -30,8 +30,8 @@ func TestDefaultRegistryLoads(t *testing.T) {
 	if !hasBody {
 		t.Error("lesson should have a body blocks field")
 	}
-	if len(r.DocTypes()) != 6 {
-		t.Errorf("DocTypes = %d, want 6", len(r.DocTypes()))
+	if len(r.DocTypes()) != 7 {
+		t.Errorf("DocTypes = %d, want 7", len(r.DocTypes()))
 	}
 }
 

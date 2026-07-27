@@ -14,10 +14,11 @@ import (
 // app.Run refuses to use it in production. It simulates RLS by filtering every
 // operation on tenantID.
 type MemoryStore struct {
-	mu      sync.RWMutex
-	byID    map[uuid.UUID]Document
-	now     func() time.Time
-	newUUID func() uuid.UUID
+	mu       sync.RWMutex
+	byID     map[uuid.UUID]Document
+	versions []Version
+	now      func() time.Time
+	newUUID  func() uuid.UUID
 }
 
 // NewMemoryStore constructs an empty in-memory store.
@@ -78,6 +79,17 @@ func (s *MemoryStore) GetPublished(_ context.Context, tenantID uuid.UUID, typ, s
 	return Document{}, ErrNotFound
 }
 
+func (s *MemoryStore) GetBySlug(_ context.Context, tenantID uuid.UUID, typ, slug string) (Document, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, d := range s.byID {
+		if d.TenantID == tenantID && d.Type == typ && d.Slug == slug {
+			return cloneDoc(d), nil
+		}
+	}
+	return Document{}, ErrNotFound
+}
+
 func (s *MemoryStore) Create(_ context.Context, tenantID uuid.UUID, in CreateInput) (Document, error) {
 	if err := in.Validate(); err != nil {
 		return Document{}, err
@@ -101,6 +113,7 @@ func (s *MemoryStore) Create(_ context.Context, tenantID uuid.UUID, in CreateInp
 		Title:     in.Title,
 		Body:      append(json.RawMessage(nil), in.Body...),
 		Status:    StatusDraft,
+		Version:   1,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -128,6 +141,7 @@ func (s *MemoryStore) Update(_ context.Context, tenantID, id uuid.UUID, in Updat
 	if in.Body != nil {
 		d.Body = append(json.RawMessage(nil), (*in.Body)...)
 	}
+	d.Version++
 	d.UpdatedAt = s.now().UTC()
 	s.byID[id] = d
 	return cloneDoc(d), nil
@@ -144,8 +158,56 @@ func (s *MemoryStore) Publish(_ context.Context, tenantID, id uuid.UUID) (Docume
 	now := s.now().UTC()
 	d.Status = StatusPublished
 	d.PublishedAt = &now
+	d.Version++
 	d.UpdatedAt = now
 	s.byID[id] = d
+	s.versions = append(s.versions, Version{
+		ID: s.newUUID(), DocumentID: d.ID, Version: d.Version, Title: d.Title,
+		Body: append(json.RawMessage(nil), d.Body...), Status: d.Status, CreatedAt: now,
+	})
+	return cloneDoc(d), nil
+}
+
+func (s *MemoryStore) ListVersions(_ context.Context, tenantID, docID uuid.UUID) ([]Version, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if d, ok := s.byID[docID]; !ok || d.TenantID != tenantID {
+		return []Version{}, nil
+	}
+	out := make([]Version, 0)
+	for i := len(s.versions) - 1; i >= 0; i-- {
+		if s.versions[i].DocumentID == docID {
+			v := s.versions[i]
+			v.Body = append(json.RawMessage(nil), v.Body...)
+			out = append(out, v)
+		}
+	}
+	return out, nil
+}
+
+func (s *MemoryStore) Rollback(_ context.Context, tenantID, docID uuid.UUID, version int) (Document, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.byID[docID]
+	if !ok || d.TenantID != tenantID {
+		return Document{}, ErrNotFound
+	}
+	var snap *Version
+	for i := range s.versions {
+		if s.versions[i].DocumentID == docID && s.versions[i].Version == version {
+			snap = &s.versions[i]
+			break
+		}
+	}
+	if snap == nil {
+		return Document{}, ErrNotFound
+	}
+	d.Title = snap.Title
+	d.Body = append(json.RawMessage(nil), snap.Body...)
+	d.Status = StatusDraft
+	d.Version++
+	d.UpdatedAt = s.now().UTC()
+	s.byID[docID] = d
 	return cloneDoc(d), nil
 }
 

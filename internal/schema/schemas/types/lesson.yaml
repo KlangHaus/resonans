@@ -5,6 +5,6 @@ fields:
   - { name: module, type: reference, ref: module }
   - name: body
     type: blocks
-    allow: [rich-text, video-embed, image, callout, code, download, iframe-embed, quiz, columns]
+    allow: [rich_text, video_embed, image, callout, code, download, iframe_embed, quiz, columns]
 list:
   columns: [title, module, status, updatedAt]

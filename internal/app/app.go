@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
@@ -22,6 +25,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/observability"
 	"github.com/KlangHaus/resonans/internal/persistence"
 	"github.com/KlangHaus/resonans/internal/schema"
+	"github.com/KlangHaus/resonans/internal/seed"
 )
 
 // version is stamped via -ldflags at build time.
@@ -173,19 +177,23 @@ func Run(ctx context.Context) error {
 
 	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
-		Store:    store,
-		Registry: registry,
-		Media:    mediaSvc,
-		Video:    videoProvider,
-		Verifier: verifier,
-		Logger:   logger,
+		Store:         store,
+		Registry:      registry,
+		Media:         mediaSvc,
+		Video:         videoProvider,
+		Verifier:      verifier,
+		PreviewSecret: cfg.PreviewSecret,
+		Logger:        logger,
 	})
 
 	// --- Delivery read router (published-only, service-auth'd) ---
 	deliveryRouter := delivery.NewRouter(delivery.Deps{
-		Store:        store,
-		ServiceToken: cfg.DeliveryToken,
-		Logger:       logger,
+		Store:         store,
+		Registry:      registry,
+		Assets:        &mediaAssetResolver{media: mediaSvc},
+		ServiceToken:  cfg.DeliveryToken,
+		PreviewSecret: cfg.PreviewSecret,
+		Logger:        logger,
 	})
 
 	mux := http.NewServeMux()
@@ -234,6 +242,37 @@ func Run(ctx context.Context) error {
 	return nil
 }
 
+// Seed inserts the explainers demo dataset for the tenant in RESONANS_SEED_TENANT.
+// Run as a one-shot (`resonans seed`) against staging so consumers (Etude M5) can
+// render real content. Connects as the app role; the stores set the tenant GUC.
+func Seed(ctx context.Context) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required for seed")
+	}
+	tenantID, err := uuid.Parse(strings.TrimSpace(os.Getenv("RESONANS_SEED_TENANT")))
+	if err != nil {
+		return fmt.Errorf("RESONANS_SEED_TENANT must be a tenant uuid: %w", err)
+	}
+	pool, err := persistence.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect db: %w", err)
+	}
+	defer pool.Close()
+	reg, err := schema.DefaultRegistry()
+	if err != nil {
+		return fmt.Errorf("load schema: %w", err)
+	}
+	if err := seed.Run(ctx, content.NewPostgresStore(pool), media.NewPostgresStore(pool), reg, tenantID); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).Info("seed_complete", "tenant", tenantID)
+	return nil
+}
+
 // Migrate runs pending migrations and returns. Used by the `resonans migrate`
 // one-shot deploy service, which connects as the BYPASSRLS migrator-role (via
 // DATABASE_URL) so the long-running server (NOBYPASSRLS app-role) never needs
@@ -259,6 +298,33 @@ func Migrate(ctx context.Context) error {
 	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).
 		Info("migrations_complete", "applied", applied)
 	return nil
+}
+
+// mediaAssetResolver adapts the media service to delivery.AssetResolver: it
+// expands a stored asset id to `{url, width?, height?}` (Bunny CDN URL) so the
+// delivery envelope carries ready-to-render assets.
+type mediaAssetResolver struct{ media *media.Service }
+
+func (m *mediaAssetResolver) ResolveAsset(ctx context.Context, tenantID uuid.UUID, assetID string) (map[string]any, bool) {
+	id, err := uuid.Parse(assetID)
+	if err != nil {
+		return nil, false
+	}
+	a, err := m.media.Get(ctx, tenantID, id)
+	if err != nil {
+		return nil, false
+	}
+	out := map[string]any{"url": m.media.URL(a, media.Transform{})}
+	if a.Width != nil {
+		out["width"] = *a.Width
+	}
+	if a.Height != nil {
+		out["height"] = *a.Height
+	}
+	if a.SizeBytes > 0 {
+		out["sizeBytes"] = a.SizeBytes
+	}
+	return out, true
 }
 
 // Version returns the build-stamped version (exposed for the healthcheck cmd).
