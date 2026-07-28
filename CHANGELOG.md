@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/KlangHaus/resonans/compare/v1.2.0...v1.3.0) (2026-07-28)
+
+
+### Features
+
+* per-tenant content profile — enable/disable doc-types in Settings ([#20](https://github.com/KlangHaus/resonans/issues/20)) ([5862316](https://github.com/KlangHaus/resonans/commit/586231650a8835a339730fc859cd46d372b5fd9c)), closes [#19](https://github.com/KlangHaus/resonans/issues/19)
+
 # [1.2.0](https://github.com/KlangHaus/resonans/compare/v1.1.0...v1.2.0) (2026-07-28)
 
 
