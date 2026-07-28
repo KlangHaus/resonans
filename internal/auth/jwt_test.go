@@ -130,3 +130,23 @@ func TestNewVerifierRequiresConfig(t *testing.T) {
 		t.Fatal("expected error when issuer/jwks missing and no keyset")
 	}
 }
+
+func TestNewVerifierNonFatalOnUnreachableJWKS(t *testing.T) {
+	// Degrade-not-fail (Beslutning D): an unreachable JWKS at boot must NOT fail
+	// NewVerifier — the public /delivery path uses no JWT and must stay up rather
+	// than crash-loop while auth is briefly down.
+	v, err := NewVerifier(context.Background(), VerifierConfig{
+		Issuer:  testIssuer,
+		JWKSURL: "http://127.0.0.1:1/.well-known/jwks.json", // connection refused
+	})
+	if err != nil {
+		t.Fatalf("NewVerifier must be non-fatal on unreachable JWKS, got: %v", err)
+	}
+	if v == nil {
+		t.Fatal("expected a usable verifier")
+	}
+	// With no keys reachable, verification fails gracefully (an error, not a panic).
+	if _, err := v.Verify(context.Background(), "not.a.jwt"); err == nil {
+		t.Fatal("expected verification to fail when JWKS is unavailable")
+	}
+}
