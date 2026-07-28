@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import type { Field } from '~/composables/useResonans'
+import type { BlockType, Field } from '~/composables/useResonans'
 
 // SchemaField renders ONE schema field into an input, driven entirely by the
 // field definition (type + i18n). This is the core of the schema-driven editor:
-// no content type is hardcoded. Scalars + i18n render as proper inputs; blocks
-// and arrays fall back to a validated JSON editor until the visual block editor
-// + the grundtone rich-text organism land (Fase 4 sequencing).
-const props = defineProps<{ field: Field; modelValue: unknown }>()
+// no content type is hardcoded. Scalars + i18n render as inputs; `richtext` uses
+// the rich-text editor; `blocks` uses the visual BlockEditor (Fase 4). `array`
+// still falls back to a validated JSON editor (next increment). blockDefs is the
+// schema block-registry, threaded down so BlockEditor can render nested blocks.
+const props = defineProps<{ field: Field; modelValue: unknown; blockDefs?: BlockType[] }>()
 const emit = defineEmits<{ 'update:modelValue': [unknown] }>()
 
 // Active locales — v1 hardcoded; later resolved from the tenant config.
 const LOCALES = ['da', 'en'] as const
 
+// i18n string/text render as per-locale inputs; i18n richtext gets its own
+// per-locale rich-text editors (handled separately below).
 const isI18nScalar = computed(
-  () => !!props.field.i18n && ['string', 'text', 'richtext'].includes(props.field.type),
+  () => !!props.field.i18n && ['string', 'text'].includes(props.field.type),
 )
+const isI18nRich = computed(() => !!props.field.i18n && props.field.type === 'richtext')
 
 function set(v: unknown) {
   emit('update:modelValue', v)
@@ -31,10 +35,10 @@ function setI18n(loc: string, v: string) {
   set(o)
 }
 
-// blocks/array fall back to a JSON editor for now.
+// `array` (non-block, e.g. feature_grid.features) still uses a JSON editor.
 const jsonText = ref('')
 watchEffect(() => {
-  if (props.field.type === 'blocks' || props.field.type === 'array') {
+  if (props.field.type === 'array') {
     jsonText.value = JSON.stringify(props.modelValue ?? [], null, 2)
   }
 })
@@ -78,10 +82,22 @@ const scalar = computed(() => String(props.modelValue ?? ''))
           @input="setI18n(loc, ($event.target as HTMLInputElement).value)"
         />
       </div>
-      <p v-if="field.type === 'richtext'" class="rz-field__hint">
-        Rich-text-editor (GTRichText) sekvenseres når grundtone leverer organismen — indtil da: ren tekst.
-      </p>
     </template>
+
+    <!-- i18n richtext: one rich-text editor per locale -->
+    <template v-else-if="isI18nRich">
+      <div v-for="loc in LOCALES" :key="loc" style="margin-bottom: 8px">
+        <div class="rz-field__hint" style="margin-bottom: 3px">{{ loc }}</div>
+        <RichTextField :model-value="i18nVal(loc)" @update:model-value="(v) => setI18n(loc, v)" />
+      </div>
+    </template>
+
+    <!-- non-i18n richtext -->
+    <RichTextField
+      v-else-if="field.type === 'richtext'"
+      :model-value="scalar"
+      @update:model-value="(v) => set(v)"
+    />
 
     <!-- non-i18n scalars -->
     <input
@@ -91,7 +107,7 @@ const scalar = computed(() => String(props.modelValue ?? ''))
       @input="set(($event.target as HTMLInputElement).value)"
     />
     <textarea
-      v-else-if="field.type === 'text' || field.type === 'richtext'"
+      v-else-if="field.type === 'text'"
       class="rz-textarea"
       :value="scalar"
       @input="set(($event.target as HTMLTextAreaElement).value)"
@@ -119,14 +135,20 @@ const scalar = computed(() => String(props.modelValue ?? ''))
       @input="set(($event.target as HTMLInputElement).value)"
     />
 
-    <!-- blocks / array: JSON fallback until the visual block editor lands -->
-    <template v-else-if="field.type === 'blocks' || field.type === 'array'">
+    <!-- blocks: visual block editor (Fase 4) -->
+    <BlockEditor
+      v-else-if="field.type === 'blocks'"
+      :model-value="modelValue"
+      :allow="field.allow"
+      :block-defs="blockDefs || []"
+      @update:model-value="(v) => set(v)"
+    />
+
+    <!-- array (non-block): JSON fallback until a repeater UI lands -->
+    <template v-else-if="field.type === 'array'">
       <textarea class="rz-textarea" style="min-height: 160px; font-family: ui-monospace, monospace" v-model="jsonText" @blur="commitJson" />
       <p v-if="jsonError" class="rz-field__hint" style="color: var(--rz-danger)">{{ jsonError }}</p>
-      <p class="rz-field__hint">
-        <template v-if="field.type === 'blocks'">Tilladte blokke: {{ (field.allow || []).join(', ') }}. </template>
-        Visuel blok-editor sekvenseres m/ [designer]-produkt-design + GTRichText.
-      </p>
+      <p class="rz-field__hint">Array-felt — repeater-UI sekvenseres som følge-increment.</p>
     </template>
 
     <p v-else class="rz-field__hint">Ukendt felt-type: {{ field.type }}</p>

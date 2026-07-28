@@ -38,32 +38,36 @@ const (
 )
 
 // Field describes one field of a doc-type or block.
+// json tags are camelCase: the schema is served at GET /api/v1/schema and
+// consumed by the Studio editor (+ any external schema client), which expects
+// the same casing as the rest of the API + the YAML source. Without them Go
+// marshals PascalCase field names and the schema-driven editor can't match types.
 type Field struct {
-	Name     string    `yaml:"name"`
-	Type     FieldType `yaml:"type"`
-	I18n     bool      `yaml:"i18n"`     // field-level translation: value keyed by locale
-	Required bool      `yaml:"required"` // must be present on a document
-	Allow    []string  `yaml:"allow"`    // blocks: permitted block type names
-	Ref      string    `yaml:"ref"`      // reference: target doc-type
-	Of       []Field   `yaml:"of"`       // array: element sub-fields
+	Name     string    `yaml:"name" json:"name"`
+	Type     FieldType `yaml:"type" json:"type"`
+	I18n     bool      `yaml:"i18n" json:"i18n,omitempty"`         // field-level translation: value keyed by locale
+	Required bool      `yaml:"required" json:"required,omitempty"` // must be present on a document
+	Allow    []string  `yaml:"allow" json:"allow,omitempty"`       // blocks: permitted block type names
+	Ref      string    `yaml:"ref" json:"ref,omitempty"`           // reference: target doc-type
+	Of       []Field   `yaml:"of" json:"of,omitempty"`             // array: element sub-fields
 }
 
 // ListConfig declares which columns the editor's document list shows for a type.
 type ListConfig struct {
-	Columns []string `yaml:"columns"`
+	Columns []string `yaml:"columns" json:"columns,omitempty"`
 }
 
 // DocType is a content type (course, lesson, page, post, ...).
 type DocType struct {
-	Type   string     `yaml:"type"`
-	Fields []Field    `yaml:"fields"`
-	List   ListConfig `yaml:"list"`
+	Type   string     `yaml:"type" json:"type"`
+	Fields []Field    `yaml:"fields" json:"fields"`
+	List   ListConfig `yaml:"list" json:"list"`
 }
 
 // BlockType is a reusable content block (rich-text, video-embed, hero, ...).
 type BlockType struct {
-	Name   string  `yaml:"name"`
-	Fields []Field `yaml:"fields"`
+	Name   string  `yaml:"name" json:"name"`
+	Fields []Field `yaml:"fields" json:"fields"`
 }
 
 // Registry holds the loaded, validated schema.

@@ -65,6 +65,7 @@ async function publish() {
         v-for="f in docType?.fields || []"
         :key="f.name"
         :field="f"
+        :block-defs="sch?.blocks || []"
         :model-value="body[f.name]"
         @update:model-value="(v) => (body[f.name] = v)"
       />
