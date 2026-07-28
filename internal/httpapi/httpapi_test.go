@@ -10,6 +10,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/content"
 	"github.com/KlangHaus/resonans/internal/media"
 	"github.com/KlangHaus/resonans/internal/schema"
+	"github.com/KlangHaus/resonans/internal/settings"
 )
 
 const (
@@ -34,6 +35,7 @@ func testRouter(t *testing.T) http.Handler {
 		Registry: mustRegistry(t),
 		Media:    mediaSvc,
 		Video:    media.NewVimeoProvider(),
+		Settings: settings.NewMemoryStore(),
 	})
 }
 
@@ -208,5 +210,69 @@ func TestCreateInvalidJSON(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestContentProfile(t *testing.T) {
+	h := testRouter(t)
+
+	// Default: all 7 types enabled.
+	rec := do(t, h, http.MethodGet, "/api/v1/settings", tenantA, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get settings = %d", rec.Code)
+	}
+	var st struct {
+		EnabledTypes []string `json:"enabledTypes"`
+		AllTypes     []string `json:"allTypes"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &st)
+	if len(st.EnabledTypes) != 0 || len(st.AllTypes) != 7 {
+		t.Fatalf("default profile: enabled=%v all=%d", st.EnabledTypes, len(st.AllTypes))
+	}
+
+	// Narrow tenant A to the web profile (post+page).
+	rec = do(t, h, http.MethodPut, "/api/v1/settings", tenantA, map[string]any{"enabledTypes": []string{"post", "page"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put settings = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Schema is filtered to the enabled set.
+	rec = do(t, h, http.MethodGet, "/api/v1/schema", tenantA, nil)
+	var sch struct {
+		DocTypes []schema.DocType `json:"docTypes"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &sch)
+	if len(sch.DocTypes) != 2 {
+		t.Fatalf("filtered schema: %d types, want 2", len(sch.DocTypes))
+	}
+
+	// Creating a disabled type is rejected; an enabled type still works.
+	rec = do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{"type": "course", "slug": "x", "title": "X"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("create disabled type = %d, want 403", rec.Code)
+	}
+	rec = do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{"type": "post", "slug": "x", "title": "X"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create enabled type = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The profile is tenant-scoped: tenant B still sees everything.
+	rec = do(t, h, http.MethodGet, "/api/v1/schema", tenantB, nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &sch)
+	if len(sch.DocTypes) != 7 {
+		t.Fatalf("tenant B schema: %d types, want 7", len(sch.DocTypes))
+	}
+
+	// Unknown type names are rejected; empty list re-enables everything.
+	if rec := do(t, h, http.MethodPut, "/api/v1/settings", tenantA, map[string]any{"enabledTypes": []string{"gizmo"}}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("put unknown type = %d, want 400", rec.Code)
+	}
+	if rec := do(t, h, http.MethodPut, "/api/v1/settings", tenantA, map[string]any{"enabledTypes": []string{}}); rec.Code != http.StatusOK {
+		t.Fatalf("put empty = %d", rec.Code)
+	}
+	rec = do(t, h, http.MethodGet, "/api/v1/schema", tenantA, nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &sch)
+	if len(sch.DocTypes) != 7 {
+		t.Fatalf("re-enabled schema: %d types, want 7", len(sch.DocTypes))
 	}
 }

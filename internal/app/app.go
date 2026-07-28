@@ -26,6 +26,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/persistence"
 	"github.com/KlangHaus/resonans/internal/schema"
 	"github.com/KlangHaus/resonans/internal/seed"
+	"github.com/KlangHaus/resonans/internal/settings"
 )
 
 // version is stamped via -ldflags at build time.
@@ -175,6 +176,14 @@ func Run(ctx context.Context) error {
 		logger.Info("video_plugin_enabled", "provider", vp.Name())
 	}
 
+	// --- Per-tenant settings (content profile) ---
+	var settingsStore settings.Store
+	if pool != nil {
+		settingsStore = settings.NewPostgresStore(pool)
+	} else {
+		settingsStore = settings.NewMemoryStore()
+	}
+
 	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
 		Store:         store,
@@ -182,6 +191,7 @@ func Run(ctx context.Context) error {
 		Media:         mediaSvc,
 		Video:         videoProvider,
 		Verifier:      verifier,
+		Settings:      settingsStore,
 		PreviewSecret: cfg.PreviewSecret,
 		Logger:        logger,
 	})

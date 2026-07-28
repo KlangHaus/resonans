@@ -17,6 +17,8 @@ const { data: sch, error } = await useAsyncData('schema', () => schema())
         <p v-if="error" class="rz-field__hint" style="padding: 0 12px">
           Kan ikke hente schema — kører backend'en? ({{ (error as Error).message }})
         </p>
+        <div class="rz-nav__spacer" />
+        <NuxtLink to="/settings" class="rz-nav__item">⚙ Indstillinger</NuxtLink>
       </nav>
     </aside>
     <main class="rz-main">
@@ -55,6 +57,11 @@ const { data: sch, error } = await useAsyncData('schema', () => schema())
   background: var(--rz-surface);
   border-left: 2px solid var(--rz-primary);
   font-weight: 600;
+}
+.rz-nav__spacer {
+  height: 14px;
+  border-bottom: 1px solid var(--rz-border);
+  margin-bottom: 14px;
 }
 .rz-main {
   overflow: auto;
