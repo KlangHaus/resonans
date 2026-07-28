@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Resonans editor (Studio) — schema-driven, swappable-theming Nuxt app.",
+  "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",

@@ -1,2 +1,7 @@
-allowBuilds:
-  esbuild: set this to true or false
+# pnpm 10: settings live here (the package.json `pnpm` field is no longer read).
+# esbuild's postinstall must be allowed to run, or nuxt build fails with
+# ERR_PNPM_IGNORED_BUILDS on fresh installs (CI/Docker).
+packages:
+  - '.'
+onlyBuiltDependencies:
+  - esbuild
