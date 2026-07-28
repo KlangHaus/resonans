@@ -256,6 +256,17 @@ func summarize(d content.Document, env Envelope) map[string]any {
 		s["summary"] = v
 	} else if v, ok := env.Data["description"]; ok {
 		s["summary"] = v
+	} else if v, ok := env.Data["excerpt"]; ok {
+		// Blog posts carry their teaser in `excerpt` — surface it as the catalog
+		// summary so a blog index needs no per-post fetch (post is a real consumer).
+		s["summary"] = v
+	}
+	// Common metadata fields a listing surface (blog index) needs — only added
+	// when the doc-type has them (courses/pages won't, so they stay absent).
+	for _, k := range []string{"author", "category"} {
+		if v, ok := env.Data[k]; ok {
+			s[k] = v
+		}
 	}
 	if cover, ok := env.Data["coverImage"].(map[string]any); ok {
 		thumb := map[string]any{"url": cover["url"]}
