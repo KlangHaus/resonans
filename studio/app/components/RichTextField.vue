@@ -76,19 +76,17 @@ const tools = [
       </button>
       <span class="rz-rte__tag">interim · GTRichText swap pending</span>
     </div>
-    <ClientOnly>
-      <div
-        ref="el"
-        class="rz-rte__area"
-        contenteditable="true"
-        :data-placeholder="placeholder || 'Skriv…'"
-        @input="emitHtml"
-        @blur="emitHtml"
-      />
-      <template #fallback>
-        <div class="rz-rte__area" v-html="modelValue || ''" />
-      </template>
-    </ClientOnly>
+    <!-- Studio is a SPA (ssr:false), so no ClientOnly needed — and using it here
+         would defer the div past onMounted, leaving el null and the content
+         unpopulated. Render the contenteditable directly. -->
+    <div
+      ref="el"
+      class="rz-rte__area"
+      contenteditable="true"
+      :data-placeholder="placeholder || 'Skriv…'"
+      @input="emitHtml"
+      @blur="emitHtml"
+    />
   </div>
 </template>
 

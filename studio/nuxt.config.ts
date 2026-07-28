@@ -7,6 +7,17 @@ export default defineNuxtConfig({
   ssr: false, // admin editor = SPA; no SSR needed
   devtools: { enabled: false },
   css: ['~/assets/theme.css'],
+  // Local dev: proxy /api → the Resonans backend so the SPA is same-origin (no
+  // CORS). Override the target via RESONANS_DEV_API. Prod serves Studio behind
+  // the same origin as the API, so this proxy is dev-only.
+  nitro: {
+    devProxy: {
+      '/api': {
+        target: `${process.env.RESONANS_DEV_API || 'http://localhost:3999'}/api`,
+        changeOrigin: true,
+      },
+    },
+  },
   runtimeConfig: {
     public: {
       // Resonans backend base URL.
