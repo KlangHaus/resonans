@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/KlangHaus/resonans/compare/v1.0.1...v1.1.0) (2026-07-28)
+
+
+### Bug Fixes
+
+* JWKS boot-priming is non-fatal (degrade-not-fail) ([#14](https://github.com/KlangHaus/resonans/issues/14)) ([7462b65](https://github.com/KlangHaus/resonans/commit/7462b6503bf99c8884df5bc3fd994d2530eb1116)), closes [#13](https://github.com/KlangHaus/resonans/issues/13)
+
+
+### Features
+
+* blog delivery-summary fields + idempotent seed + Journal posts ([#12](https://github.com/KlangHaus/resonans/issues/12)) ([c5152c5](https://github.com/KlangHaus/resonans/commit/c5152c5654a112df8f54ebf9ccf43d745c7eacc0)), closes [#11](https://github.com/KlangHaus/resonans/issues/11)
+
 ## [1.0.1](https://github.com/KlangHaus/resonans/compare/v1.0.0...v1.0.1) (2026-07-27)
 
 
