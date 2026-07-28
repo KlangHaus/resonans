@@ -66,9 +66,12 @@ func NewVerifier(ctx context.Context, cfg VerifierConfig) (Verifier, error) {
 	if err := cache.Register(cfg.JWKSURL); err != nil {
 		return nil, fmt.Errorf("auth: register jwks url: %w", err)
 	}
-	if _, err := cache.Refresh(ctx, cfg.JWKSURL); err != nil {
-		return nil, fmt.Errorf("auth: prime jwks cache: %w", err)
-	}
+	// Degrade-not-fail (Beslutning D): priming is best-effort. If auth/JWKS is
+	// unreachable at boot we STILL return a working verifier — the public
+	// /delivery path uses no JWT, and the editor JWT path recovers as soon as
+	// the keys are fetched (on demand in keys() + background refresh). This
+	// stops a public prod surface from crash-looping when auth is briefly down.
+	_, _ = cache.Refresh(ctx, cfg.JWKSURL)
 	v.cache = cache
 	return v, nil
 }
@@ -77,7 +80,16 @@ func (v *jwksVerifier) keys(ctx context.Context) (jwk.Set, error) {
 	if v.keySet != nil {
 		return v.keySet, nil
 	}
-	return v.cache.Get(ctx, v.jwksURL)
+	set, err := v.cache.Get(ctx, v.jwksURL)
+	if err != nil {
+		// Boot priming may have failed (degrade-not-fail); fetch on demand so the
+		// verifier recovers once auth is reachable — no server restart needed.
+		if _, rerr := v.cache.Refresh(ctx, v.jwksURL); rerr != nil {
+			return nil, rerr
+		}
+		return v.cache.Get(ctx, v.jwksURL)
+	}
+	return set, nil
 }
 
 // Verify parses and validates the token (signature, issuer, optional audience,
