@@ -102,5 +102,13 @@ export function useResonans() {
       }),
     publishDocument: (id: string) =>
       req<Document>(`/api/v1/documents/${id}/publish`, { method: 'POST' }),
+    getSettings: () =>
+      req<{ enabledTypes: string[]; allTypes: string[] }>('/api/v1/settings'),
+    putSettings: (enabledTypes: string[]) =>
+      req<{ enabledTypes: string[]; allTypes: string[] }>('/api/v1/settings', {
+        method: 'PUT',
+        body: { enabledTypes },
+        headers: { 'Content-Type': 'application/json' },
+      }),
   }
 }

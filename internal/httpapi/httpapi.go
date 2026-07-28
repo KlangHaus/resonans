@@ -24,6 +24,7 @@ import (
 	"github.com/KlangHaus/resonans/internal/media"
 	"github.com/KlangHaus/resonans/internal/preview"
 	"github.com/KlangHaus/resonans/internal/schema"
+	"github.com/KlangHaus/resonans/internal/settings"
 )
 
 // maxUploadBytes caps an asset upload (25 MiB).
@@ -36,6 +37,7 @@ type Deps struct {
 	Media         *media.Service
 	Video         media.VideoProvider // nil when no video plugin is configured
 	Verifier      auth.Verifier       // nil in dev/test (X-Dev-Tenant header path)
+	Settings      settings.Store      // per-tenant content profile
 	PreviewSecret string              // signs preview tokens; empty disables preview
 	Logger        *slog.Logger
 }
@@ -46,6 +48,7 @@ type Handlers struct {
 	registry      *schema.Registry
 	media         *media.Service
 	video         media.VideoProvider
+	settings      settings.Store
 	previewSecret []byte
 	log           *slog.Logger
 }
@@ -53,12 +56,16 @@ type Handlers struct {
 // NewRouter builds the API handler: content routes wrapped in the JWT-auth
 // middleware (which resolves the tenant onto the request context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, settings: d.Settings, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
 
 	mux := http.NewServeMux()
-	// Schema (editor form/palette source) — authenticated, not tenant-scoped.
+	// Schema (editor form/palette source) — filtered to the tenant's enabled
+	// doc-types (content profile).
 	mux.HandleFunc("GET /api/v1/schema", h.schemaAll)
 	mux.HandleFunc("GET /api/v1/schema/{type}", h.schemaOne)
+	// Per-tenant settings (content profile: enabled doc-types).
+	mux.HandleFunc("GET /api/v1/settings", h.getSettings)
+	mux.HandleFunc("PUT /api/v1/settings", h.putSettings)
 	// Documents — tenant-scoped authoring.
 	mux.HandleFunc("GET /api/v1/documents", h.listDocuments)
 	mux.HandleFunc("GET /api/v1/documents/{id}", h.getDocument)
@@ -277,11 +284,89 @@ func (h *Handlers) videoResolve(w http.ResponseWriter, r *http.Request) {
 
 // schemaAll serves the full registry (doc-types + block library) so the editor
 // can render nav, forms and the block palette.
-func (h *Handlers) schemaAll(w http.ResponseWriter, _ *http.Request) {
+func (h *Handlers) schemaAll(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	enabled, err := h.enabledTypes(r, tid)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	all := h.registry.DocTypes()
+	docTypes := make([]schema.DocType, 0, len(all))
+	for _, dt := range all {
+		if settings.Enabled(enabled, dt.Type) {
+			docTypes = append(docTypes, dt)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"docTypes": h.registry.DocTypes(),
+		"docTypes": docTypes,
 		"blocks":   h.registry.Blocks(),
 	})
+}
+
+// enabledTypes reads the tenant's content profile (nil settings store = all).
+func (h *Handlers) enabledTypes(r *http.Request, tid uuid.UUID) ([]string, error) {
+	if h.settings == nil {
+		return nil, nil
+	}
+	return h.settings.EnabledTypes(r.Context(), tid)
+}
+
+// getSettings returns the tenant's content profile plus the full type list so
+// the editor can render enable/disable toggles (disabled types are absent from
+// /schema, so the settings surface needs the registry's complete set).
+func (h *Handlers) getSettings(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	enabled, err := h.enabledTypes(r, tid)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	all := h.registry.DocTypes()
+	allTypes := make([]string, 0, len(all))
+	for _, dt := range all {
+		allTypes = append(allTypes, dt.Type)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabledTypes": enabled,  // empty = all enabled
+		"allTypes":     allTypes, // full registry, for the toggle UI
+	})
+}
+
+// putSettings replaces the tenant's enabled doc-type set. Empty list = enable
+// everything. Unknown type names are rejected (registry is the source of truth).
+func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	if h.settings == nil {
+		writeJSON(w, http.StatusNotImplemented, errBody("settings store not configured"))
+		return
+	}
+	var in struct {
+		EnabledTypes []string `json:"enabledTypes"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	for _, t := range in.EnabledTypes {
+		if _, ok := h.registry.DocType(t); !ok {
+			writeJSON(w, http.StatusBadRequest, errBody("unknown doc-type: "+t))
+			return
+		}
+	}
+	if err := h.settings.SetEnabledTypes(r.Context(), tid, in.EnabledTypes); err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	h.getSettings(w, r)
 }
 
 func (h *Handlers) schemaOne(w http.ResponseWriter, r *http.Request) {
@@ -375,6 +460,17 @@ func (h *Handlers) createDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	var in content.CreateInput
 	if !decodeJSON(w, r, &in) {
+		return
+	}
+	// Content profile: creating a disabled doc-type is rejected (existing docs
+	// of a later-disabled type stay readable/editable — no data loss).
+	enabled, err := h.enabledTypes(r, tid)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	if !settings.Enabled(enabled, in.Type) {
+		writeJSON(w, http.StatusForbidden, errBody("doc-type disabled for this tenant: "+in.Type))
 		return
 	}
 	body := in.Body
