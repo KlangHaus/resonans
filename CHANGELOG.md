@@ -1,3 +1,11 @@
+# [1.2.0](https://github.com/KlangHaus/resonans/compare/v1.1.0...v1.2.0) (2026-07-28)
+
+
+### Features
+
+* ship Studio as its own image (resonans-studio) for staging deploy ([#18](https://github.com/KlangHaus/resonans/issues/18)) ([6a84295](https://github.com/KlangHaus/resonans/commit/6a84295faffbc233eb1bf255f2f40bdec57afc8e)), closes [#17](https://github.com/KlangHaus/resonans/issues/17)
+* visuel blok-editor i Studio (Fase 4 core) ([#16](https://github.com/KlangHaus/resonans/issues/16)) ([d986c62](https://github.com/KlangHaus/resonans/commit/d986c62eae2a03f080ba2624eef6b307df68287e)), closes [#96](https://github.com/KlangHaus/resonans/issues/96) [#15](https://github.com/KlangHaus/resonans/issues/15)
+
 # [1.1.0](https://github.com/KlangHaus/resonans/compare/v1.0.1...v1.1.0) (2026-07-28)
 
 
