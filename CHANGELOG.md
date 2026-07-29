@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/KlangHaus/resonans/compare/v1.3.0...v1.4.0) (2026-07-29)
+
+
+### Features
+
+* Storyblok-style Studio-skal — Spaces-forside + org m/ space-oprettelse ([#22](https://github.com/KlangHaus/resonans/issues/22)) ([93ea76f](https://github.com/KlangHaus/resonans/commit/93ea76f3bd896b927f0f5c9ed822eac410080005)), closes [#21](https://github.com/KlangHaus/resonans/issues/21)
+
 # [1.3.0](https://github.com/KlangHaus/resonans/compare/v1.2.0...v1.3.0) (2026-07-28)
 
 
