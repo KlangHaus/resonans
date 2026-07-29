@@ -64,12 +64,15 @@ export function useResonans() {
   const cfg = useRuntimeConfig()
   const base = (cfg.public.apiBase as string) || ''
   const devTenant = (cfg.public.devTenant as string) || ''
+  const { activeId } = useSpaces()
 
   function headers(extra: Record<string, string> = {}): Record<string, string> {
     const h: Record<string, string> = { ...extra }
-    // Dev convenience: send the tenant when auth is disabled. In prod the
-    // session/JWT supplies it and this header is ignored server-side.
-    if (devTenant) h['X-Dev-Tenant'] = devTenant
+    // Tenant = the ACTIVE SPACE (space ≡ tenant, Beslutning K), falling back to
+    // the configured dev-tenant. Dev-mode only: in prod the session/JWT supplies
+    // the tenant and this header is ignored server-side.
+    const tenant = activeId.value || devTenant
+    if (tenant) h['X-Dev-Tenant'] = tenant
     return h
   }
 
