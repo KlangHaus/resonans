@@ -20,6 +20,9 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
+      // Sentry (SaaS EU) — DSN er publishable; tom = Sentry slået fra.
+      sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
+      sentryEnv: process.env.NUXT_PUBLIC_SENTRY_ENV || 'staging',
       // Resonans backend base URL.
       apiBase: '',
       // Dev-only tenant (sent as X-Dev-Tenant when auth is disabled). In prod
