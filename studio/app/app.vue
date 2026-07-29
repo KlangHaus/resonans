@@ -24,22 +24,15 @@ function backToSpaces() {
 // --- What's New (overlay, Storyblok-style) ---
 const showNews = ref(false)
 
-// Kurateret panel-nav (Allan 2026-07-28): Dashboard · Pages · Posts · Block
-// Library · Assets · Datasources (+ evt. øvrige AKTIVE doc-typer, fx LMS-sæt i
-// et undervisnings-space — profilfiltreret, så et web-space ser præcis listen).
-const panelNav = computed(() => {
-  const enabled = (sch.value?.docTypes || []).map((d) => d.type)
-  const items: { to: string; label: string }[] = [{ to: '/dashboard', label: '⌂ Dashboard' }]
-  if (enabled.includes('page')) items.push({ to: '/page', label: 'Pages' })
-  if (enabled.includes('post')) items.push({ to: '/post', label: 'Posts' })
-  for (const t of enabled) {
-    if (t !== 'page' && t !== 'post') items.push({ to: `/${t}`, label: t.charAt(0).toUpperCase() + t.slice(1) })
-  }
-  items.push({ to: '/blocks', label: 'Block Library' })
-  items.push({ to: '/assets', label: 'Assets' })
-  items.push({ to: '/datasources', label: 'Datasources' })
-  return items
-})
+// Panel-nav (Allan 2026-07-29, Storyblok-mønstret): content-typerne er IKKE
+// nav-punkter — de er en kolonne i Content-listen og et VALG ved oprettelse.
+const panelNav = [
+  { to: '/dashboard', label: '⌂ Dashboard' },
+  { to: '/content', label: 'Content' },
+  { to: '/blocks', label: 'Block Library' },
+  { to: '/assets', label: 'Assets' },
+  { to: '/datasources', label: 'Datasources' },
+]
 
 // --- Hjælp & inspiration (drop-up) + Sentry-feedback ---
 const showHelp = ref(false)
