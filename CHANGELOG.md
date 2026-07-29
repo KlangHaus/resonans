@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/KlangHaus/resonans/compare/v1.4.0...v1.5.0) (2026-07-29)
+
+
+### Features
+
+* rail-polish mod designer-forlaeg — ikon-rail, rail-tokens, profil-badges ([#24](https://github.com/KlangHaus/resonans/issues/24)) ([cac566a](https://github.com/KlangHaus/resonans/commit/cac566a7b177cc8767d446fe5ca6ce43c1ad27dc)), closes [#23](https://github.com/KlangHaus/resonans/issues/23)
+
 # [1.4.0](https://github.com/KlangHaus/resonans/compare/v1.3.0...v1.4.0) (2026-07-29)
 
 
