@@ -16,6 +16,19 @@ export interface Space {
 const LS_SPACES = 'resonans.spaces'
 const LS_ACTIVE = 'resonans.activeSpace'
 
+// crypto.randomUUID is [SecureContext]-gated and MISSING on WG-internal staging
+// (plain HTTP) — clicking "Opret" would throw silently (#25). getRandomValues is
+// NOT gated, so fall back to a manual RFC 4122 v4 when randomUUID is absent.
+function uuidv4(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const b = new Uint8Array(16)
+  crypto.getRandomValues(b)
+  b[6] = (b[6]! & 0x0f) | 0x40 // version 4
+  b[8] = (b[8]! & 0x3f) | 0x80 // variant 10xx
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0'))
+  return `${h.slice(0, 4).join('')}-${h.slice(4, 6).join('')}-${h.slice(6, 8).join('')}-${h.slice(8, 10).join('')}-${h.slice(10).join('')}`
+}
+
 function load(): Space[] {
   try {
     return JSON.parse(localStorage.getItem(LS_SPACES) || '[]') as Space[]
@@ -53,7 +66,7 @@ export function useSpaces() {
     localStorage.removeItem(LS_ACTIVE)
   }
   function create(name: string): Space {
-    const s: Space = { id: crypto.randomUUID(), name: name.trim(), createdAt: new Date().toISOString() }
+    const s: Space = { id: uuidv4(), name: name.trim(), createdAt: new Date().toISOString() }
     spaces.value.push(s)
     persist()
     return s
