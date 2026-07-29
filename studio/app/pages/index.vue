@@ -16,6 +16,30 @@ const filtered = computed(() => {
 
 const covers = ['cov0', 'cov1', 'cov2', 'cov3']
 
+// Profil-badge pr. space ([designer]-forlæg: LMS/Marketing-type på kortet).
+// Afledt af spacets content-profil: kun web-typer → Marketing; kun LMS-typer →
+// LMS; alt/mix → Alt indhold. Hentes pr. space (eksplicit tenant-header — vi
+// står UDENFOR et space på landingen).
+const LMS_TYPES = ['course', 'lesson', 'module', 'quiz', 'resource']
+const badges = ref<Record<string, string>>({})
+watchEffect(async () => {
+  for (const s of spaces.value) {
+    if (badges.value[s.id]) continue
+    try {
+      const st = await $fetch<{ enabledTypes: string[] | null }>('/api/v1/settings', {
+        headers: { 'X-Dev-Tenant': s.id },
+      })
+      const enabled = st.enabledTypes || []
+      if (!enabled.length) badges.value[s.id] = 'Alt indhold'
+      else if (enabled.every((t) => !LMS_TYPES.includes(t))) badges.value[s.id] = 'Marketing'
+      else if (enabled.every((t) => LMS_TYPES.includes(t))) badges.value[s.id] = 'LMS'
+      else badges.value[s.id] = 'Alt indhold'
+    } catch {
+      badges.value[s.id] = ''
+    }
+  }
+})
+
 async function open(id: string) {
   enter(id)
   // Ind i spacet: første aktive content-type (profil-filtreret pr. space).
@@ -63,7 +87,10 @@ function since(iso: string) {
         <div class="sp__cardfoot">
           <span class="sp__avatar">{{ s.name.slice(0, 2).toUpperCase() }}</span>
           <span class="sp__meta">{{ since(s.createdAt) }}</span>
-          <span class="sp__badges"><span class="rz-chip">Staging</span> <span class="rz-chip">EU</span></span>
+          <span class="sp__badges">
+            <span v-if="badges[s.id]" class="sp__typebadge">{{ badges[s.id] }}</span>
+            <span class="rz-chip">Staging</span> <span class="rz-chip">EU</span>
+          </span>
         </div>
       </button>
     </div>
@@ -160,5 +187,13 @@ function since(iso: string) {
 }
 .sp__meta {
   flex: 1;
+}
+.sp__typebadge {
+  background: var(--rz-primary, #e94560);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 7px;
 }
 </style>

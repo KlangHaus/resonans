@@ -74,23 +74,29 @@ const NEWS = [
 <template>
   <div class="sb-shell">
     <!-- Dark rail -->
-    <aside class="sb-rail">
-      <NuxtLink to="/" class="sb-rail__brand" @click="leave()">
-        <span class="sb-rail__mark">R</span> resonans
+    <aside class="sb-rail" :class="{ 'sb-rail--slim': inSpace }">
+      <NuxtLink to="/" class="sb-rail__brand" title="resonans" @click="leave()">
+        <span class="sb-rail__mark">R</span> <span class="sb-rail__label">resonans</span>
       </NuxtLink>
 
+      <!-- Current-space-chip (kun slim/inde-i-space — [designer]s inner-rail-kontraktion) -->
+      <div v-if="inSpace" class="sb-rail__spacechip" :title="active?.name">
+        {{ (active?.name || '?').slice(0, 2).toUpperCase() }}
+      </div>
+      <div v-if="inSpace" class="sb-rail__sep" />
+
       <nav class="sb-rail__nav">
-        <NuxtLink to="/" class="sb-rail__item" :class="{ on: route.path === '/' || inSpace }" @click="leave()">
-          <span class="sb-rail__ic">▢</span> Mine Spaces
+        <NuxtLink to="/" class="sb-rail__item" :class="{ on: route.path === '/' || inSpace }" title="Mine Spaces" @click="leave()">
+          <span class="sb-rail__ic">▢</span> <span class="sb-rail__label">Mine Spaces</span>
         </NuxtLink>
-        <NuxtLink to="/organization" class="sb-rail__item" :class="{ on: route.path === '/organization' }">
-          <span class="sb-rail__ic">🏢</span> Min organisation
+        <NuxtLink to="/organization" class="sb-rail__item" :class="{ on: route.path === '/organization' }" title="Min organisation">
+          <span class="sb-rail__ic">🏢</span> <span class="sb-rail__label">Min organisation</span>
         </NuxtLink>
       </nav>
 
       <div class="sb-rail__bottom">
-        <button type="button" class="sb-rail__item" @click="showNews = true">
-          <span class="sb-rail__ic">✦</span> Nyheder <span class="sb-rail__badge">{{ NEWS.length }}</span>
+        <button type="button" class="sb-rail__item" title="Nyheder" @click="showNews = true">
+          <span class="sb-rail__ic">✦</span> <span class="sb-rail__label">Nyheder</span> <span class="sb-rail__badge">{{ NEWS.length }}</span>
         </button>
 
         <!-- Hjælp & inspiration: drop-up-menu (Storyblok-mønstret) -->
@@ -102,13 +108,13 @@ const NEWS = [
             <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
             <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/issues" target="_blank" rel="noopener">Community</a>
           </div>
-          <button type="button" class="sb-rail__item" :class="{ on: showHelp }" @click="showHelp = !showHelp">
-            <span class="sb-rail__ic">◎</span> Hjælp & inspiration
+          <button type="button" class="sb-rail__item" :class="{ on: showHelp }" title="Hjælp & inspiration" @click="showHelp = !showHelp">
+            <span class="sb-rail__ic">◎</span> <span class="sb-rail__label">Hjælp & inspiration</span>
           </button>
         </div>
 
-        <div class="sb-rail__item sb-rail__account">
-          <span class="sb-rail__avatar">AC</span> Min konto
+        <div class="sb-rail__item sb-rail__account" title="Min konto">
+          <span class="sb-rail__avatar">AC</span> <span class="sb-rail__label">Min konto</span>
         </div>
       </div>
     </aside>
@@ -161,11 +167,63 @@ const NEWS = [
 .sb-rail {
   width: 232px;
   flex: none;
-  background: #1a1a2e; /* navy — brand */
-  color: rgba(255, 255, 255, 0.82);
+  background: var(--rz-rail-bg, #14161c); /* permanent mørk — --rz-rail-* er tema-uafhængige */
+  color: var(--rz-rail-text-muted, #8b8f9c);
   display: flex;
   flex-direction: column;
   padding: 14px 10px;
+  transition: width 0.15s ease;
+}
+/* Slim ikon-rail inde i et space ([designer]s outer→inner-kontraktion) */
+.sb-rail--slim {
+  width: 60px;
+  padding: 14px 8px;
+  align-items: center;
+}
+.sb-rail--slim .sb-rail__label {
+  display: none;
+}
+.sb-rail--slim .sb-rail__brand {
+  padding: 6px 0 14px;
+}
+.sb-rail--slim .sb-rail__item {
+  justify-content: center;
+  padding: 9px 0;
+  width: 44px;
+}
+.sb-rail--slim .sb-rail__badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 0 5px;
+  font-size: 9px;
+}
+.sb-rail--slim .sb-rail__item {
+  position: relative;
+}
+.sb-rail__spacechip {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #e94560, #c4a35a);
+  color: #1a1a2e;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 12px;
+  box-shadow: 0 0 0 2px var(--rz-rail-active-bg, #242835);
+}
+.sb-rail__sep {
+  width: 28px;
+  height: 1px;
+  background: var(--rz-rail-border, #262a35);
+  margin: 12px 0;
+}
+.sb-rail--slim .sb-help__menu {
+  left: 52px;
+  right: auto;
+  bottom: 0;
+  width: 230px;
 }
 .sb-rail__brand {
   display: flex;
@@ -173,7 +231,7 @@ const NEWS = [
   gap: 9px;
   font-weight: 800;
   font-size: 16px;
-  color: #fff;
+  color: var(--rz-rail-text, #e8e9ed);
   padding: 6px 10px 18px;
 }
 .sb-rail__mark {
@@ -199,7 +257,7 @@ const NEWS = [
   padding: 9px 10px;
   border-radius: 8px;
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--rz-rail-text-muted, #8b8f9c);
   background: none;
   border: 0;
   cursor: pointer;
@@ -208,12 +266,12 @@ const NEWS = [
   width: 100%;
 }
 .sb-rail__item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  background: var(--rz-rail-raised, #1b1e26);
+  color: var(--rz-rail-text, #e8e9ed);
 }
 .sb-rail__item.on {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--rz-rail-active-bg, #242835);
+  color: var(--rz-rail-text, #e8e9ed);
   font-weight: 600;
 }
 .sb-rail__ic {
