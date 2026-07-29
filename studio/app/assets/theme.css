@@ -20,6 +20,16 @@
   --rz-space: 16px;
   --rz-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --rz-sidebar-w: 240px;
+
+  /* Rail-tokens ([designer]-forlæg, låst 2026-07-28): den ydre rail er
+     PERMANENT mørk uanset app-tema (GitHub/Linear-mønstret) — derfor egne
+     tokens udenfor lys/mørk-ramperne ovenfor. */
+  --rz-rail-bg: #14161c;
+  --rz-rail-raised: #1b1e26;
+  --rz-rail-text: #e8e9ed;
+  --rz-rail-text-muted: #8b8f9c;
+  --rz-rail-active-bg: #242835;
+  --rz-rail-border: #262a35;
 }
 
 @media (prefers-color-scheme: dark) {
