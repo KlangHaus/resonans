@@ -3,7 +3,6 @@
 // inkl. space-oprettelse (Allan-krav: "i org skal man kunne kreere new spaces").
 // I prod-Studio kommer org-data fra auth (BetterAuth-org); dette er dev-formen.
 const { spaces, enter, create } = useSpaces()
-const { schema } = useResonans()
 
 const newName = ref('')
 const busy = ref(false)
@@ -20,8 +19,7 @@ async function createSpace() {
 
 async function open(id: string) {
   enter(id)
-  const sch = await schema()
-  navigateTo(`/${sch.docTypes[0]?.type || 'post'}`)
+  navigateTo('/dashboard')
 }
 </script>
 

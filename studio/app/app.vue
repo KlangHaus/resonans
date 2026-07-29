@@ -23,6 +23,32 @@ function backToSpaces() {
 
 // --- What's New (overlay, Storyblok-style) ---
 const showNews = ref(false)
+
+// Kurateret panel-nav (Allan 2026-07-28): Dashboard · Pages · Posts · Block
+// Library · Assets · Datasources (+ evt. øvrige AKTIVE doc-typer, fx LMS-sæt i
+// et undervisnings-space — profilfiltreret, så et web-space ser præcis listen).
+const panelNav = computed(() => {
+  const enabled = (sch.value?.docTypes || []).map((d) => d.type)
+  const items: { to: string; label: string }[] = [{ to: '/dashboard', label: '⌂ Dashboard' }]
+  if (enabled.includes('page')) items.push({ to: '/page', label: 'Pages' })
+  if (enabled.includes('post')) items.push({ to: '/post', label: 'Posts' })
+  for (const t of enabled) {
+    if (t !== 'page' && t !== 'post') items.push({ to: `/${t}`, label: t.charAt(0).toUpperCase() + t.slice(1) })
+  }
+  items.push({ to: '/blocks', label: 'Block Library' })
+  items.push({ to: '/assets', label: 'Assets' })
+  items.push({ to: '/datasources', label: 'Datasources' })
+  return items
+})
+
+// --- Hjælp & inspiration (drop-up) + Sentry-feedback ---
+const showHelp = ref(false)
+const { $reportProblem } = useNuxtApp()
+async function reportProblem() {
+  showHelp.value = false
+  if ($reportProblem) await $reportProblem()
+  else window.open('https://github.com/KlangHaus/resonans/issues/new', '_blank')
+}
 const NEWS = [
   {
     date: '28. jul 2026',
@@ -66,9 +92,21 @@ const NEWS = [
         <button type="button" class="sb-rail__item" @click="showNews = true">
           <span class="sb-rail__ic">✦</span> Nyheder <span class="sb-rail__badge">{{ NEWS.length }}</span>
         </button>
-        <a class="sb-rail__item" href="https://github.com/KlangHaus/resonans" target="_blank" rel="noopener">
-          <span class="sb-rail__ic">◎</span> Hjælp & inspiration
-        </a>
+
+        <!-- Hjælp & inspiration: drop-up-menu (Storyblok-mønstret) -->
+        <div class="sb-help">
+          <div v-if="showHelp" class="sb-help__menu">
+            <div class="sb-help__title">Hvordan kan vi hjælpe?</div>
+            <button type="button" class="sb-help__link" @click="reportProblem">Rapportér et problem</button>
+            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans#readme" target="_blank" rel="noopener">Dokumentation</a>
+            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/issues" target="_blank" rel="noopener">Community</a>
+          </div>
+          <button type="button" class="sb-rail__item" :class="{ on: showHelp }" @click="showHelp = !showHelp">
+            <span class="sb-rail__ic">◎</span> Hjælp & inspiration
+          </button>
+        </div>
+
         <div class="sb-rail__item sb-rail__account">
           <span class="sb-rail__avatar">AC</span> Min konto
         </div>
@@ -83,15 +121,15 @@ const NEWS = [
         <strong>{{ active?.name }}</strong>
       </div>
       <nav class="sb-panel__nav">
-        <NuxtLink v-for="dt in sch?.docTypes || []" :key="dt.type" :to="`/${dt.type}`" class="sb-panel__item">
-          {{ dt.type }}
+        <NuxtLink v-for="item in panelNav" :key="item.to" :to="item.to" class="sb-panel__item">
+          {{ item.label }}
         </NuxtLink>
         <p v-if="error" class="rz-field__hint" style="padding: 0 12px">
           Kan ikke hente schema — kører backend'en?
         </p>
       </nav>
       <div class="sb-panel__foot">
-        <NuxtLink to="/settings" class="sb-panel__item">⚙ Indstillinger</NuxtLink>
+        <NuxtLink to="/settings" class="sb-panel__item">⚙ Projekt settings</NuxtLink>
       </div>
     </aside>
 
@@ -211,6 +249,45 @@ const NEWS = [
 }
 .sb-rail__account {
   cursor: default;
+}
+/* Help drop-up */
+.sb-help {
+  position: relative;
+}
+.sb-help__menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 6px;
+  right: 6px;
+  background: var(--rz-raised, #fff);
+  color: var(--rz-text, #1a1a2e);
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+  padding: 8px 0;
+  z-index: 40;
+}
+.sb-help__title {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--rz-border, #e6e2da);
+  margin-bottom: 4px;
+}
+.sb-help__link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--rz-text, #1a1a2e);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.sb-help__link:hover {
+  background: var(--rz-surface, #f4f2ee);
+  color: var(--rz-primary, #e94560);
 }
 /* Contextual panel */
 .sb-panel {

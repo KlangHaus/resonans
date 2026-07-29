@@ -105,6 +105,15 @@ export function useResonans() {
       }),
     publishDocument: (id: string) =>
       req<Document>(`/api/v1/documents/${id}/publish`, { method: 'POST' }),
+    listAssets: () =>
+      req<{ assets: { id: string; filename: string; kind: string; mime: string; sizeBytes: number; width?: number; height?: number; url: string }[] }>(
+        '/api/v1/assets',
+      ).then((r) => r.assets),
+    uploadAsset: (file: File) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      return req('/api/v1/assets', { method: 'POST', body: fd })
+    },
     getSettings: () =>
       req<{ enabledTypes: string[]; allTypes: string[] }>('/api/v1/settings'),
     putSettings: (enabledTypes: string[]) =>

@@ -3,7 +3,6 @@
 // og "+ Tilføj Space". Et space = en tenant (Beslutning K) — klik går IND i
 // spacet (sætter aktiv tenant) og videre til første content-type.
 const { spaces, enter } = useSpaces()
-const { schema } = useResonans()
 
 const q = ref('')
 const sort = ref<'updated' | 'name'>('updated')
@@ -20,8 +19,7 @@ const covers = ['cov0', 'cov1', 'cov2', 'cov3']
 async function open(id: string) {
   enter(id)
   // Ind i spacet: første aktive content-type (profil-filtreret pr. space).
-  const sch = await schema()
-  navigateTo(`/${sch.docTypes[0]?.type || 'post'}`)
+  navigateTo('/dashboard')
 }
 
 function since(iso: string) {

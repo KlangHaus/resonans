@@ -328,6 +328,9 @@ func (h *Handlers) getSettings(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
+	if enabled == nil {
+		enabled = []string{} // JSON contract: always an array, never null
+	}
 	all := h.registry.DocTypes()
 	allTypes := make([]string, 0, len(all))
 	for _, dt := range all {

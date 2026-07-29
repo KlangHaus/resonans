@@ -21,7 +21,7 @@ watch(
   (d) => {
     if (!d) return
     all.value = d.allTypes
-    const enabled = d.enabledTypes.length ? d.enabledTypes : d.allTypes
+    const enabled = d.enabledTypes?.length ? d.enabledTypes : d.allTypes
     checked.value = Object.fromEntries(d.allTypes.map((t) => [t, enabled.includes(t)]))
   },
   { immediate: true },

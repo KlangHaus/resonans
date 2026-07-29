@@ -4,7 +4,6 @@
 // indholdet automatisk, så intet backend-kald er nødvendigt for selve
 // oprettelsen. I prod-Studio bliver dette en auth-org-oprettelse i stedet.
 const { create, enter } = useSpaces()
-const { schema } = useResonans()
 
 const name = ref('')
 const busy = ref(false)
@@ -14,8 +13,7 @@ async function submit() {
   busy.value = true
   const s = create(name.value)
   enter(s.id)
-  const sch = await schema()
-  navigateTo(`/${sch.docTypes[0]?.type || 'post'}`)
+  navigateTo('/dashboard')
 }
 </script>
 
