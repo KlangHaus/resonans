@@ -1,3 +1,15 @@
+# [1.6.0](https://github.com/KlangHaus/resonans/compare/v1.5.0...v1.6.0) (2026-07-29)
+
+
+### Bug Fixes
+
+* space creation on insecure origins (crypto.randomUUID fallback) ([#26](https://github.com/KlangHaus/resonans/issues/26)) ([93d16bb](https://github.com/KlangHaus/resonans/commit/93d16bbb743c7d8e951e299566dcc258a7a0a452)), closes [#25](https://github.com/KlangHaus/resonans/issues/25)
+
+
+### Features
+
+* unified Content nav — types chosen at creation, not nav items ([#28](https://github.com/KlangHaus/resonans/issues/28)) ([33440a1](https://github.com/KlangHaus/resonans/commit/33440a1f6d819a3bb9047f59643392059bdc12a7)), closes [#27](https://github.com/KlangHaus/resonans/issues/27)
+
 # [1.5.0](https://github.com/KlangHaus/resonans/compare/v1.4.0...v1.5.0) (2026-07-29)
 
 
