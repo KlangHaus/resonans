@@ -62,7 +62,7 @@ Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
 
 ## Deploy
 
-Compose-workload på VM2 (ops), bag Caddy (`indhold.klanghaus.dk`). Deploy-stub:
+Compose-workload på VM2 (ops), bag Caddy (`cms.klanghaus.dk`). Deploy-stub:
 `klanghaus/infra/compose/prod/vm2-ops/`. Kontrakt: `DATABASE_URL`, `PUBLIC_URL`,
 port `:3000`. Secrets via SOPS+age ([infra]).
 
