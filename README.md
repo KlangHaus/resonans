@@ -15,7 +15,7 @@ Produkt-brief: `klanghaus/docs/product-briefs/resonans/index.md`.
   ved boot (embedded).
 - **BetterAuth-JWT** verificeret lokalt mod cached JWKS; tenant = `org`-claim.
 - **OTel** fra dag ét (traces+metrics+logs; tenant.id per-span).
-- Distroless-image, Compose-workload på **VM2** bag Caddy (`indhold.klanghaus.dk`).
+- Distroless-image, Compose-workload på **VM2** bag Caddy (`cms.klanghaus.dk`).
 
 ## Multi-tenancy + auth
 
@@ -109,7 +109,7 @@ private videoer (Etude-boundary), image-varianter-precompute.
 
 Honoreres af scaffoldet — ændr ikke uden en samtidig `infra/compose`-ændring:
 
-- `DATABASE_URL` (egen content-DB) · `PUBLIC_URL=https://indhold.klanghaus.dk` · lyt på `:3000`
+- `DATABASE_URL` (egen content-DB) · `PUBLIC_URL=https://cms.klanghaus.dk` · lyt på `:3000`
 
 ## Faser (roadmap)
 

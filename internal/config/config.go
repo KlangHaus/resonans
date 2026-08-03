@@ -24,7 +24,7 @@ type Config struct {
 	LogLevel string
 
 	// PublicURL is the canonical externally-reachable base URL of this CMS
-	// (https://indhold.klanghaus.dk in prod). Deploy contract: PUBLIC_URL.
+	// (https://cms.klanghaus.dk in prod). Deploy contract: PUBLIC_URL.
 	PublicURL string
 
 	// DatabaseURL is the Postgres DSN for the content-DB (Beslutning K,
