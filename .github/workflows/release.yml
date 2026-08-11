@@ -59,37 +59,41 @@ jobs:
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
 
+      # J4 — kanonisk DIGEST-reference. Signaturer/attestationer gemmes i
+      # registry'et pr. DIGEST, ikke pr. tag, så én operation mod digestet
+      # dækker alle tags der peger på det. Digest-referencen gør også SBOM'en
+      # immun over for at et mutérbart tag (latest/main) flyttes af et
+      # samtidigt run mellem build og scanning.
+      - id: ref
+        name: canonical digest reference
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          first="${TAGS%%$'\n'*}"           # metadata-action: ét tag pr. linje
+          echo "image=${first%%:*}@${DIGEST}" >> "$GITHUB_OUTPUT"
+
       # J4 — cosign keyless signing (OIDC, ingen long-lived key)
       - uses: sigstore/cosign-installer@v3
       - name: cosign sign
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          set -euo pipefail
-          for tag in $TAGS; do
-            cosign sign --yes "${tag}@${DIGEST}"
-          done
+        run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
-      # J4 — Syft SBOM (lokal fil; cosign attest bærer garantien → INGEN actions:write)
-      - uses: anchore/sbom-action@v0
+      # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
+      # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
+      # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          image: ${{ steps.ref.outputs.image }}
           format: spdx-json
           output-file: sbom.spdx.json
           upload-artifact: false
           upload-release-assets: false
 
       - name: cosign attach SBOM
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          set -euo pipefail
-          for tag in $TAGS; do
-            cosign attest --yes --predicate sbom.spdx.json \
-              --type spdxjson "${tag}@${DIGEST}"
-          done
+          cosign attest --yes --predicate sbom.spdx.json \
+            --type spdxjson "${{ steps.ref.outputs.image }}"
 
   # Studio (editor SPA) ships as its own image built from studio/ — deployed as
   # a separate compose-service behind its own vhost, versioned with the repo.
@@ -131,34 +135,38 @@ jobs:
           cache-from: type=gha,scope=studio
           cache-to: type=gha,mode=max,scope=studio
 
+      # J4 — kanonisk DIGEST-reference. Signaturer/attestationer gemmes i
+      # registry'et pr. DIGEST, ikke pr. tag, så én operation mod digestet
+      # dækker alle tags der peger på det. Digest-referencen gør også SBOM'en
+      # immun over for at et mutérbart tag (latest/main) flyttes af et
+      # samtidigt run mellem build og scanning.
+      - id: ref
+        name: canonical digest reference
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          first="${TAGS%%$'\n'*}"           # metadata-action: ét tag pr. linje
+          echo "image=${first%%:*}@${DIGEST}" >> "$GITHUB_OUTPUT"
+
       # J4 — cosign keyless signing (OIDC, ingen long-lived key)
       - uses: sigstore/cosign-installer@v3
       - name: cosign sign
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          set -euo pipefail
-          for tag in $TAGS; do
-            cosign sign --yes "${tag}@${DIGEST}"
-          done
+        run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
-      # J4 — Syft SBOM (lokal fil; cosign attest bærer garantien → INGEN actions:write)
-      - uses: anchore/sbom-action@v0
+      # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
+      # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
+      # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          image: ${{ steps.ref.outputs.image }}
           format: spdx-json
           output-file: sbom.spdx.json
           upload-artifact: false
           upload-release-assets: false
 
       - name: cosign attach SBOM
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          set -euo pipefail
-          for tag in $TAGS; do
-            cosign attest --yes --predicate sbom.spdx.json \
-              --type spdxjson "${tag}@${DIGEST}"
-          done
+          cosign attest --yes --predicate sbom.spdx.json \
+            --type spdxjson "${{ steps.ref.outputs.image }}"
