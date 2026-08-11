@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write # cosign keyless OIDC
 
 env:
   REGISTRY: ghcr.io
@@ -46,7 +47,8 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - uses: docker/build-push-action@v7
+      - id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -56,6 +58,38 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
+
+      # J4 — cosign keyless signing (OIDC, ingen long-lived key)
+      - uses: sigstore/cosign-installer@v3
+      - name: cosign sign
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $TAGS; do
+            cosign sign --yes "${tag}@${DIGEST}"
+          done
+
+      # J4 — Syft SBOM (lokal fil; cosign attest bærer garantien → INGEN actions:write)
+      - uses: anchore/sbom-action@v0
+        with:
+          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: cosign attach SBOM
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $TAGS; do
+            cosign attest --yes --predicate sbom.spdx.json \
+              --type spdxjson "${tag}@${DIGEST}"
+          done
 
   # Studio (editor SPA) ships as its own image built from studio/ — deployed as
   # a separate compose-service behind its own vhost, versioned with the repo.
@@ -87,7 +121,8 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - uses: docker/build-push-action@v7
+      - id: build
+        uses: docker/build-push-action@v7
         with:
           context: studio
           push: true
@@ -95,3 +130,35 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=studio
           cache-to: type=gha,mode=max,scope=studio
+
+      # J4 — cosign keyless signing (OIDC, ingen long-lived key)
+      - uses: sigstore/cosign-installer@v3
+      - name: cosign sign
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $TAGS; do
+            cosign sign --yes "${tag}@${DIGEST}"
+          done
+
+      # J4 — Syft SBOM (lokal fil; cosign attest bærer garantien → INGEN actions:write)
+      - uses: anchore/sbom-action@v0
+        with:
+          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: cosign attach SBOM
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $TAGS; do
+            cosign attest --yes --predicate sbom.spdx.json \
+              --type spdxjson "${tag}@${DIGEST}"
+          done
