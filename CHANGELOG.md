@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/KlangHaus/resonans/compare/v1.6.0...v1.6.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **ci:** align Go toolchain — test and ship the same stdlib ([#34](https://github.com/KlangHaus/resonans/issues/34)) ([988ebd4](https://github.com/KlangHaus/resonans/commit/988ebd4dd5dd9452e92c4cb3ab06015eea3e9674)), closes [#2](https://github.com/KlangHaus/resonans/issues/2) [#33](https://github.com/KlangHaus/resonans/issues/33)
+
 # [1.6.0](https://github.com/KlangHaus/resonans/compare/v1.5.0...v1.6.0) (2026-07-29)
 
 
