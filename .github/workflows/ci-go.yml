@@ -49,14 +49,26 @@ jobs:
         with:
           args: ./...
 
-      # RØD-FØR-GRØN (midlertidig, fjernes i næste commit): pin scanningen til
-      # go1.26.4, en kendt-sårbar patch. Består dette step, MÅLER gaten ikke
-      # toolchainen — og så beviser den grønne variant nedenfor ingenting.
-      # Forventet: 8 stdlib-advisories → exit != 0.
+      # `go-version-file: go.mod` er IKKE bindende for denne action: dens
+      # defaults (go-version-input: stable + check-latest: true) overskriver
+      # den, så gaten scannede `stable` i stedet for den toolchain imaget
+      # bygges med. Læs direktivet og giv det eksplicit videre.
+      #
+      # Fail-closed: en tom version ville falde tilbage til `stable` og
+      # genindføre præcis den blinde vinkel, så vi afbryder hellere.
+      - id: goversion
+        name: read go directive from go.mod
+        run: |
+          set -euo pipefail
+          v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
+          test -n "$v" || { echo "could not parse the go directive from go.mod"; exit 1; }
+          echo "scanning stdlib for go${v}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
       - name: govulncheck
         uses: golang/govulncheck-action@v1
         with:
-          go-version-input: '1.26.4'
+          go-version-input: ${{ steps.goversion.outputs.version }}
           check-latest: false
           repo-checkout: false
 
