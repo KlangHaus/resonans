@@ -1,7 +1,10 @@
 # Multi-stage build for the Resonans CMS (Go REST content-API).
 # Mirrors the permissions/notifications service Dockerfiles (Docker Compose /
 # Caddy deploy model per docs/infrastructure — not k8s).
-FROM golang:1.26-alpine AS build
+# Pinned to the exact patch that matches go.mod's `go` directive: CI runs tests
+# on the directive version, so a floating tag would ship a stdlib we never
+# tested against ([permissions]-fund 2026-08-14).
+FROM golang:1.26.6-alpine AS build
 ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
