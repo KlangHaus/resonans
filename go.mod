@@ -1,6 +1,6 @@
 module github.com/KlangHaus/resonans
 
-go 1.26.6
+go 1.25.13
 
 require (
 	github.com/google/uuid v1.6.0
