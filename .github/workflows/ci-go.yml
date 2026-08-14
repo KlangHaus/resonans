@@ -49,10 +49,15 @@ jobs:
         with:
           args: ./...
 
+      # RØD-FØR-GRØN (midlertidig, fjernes i næste commit): pin scanningen til
+      # go1.26.4, en kendt-sårbar patch. Består dette step, MÅLER gaten ikke
+      # toolchainen — og så beviser den grønne variant nedenfor ingenting.
+      # Forventet: 8 stdlib-advisories → exit != 0.
       - name: govulncheck
         uses: golang/govulncheck-action@v1
         with:
-          go-version-file: go.mod
+          go-version-input: '1.26.4'
+          check-latest: false
           repo-checkout: false
 
       - name: Test (race + coverage)
