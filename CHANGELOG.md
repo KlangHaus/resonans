@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/KlangHaus/resonans/compare/v1.6.1...v1.6.2) (2026-08-16)
+
+
+### Bug Fixes
+
+* **ci:** govulncheck must scan the toolchain we ship ([#36](https://github.com/KlangHaus/resonans/issues/36)) ([d5c0df9](https://github.com/KlangHaus/resonans/commit/d5c0df95f88b25b93a1be64cd83a95397c5e3e83)), closes [#35](https://github.com/KlangHaus/resonans/issues/35)
+
 ## [1.6.1](https://github.com/KlangHaus/resonans/compare/v1.6.0...v1.6.1) (2026-08-14)
 
 
