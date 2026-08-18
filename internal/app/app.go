@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,8 +30,15 @@ import (
 	"github.com/KlangHaus/resonans/internal/settings"
 )
 
-// version is stamped via -ldflags at build time.
-var version = "0.0.0"
+// version and revision are stamped via -ldflags at build time. revision is the
+// full git sha the image was built from. /healthz exposes both so the RUNNING
+// process can be asked what it is, without trusting compose, the deploy agent
+// or a mutable tag — "does prod run the reviewed code?" must be answerable from
+// outside the deploy system (Beslutning AJ).
+var (
+	version  = "0.0.0"
+	revision = "unknown"
+)
 
 const shutdownTimeout = 10 * time.Second
 
@@ -211,9 +219,15 @@ func Run(ctx context.Context) error {
 	mux.Handle("/delivery/", deliveryRouter)
 
 	// HTTP probes used by the Docker HEALTHCHECK + Caddy (unauthenticated).
+	// Build identity is marshaled once at boot: it never changes, and a probe
+	// must not be able to fail on serialization.
+	healthBody, err := healthPayload()
+	if err != nil {
+		return fmt.Errorf("marshal health body: %w", err)
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write(healthBody)
 	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -337,5 +351,21 @@ func (m *mediaAssetResolver) ResolveAsset(ctx context.Context, tenantID uuid.UUI
 	return out, true
 }
 
+// healthPayload is the /healthz body. Split out so a test can assert the probe
+// reports the STAMPED identity: the constant `{"status":"ok"}` it replaces would
+// have satisfied any test that only checked the status field.
+func healthPayload() ([]byte, error) {
+	return json.Marshal(map[string]string{
+		"status":   "ok",
+		"service":  "resonans",
+		"version":  version,
+		"revision": revision,
+	})
+}
+
 // Version returns the build-stamped version (exposed for the healthcheck cmd).
 func Version() string { return version }
+
+// Revision returns the build-stamped git sha, or "unknown" when the binary was
+// not built through the release pipeline.
+func Revision() string { return revision }

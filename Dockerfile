@@ -8,12 +8,15 @@
 # 1.26 directive (målt på denne PR: exit code 3). Bump both together.
 FROM golang:1.25.13-alpine AS build
 ARG VERSION=dev
+# REVISION = full git sha. Stamped into the binary so /healthz can report which
+# build is running — the OCI label alone is invisible to a running process.
+ARG REVISION=unknown
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath \
-    -ldflags="-s -w -X github.com/KlangHaus/resonans/internal/app.version=${VERSION}" \
+    -ldflags="-s -w -X github.com/KlangHaus/resonans/internal/app.version=${VERSION} -X github.com/KlangHaus/resonans/internal/app.revision=${REVISION}" \
     -o /out/resonans ./cmd/resonans
 
 FROM gcr.io/distroless/static-debian12:nonroot

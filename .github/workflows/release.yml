@@ -8,6 +8,19 @@ on:
   push:
     tags: ["v*.*.*"]
     branches: [main]
+  # Called directly by semantic-release after it cuts a tag. The tag-push
+  # trigger above has NEVER fired: eight tags (v1.1.0..v1.6.2) produced zero
+  # semver images, because the release commit carries [skip ci] and the tag
+  # points at exactly that commit. An event that silently does not fire is
+  # indistinguishable from one with nothing to do — so do not depend on it.
+  # Calling the build makes the outcome a consequence of the release job
+  # itself, which either succeeds visibly or fails visibly.
+  workflow_call:
+    inputs:
+      ref:
+        description: Tag or sha to build.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +37,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      # github.sha is the CALLER's commit on a workflow_call — not the ref we
+      # just checked out. Stamping it would label the image with a revision it
+      # was not built from, which is exactly the drift these labels exist to
+      # rule out. Read the sha from the checkout instead.
+      - id: rev
+        name: resolve built revision
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "::notice::building revision ${sha}"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -45,7 +72,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.rev.outputs.sha }}
 
       - id: build
         uses: docker/build-push-action@v7
@@ -58,6 +85,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ steps.rev.outputs.sha }}
 
       # J4 — kanonisk DIGEST-reference. Signaturer/attestationer gemmes i
       # registry'et pr. DIGEST, ikke pr. tag, så én operation mod digestet
@@ -102,6 +130,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      # github.sha is the CALLER's commit on a workflow_call — not the ref we
+      # just checked out. Stamping it would label the image with a revision it
+      # was not built from, which is exactly the drift these labels exist to
+      # rule out. Read the sha from the checkout instead.
+      - id: rev
+        name: resolve built revision
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "::notice::building revision ${sha}"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -123,7 +165,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.rev.outputs.sha }}
 
       - id: build
         uses: docker/build-push-action@v7
@@ -134,6 +176,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=studio
           cache-to: type=gha,mode=max,scope=studio
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ steps.rev.outputs.sha }}
 
       # J4 — kanonisk DIGEST-reference. Signaturer/attestationer gemmes i
       # registry'et pr. DIGEST, ikke pr. tag, så én operation mod digestet
