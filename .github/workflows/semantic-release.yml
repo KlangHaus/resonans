@@ -41,6 +41,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    outputs:
+      # Empty when this run cut no release — the build job is skipped then.
+      tag: ${{ steps.released.outputs.tag }}
     # workflow_dispatch har intet workflow_run-payload (manuel nødbremse,
     # kør altid); workflow_run skal have et succesfuldt CI (Go)-run bagved.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
@@ -80,3 +83,36 @@ jobs:
           semantic-release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      # Bind the outcome to the artifact, not to an event. semantic-release
+      # tags the commit it just created, so a tag pointing at HEAD is the
+      # unambiguous signal that a release happened this run.
+      - id: released
+        name: did this run cut a release?
+        run: |
+          set -euo pipefail
+          tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+          if [ -z "$tag" ]; then
+            echo "::notice::no release cut this run — skipping image build"
+          else
+            echo "::notice::released $tag — building images for it"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # CALL the build rather than hoping the tag-push triggers it. The push trigger
+  # in release.yml has never fired: the release commit carries [skip ci] and the
+  # tag points at that commit, so eight tags produced zero semver images. A
+  # called workflow either runs and reports, or fails loudly — there is no
+  # silent third state.
+  build:
+    name: Build release images
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: ./.github/workflows/release.yml
+    with:
+      ref: ${{ needs.release.outputs.tag }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # cosign keyless OIDC
+    secrets: inherit
