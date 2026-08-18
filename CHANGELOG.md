@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/KlangHaus/resonans/compare/v1.6.2...v1.7.0) (2026-08-18)
+
+
+### Features
+
+* **ops:** build-identitet fra /healthz + release-kæden kalder buildet ([#38](https://github.com/KlangHaus/resonans/issues/38)) ([fde83e3](https://github.com/KlangHaus/resonans/commit/fde83e3b664531a1dd498d338df9e208f0a3a557)), closes [#37](https://github.com/KlangHaus/resonans/issues/37)
+
 ## [1.6.2](https://github.com/KlangHaus/resonans/compare/v1.6.1...v1.6.2) (2026-08-16)
 
 
