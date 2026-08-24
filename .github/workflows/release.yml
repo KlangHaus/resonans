@@ -21,6 +21,15 @@ on:
         description: Tag or sha to build.
         required: true
         type: string
+  # Manual build against any ref. Two purposes: verify the release path without
+  # waiting for a release to happen, and rebuild the semver images that were
+  # never produced while the tag trigger was silent (v1.1.0..v1.6.2).
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag or sha to build (e.g. v1.7.0).
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -66,8 +75,13 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
           tags: |
             type=sha,prefix=sha-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            # value= is required here: metadata-action derives semver from
+            # github.ref, which on a workflow_call/dispatch is the CALLER's ref
+            # (refs/heads/main) — not the tag we checked out. Without it the
+            # pattern matches nothing and the image never gets its version tag,
+            # which is exactly how eight releases produced zero semver images.
+            type=semver,pattern={{version}},value=${{ inputs.ref || github.ref }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.ref || github.ref }}
             type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
           labels: |
@@ -159,8 +173,13 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}-studio
           tags: |
             type=sha,prefix=sha-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            # value= is required here: metadata-action derives semver from
+            # github.ref, which on a workflow_call/dispatch is the CALLER's ref
+            # (refs/heads/main) — not the tag we checked out. Without it the
+            # pattern matches nothing and the image never gets its version tag,
+            # which is exactly how eight releases produced zero semver images.
+            type=semver,pattern={{version}},value=${{ inputs.ref || github.ref }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.ref || github.ref }}
             type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
           labels: |
