@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/KlangHaus/resonans/compare/v1.7.0...v1.7.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **ci:** derive semver tags from the called ref, not the caller's ([#40](https://github.com/KlangHaus/resonans/issues/40)) ([1673809](https://github.com/KlangHaus/resonans/commit/16738097d422f22d8af719e88ac3146d23408a3f)), closes [#39](https://github.com/KlangHaus/resonans/issues/39)
+
 # [1.7.0](https://github.com/KlangHaus/resonans/compare/v1.6.2...v1.7.0) (2026-08-18)
 
 
