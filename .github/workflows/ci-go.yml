@@ -36,7 +36,11 @@ jobs:
 
       - name: Verify formatting (gofumpt)
         run: |
-          go install mvdan.cc/gofumpt@latest
+          # PINNED, not @latest: v0.12.0 (2026-09-07) requires go >= 1.26 while
+          # go.mod is held at 1.25.13 by the golangci-lint v2.5.0 pin, so the
+          # floating tag broke CI without a commit. v0.11.0 is the version
+          # @latest resolved to on the last green run. Bump both tools together.
+          go install mvdan.cc/gofumpt@v0.11.0
           test -z "$(gofumpt -l .)" || (echo "Run gofumpt -w ." && gofumpt -l . && exit 1)
 
       - name: golangci-lint
