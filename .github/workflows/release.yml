@@ -58,8 +58,27 @@ jobs:
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
+          short="$(git rev-parse --short=7 HEAD)"
+
+          # main-HEAD is read from GitHub AT BUILD TIME, never from github.sha:
+          # on a workflow_call/dispatch that context holds the CALLER's commit,
+          # which is how an image built from v1.7.0 came to wear `latest`.
+          #
+          # Fail-closed by construction: if the lookup fails, main_head stays
+          # empty, never equals sha, and latest/main are simply not applied. A
+          # missing tag is visible on the next pull; a wrong one is invisible
+          # until someone deploys older code — which is the state this fixes.
+          main_head="$(git ls-remote origin refs/heads/main | cut -f1 || true)"
+          if [ -n "$main_head" ] && [ "$sha" = "$main_head" ]; then
+            is_main_head=true
+          else
+            is_main_head=false
+          fi
+
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-          echo "::notice::building revision ${sha}"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "is_main_head=${is_main_head}" >> "$GITHUB_OUTPUT"
+          echo "::notice::building revision ${sha} · main-HEAD=${main_head:-<lookup failed>} · latest/main: ${is_main_head}"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -74,7 +93,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
           tags: |
-            type=sha,prefix=sha-
+            # Every tag below is derived from the CHECKOUT, never from the
+            # github.* context. On a workflow_call/dispatch that context
+            # describes the caller, so `type=sha` and `type=ref` would name a
+            # commit the image does not contain.
+            type=raw,value=sha-${{ steps.rev.outputs.short }}
             # value= is required here: metadata-action derives semver from
             # github.ref, which on a workflow_call/dispatch is the CALLER's ref
             # (refs/heads/main) — not the tag we checked out. Without it the
@@ -82,8 +105,13 @@ jobs:
             # which is exactly how eight releases produced zero semver images.
             type=semver,pattern={{version}},value=${{ inputs.ref || github.ref }}
             type=semver,pattern={{major}}.{{minor}},value=${{ inputs.ref || github.ref }}
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            # Moving tags follow the ONE invariant that protects deployers:
+            # `latest` is never OLDER than main. They are applied only when the
+            # built revision IS main's head — which admits real releases (the
+            # release commit is main's head when it is cut) and excludes a
+            # dispatch of an old ref, without needing a rule about who ran it.
+            type=raw,value=main,enable=${{ steps.rev.outputs.is_main_head == 'true' }}
+            type=raw,value=latest,enable=${{ steps.rev.outputs.is_main_head == 'true' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.rev.outputs.sha }}
@@ -156,8 +184,27 @@ jobs:
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
+          short="$(git rev-parse --short=7 HEAD)"
+
+          # main-HEAD is read from GitHub AT BUILD TIME, never from github.sha:
+          # on a workflow_call/dispatch that context holds the CALLER's commit,
+          # which is how an image built from v1.7.0 came to wear `latest`.
+          #
+          # Fail-closed by construction: if the lookup fails, main_head stays
+          # empty, never equals sha, and latest/main are simply not applied. A
+          # missing tag is visible on the next pull; a wrong one is invisible
+          # until someone deploys older code — which is the state this fixes.
+          main_head="$(git ls-remote origin refs/heads/main | cut -f1 || true)"
+          if [ -n "$main_head" ] && [ "$sha" = "$main_head" ]; then
+            is_main_head=true
+          else
+            is_main_head=false
+          fi
+
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-          echo "::notice::building revision ${sha}"
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+          echo "is_main_head=${is_main_head}" >> "$GITHUB_OUTPUT"
+          echo "::notice::building revision ${sha} · main-HEAD=${main_head:-<lookup failed>} · latest/main: ${is_main_head}"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -172,7 +219,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}-studio
           tags: |
-            type=sha,prefix=sha-
+            # Every tag below is derived from the CHECKOUT, never from the
+            # github.* context. On a workflow_call/dispatch that context
+            # describes the caller, so `type=sha` and `type=ref` would name a
+            # commit the image does not contain.
+            type=raw,value=sha-${{ steps.rev.outputs.short }}
             # value= is required here: metadata-action derives semver from
             # github.ref, which on a workflow_call/dispatch is the CALLER's ref
             # (refs/heads/main) — not the tag we checked out. Without it the
@@ -180,8 +231,13 @@ jobs:
             # which is exactly how eight releases produced zero semver images.
             type=semver,pattern={{version}},value=${{ inputs.ref || github.ref }}
             type=semver,pattern={{major}}.{{minor}},value=${{ inputs.ref || github.ref }}
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            # Moving tags follow the ONE invariant that protects deployers:
+            # `latest` is never OLDER than main. They are applied only when the
+            # built revision IS main's head — which admits real releases (the
+            # release commit is main's head when it is cut) and excludes a
+            # dispatch of an old ref, without needing a rule about who ran it.
+            type=raw,value=main,enable=${{ steps.rev.outputs.is_main_head == 'true' }}
+            type=raw,value=latest,enable=${{ steps.rev.outputs.is_main_head == 'true' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.rev.outputs.sha }}
