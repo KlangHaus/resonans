@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/KlangHaus/resonans/compare/v1.7.2...v1.7.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** derive image tags from the checkout, not the caller's context ([#43](https://github.com/KlangHaus/resonans/issues/43)) ([9aeaceb](https://github.com/KlangHaus/resonans/commit/9aeacebf87b7d847e68c3edb286826cd7771e2d7))
+
 ## [1.7.2](https://github.com/KlangHaus/resonans/compare/v1.7.1...v1.7.2) (2026-09-07)
 
 
