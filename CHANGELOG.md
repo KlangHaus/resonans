@@ -1,3 +1,10 @@
+## [1.7.5](https://github.com/KlangHaus/resonans/compare/v1.7.4...v1.7.5) (2026-09-08)
+
+
+### Bug Fixes
+
+* **ci:** markér en udgivelse der kørte under fallback-identiteten (kur b + pipefail + tag-skelnen) ([#45](https://github.com/KlangHaus/resonans/issues/45)) ([dfd87e4](https://github.com/KlangHaus/resonans/commit/dfd87e4221dcaa28c7ebccc4c51a0fb33031776e)), closes [#38](https://github.com/KlangHaus/resonans/issues/38) [#46](https://github.com/KlangHaus/resonans/issues/46)
+
 ## [1.7.4](https://github.com/KlangHaus/resonans/compare/v1.7.3...v1.7.4) (2026-09-08)
 
 
