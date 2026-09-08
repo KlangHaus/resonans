@@ -91,6 +91,15 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6
         with:
+          # latest=false: the action sets `latest` ON ITS OWN whenever a semver
+          # tag matches (flavor default is latest=auto). That implicit default
+          # is a dependency exactly like the github.* context — gating our own
+          # raw tag below disabled only OUR path, and the action's ran beside
+          # it. Measured: a dispatch of v1.7.0 logged `latest/main: false` and
+          # still moved `latest` onto the old image. Only the gated raw tag
+          # below may set it.
+          flavor: |
+            latest=false
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
           tags: |
             # Every tag below is derived from the CHECKOUT, never from the
@@ -217,6 +226,15 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6
         with:
+          # latest=false: the action sets `latest` ON ITS OWN whenever a semver
+          # tag matches (flavor default is latest=auto). That implicit default
+          # is a dependency exactly like the github.* context — gating our own
+          # raw tag below disabled only OUR path, and the action's ran beside
+          # it. Measured: a dispatch of v1.7.0 logged `latest/main: false` and
+          # still moved `latest` onto the old image. Only the gated raw tag
+          # below may set it.
+          flavor: |
+            latest=false
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}-studio
           tags: |
             # Every tag below is derived from the CHECKOUT, never from the
