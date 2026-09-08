@@ -1,3 +1,24 @@
+## [1.7.4](https://github.com/KlangHaus/resonans/compare/v1.7.3...v1.7.4) (2026-09-08)
+
+
+### Bug Fixes
+
+* **ci:** stop metadata-action i selv at sætte `latest` (ufuldstændig kur i [#43](https://github.com/KlangHaus/resonans/issues/43)) ([#46](https://github.com/KlangHaus/resonans/issues/46)) ([2869576](https://github.com/KlangHaus/resonans/commit/286957675a95dc820af2beacb10d4452fd88f20f))
+
+## [1.7.3](https://github.com/KlangHaus/resonans/compare/v1.7.2...v1.7.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** derive image tags from the checkout, not the caller's context ([#43](https://github.com/KlangHaus/resonans/issues/43)) ([9aeaceb](https://github.com/KlangHaus/resonans/commit/9aeacebf87b7d847e68c3edb286826cd7771e2d7))
+
+## [1.7.2](https://github.com/KlangHaus/resonans/compare/v1.7.1...v1.7.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** pin gofumpt to v0.11.0 — a floating tag broke CI without a commit ([#44](https://github.com/KlangHaus/resonans/issues/44)) ([1c6d90e](https://github.com/KlangHaus/resonans/commit/1c6d90ebdf4b1d730644f975314dd6de6c41620b))
+
 ## [1.7.1](https://github.com/KlangHaus/resonans/compare/v1.7.0...v1.7.1) (2026-08-24)
 
 
