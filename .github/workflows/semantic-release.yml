@@ -56,6 +56,34 @@ jobs:
           app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
           private-key: ${{ secrets.SEMANTIC_RELEASE_APP_PRIVATE_KEY }}
 
+      # The fallback `|| secrets.GITHUB_TOKEN` below is DELIBERATE — the mint is
+      # allowed to fail. What was unintended is that the fall was SILENT:
+      # continue-on-error keeps the step green and `||` makes the result
+      # indistinguishable from the successful case. Eight releases looked normal.
+      #
+      # The marking hangs on the POINT OF USE, not on the mint step's outcome.
+      # The two are decoupled: a third consumer added later would otherwise
+      # inherit the fallback without inheriting the marking. The condition is
+      # therefore "the token that is USED is empty" — one condition covering
+      # both a failed mint and a skipped one.
+      #
+      # always(): without it a skipped producer yields '', the marking's
+      # condition is false, and the guard goes silent exactly when something
+      # went wrong. Position alone closed that today; a reordering would open it.
+      #
+      # The token goes through env, never interpolated into the script.
+      - name: Fastslå udgivelsens identitet
+        id: identitet
+        if: always()
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "$APP_TOKEN" ]; then
+            echo "fallback=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "fallback=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v7
         with:
           # fetch-depth:0 = fuld historik til semantic-release. ref pinner til
@@ -87,17 +115,56 @@ jobs:
       # Bind the outcome to the artifact, not to an event. semantic-release
       # tags the commit it just created, so a tag pointing at HEAD is the
       # unambiguous signal that a release happened this run.
+      # always(): this step feeds the marking's condition, so it is a producer
+      # too — and a chain is only as robust as its least guarded producer. If
+      # semantic-release fails AFTER pushing the tag, skipping this step would
+      # silence the marking about a release that did happen.
       - id: released
         name: did this run cut a release?
+        if: always()
         run: |
           set -euo pipefail
-          tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+          # `|| true` on the whole pipeline would make "could not read tags"
+          # indistinguishable from "no tag" — the same translation of a broken
+          # instrument into a claim about the world that this PR exists to stop.
+          if ! tags="$(git tag --points-at HEAD)"; then
+            echo "::error title=Kunne ikke læse tags::git tag --points-at HEAD fejlede. Om der blev skåret et release er UKENDT — det er ikke det samme som at der ikke blev."
+            exit 1
+          fi
+          # grep returning 1 here is a real answer: no tag matched.
+          tag="$(printf '%s\n' "$tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
           if [ -z "$tag" ]; then
             echo "::notice::no release cut this run — skipping image build"
           else
             echo "::notice::released $tag — building images for it"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # The marking stands AFTER the release: it removes nothing, it marks. The
+      # release has already happened; what was missing is that anyone knew.
+      #
+      # Three states, because two would let the silent one pass as the good one:
+      #   ''      -> identity NOT DETERMINED (producer skipped or failed)
+      #   'true'  -> published under the fallback identity
+      #   'false' -> the only green state
+      # Gated on released.tag so we never name a consequence of a release that
+      # did not happen: no release, nothing to determine.
+      #
+      # The text names the CONSEQUENCE, not the mechanism — "the mint failed"
+      # does not tell a reader what went wrong for them.
+      - name: Udgivelsens identitet skal være afgjort og App-baseret
+        if: always() && steps.identitet.outputs.fallback != 'false' && steps.released.outputs.tag != ''
+        env:
+          FALLBACK: ${{ steps.identitet.outputs.fallback }}
+          MINT_UDFALD: ${{ steps.app-token.outcome }}
+        run: |
+          if [ -z "$FALLBACK" ]; then
+            echo "::error title=Udgivelsens identitet ikke afgjort::Trinnet der fastslår identiteten producerede ingen værdi — det kørte ikke, eller det fejlede. Vi ved derfor IKKE hvem der pushede taget. Dette er ikke det samme som at alt gik godt: værnet kunne ikke måle, og en umålt udgivelse behandles som en fejlet."
+          else
+            echo "::error title=Udgivelse under fallback-identitet::Taget blev pushet af GITHUB_TOKEN, ikke App-identiteten. To følger: (1) tag-pushet trigger ikke release.yml — hos resonans bygges imaget via workflow_call-kaldet uanset, så denne følge gælder os IKKE; (2) hele release-leddet — commits, tags, GitHub-release — bærer GITHUB_TOKENs identitet, ikke App'ens."
+          fi
+          echo "Mint-trinnets udfald: $MINT_UDFALD (forklaring, ikke betingelse — betingelsen er at det BRUGTE token var tomt eller uafgjort)."
+          exit 1
 
   # CALL the build rather than hoping the tag-push triggers it. The push trigger
   # in release.yml has never fired: the release commit carries [skip ci] and the
@@ -107,7 +174,12 @@ jobs:
   build:
     name: Build release images
     needs: release
-    if: needs.release.outputs.tag != ''
+    # always(): the identity marking fails the release job on purpose, and #38
+    # made the image build independent of the tag-push trigger. Letting the
+    # marking skip this job would re-couple them through the back door — and
+    # would inflict the very consequence the marking warns about. A real
+    # release failure still produces no tag, so it still builds nothing.
+    if: always() && needs.release.outputs.tag != ''
     uses: ./.github/workflows/release.yml
     with:
       ref: ${{ needs.release.outputs.tag }}
