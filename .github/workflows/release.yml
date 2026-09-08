@@ -166,6 +166,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # build-push-action does NOT inherit annotations from metadata-action;
+          # the input must be wired. Measured on the published image before this
+          # line existed: manifest.annotations was absent entirely, so the value
+          # was computed and thrown away. Same shape as the latest finding —
+          # enumerate the WHOLE path to the point of consumption, not just the
+          # step that produces the value.
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -335,6 +342,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # build-push-action does NOT inherit annotations from metadata-action;
+          # the input must be wired. Measured on the published image before this
+          # line existed: manifest.annotations was absent entirely, so the value
+          # was computed and thrown away. Same shape as the latest finding —
+          # enumerate the WHOLE path to the point of consumption, not just the
+          # step that produces the value.
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha,scope=studio
           cache-to: type=gha,mode=max,scope=studio
           build-args: |
