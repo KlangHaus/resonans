@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/KlangHaus/resonans/compare/v1.7.5...v1.8.0) (2026-09-08)
+
+
+### Features
+
+* **ci:** thin Jenkinsfile with a test stage ([#47](https://github.com/KlangHaus/resonans/issues/47)) ([64a7106](https://github.com/KlangHaus/resonans/commit/64a710673fd4a504ff70167899a23f48f59162c9)), closes [#34](https://github.com/KlangHaus/resonans/issues/34)
+
 ## [1.7.5](https://github.com/KlangHaus/resonans/compare/v1.7.4...v1.7.5) (2026-09-08)
 
 
