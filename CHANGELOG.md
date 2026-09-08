@@ -1,3 +1,10 @@
+## [1.7.4](https://github.com/KlangHaus/resonans/compare/v1.7.3...v1.7.4) (2026-09-08)
+
+
+### Bug Fixes
+
+* **ci:** stop metadata-action i selv at sætte `latest` (ufuldstændig kur i [#43](https://github.com/KlangHaus/resonans/issues/43)) ([#46](https://github.com/KlangHaus/resonans/issues/46)) ([2869576](https://github.com/KlangHaus/resonans/commit/286957675a95dc820af2beacb10d4452fd88f20f))
+
 ## [1.7.3](https://github.com/KlangHaus/resonans/compare/v1.7.2...v1.7.3) (2026-09-07)
 
 
