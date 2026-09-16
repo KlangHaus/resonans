@@ -18,8 +18,8 @@
 //    We ship 1.25.13 (Dockerfile FROM golang:1.25.13-alpine). Testing on the
 //    agent default (1.27.0) would test a stdlib two minors away from the one
 //    we release. The agent lacks 1.25.13, so `go` fetches exactly that
-//    toolchain (GOTOOLCHAIN=go1.25.13 — an exact pin, not `auto`; the download
-//    is verified against the Go checksum database).
+//    toolchain (GOTOOLCHAIN=go1.25.13 — an exact pin, not `auto`; the command
+//    asserts the download is verified against the Go checksum database).
 //    The first version of this file did that SILENTLY, and the library
 //    refused it: "PARALLEL mode without a `tools:` declaration" — so the check
 //    never ran on any commit. `selfInstalls` makes the fetch a declaration the
@@ -41,6 +41,16 @@ klanghausPipeline(
         directive="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
         if [ "$directive" != "$pinned" ]; then
           echo "go.mod says go ${directive:-<none>}, Jenkinsfile pins ${pinned} - change BOTH"
+          exit 1
+        fi
+        # The fetched toolchain is only as trustworthy as its checksum check.
+        # Asserted BEFORE the pin is exported: with GOTOOLCHAIN=go1.25.13 set,
+        # `go env` itself would trigger the download it is meant to guard.
+        # GONOSUMCHECK is read from the environment - `go env` does not report it.
+        sumdb="$(GOTOOLCHAIN=local go env GOSUMDB)"
+        bypass="$(GOTOOLCHAIN=local go env GONOSUMDB GOINSECURE | tr -d '\\n')${GONOSUMCHECK:-}"
+        if [ "$sumdb" != "sum.golang.org" ] || [ -n "$bypass" ]; then
+          echo "checksum verification is weakened: GOSUMDB=${sumdb} bypass=${bypass}"
           exit 1
         fi
         export GOTOOLCHAIN="go${pinned}"
