@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/KlangHaus/resonans/compare/v1.8.0...v1.8.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **deps:** bump grpc to 1.83.2 and pin govulncheck to v1.7.0 ([#49](https://github.com/KlangHaus/resonans/issues/49)) ([67052dd](https://github.com/KlangHaus/resonans/commit/67052ddc3973db544ffc267126a7b4a05eff1b2d)), closes [#42](https://github.com/KlangHaus/resonans/issues/42)
+
 # [1.8.0](https://github.com/KlangHaus/resonans/compare/v1.7.5...v1.8.0) (2026-09-08)
 
 
