@@ -53,28 +53,32 @@ jobs:
         with:
           args: ./...
 
-      # `go-version-file: go.mod` er IKKE bindende for denne action: dens
-      # defaults (go-version-input: stable + check-latest: true) overskriver
-      # den, så gaten scannede `stable` i stedet for den toolchain imaget
-      # bygges med. Læs direktivet og giv det eksplicit videre.
+      # govulncheck scans the stdlib of the Go that RUNS it, so it must run on
+      # go.mod's directive — the toolchain the image is built with.
       #
-      # Fail-closed: en tom version ville falde tilbage til `stable` og
-      # genindføre præcis den blinde vinkel, så vi afbryder hellere.
-      - id: goversion
-        name: read go directive from go.mod
+      # 🔴 NOT golang/govulncheck-action: it has no version input and runs
+      # `go install ...@latest`. v1.8.0 requires go >= 1.26, and the check went
+      # red on every PR without a commit (same class as gofumpt@latest in #44).
+      # Its setup-go defaults (stable + check-latest) also overrode
+      # go-version-file, so it had scanned `stable` rather than what we ship.
+      #
+      # Fail-closed: an empty directive or a mismatching toolchain aborts,
+      # instead of silently scanning some other stdlib.
+      - name: govulncheck
+        env:
+          GOTOOLCHAIN: local
         run: |
           set -euo pipefail
           v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
           test -n "$v" || { echo "could not parse the go directive from go.mod"; exit 1; }
-          echo "scanning stdlib for go${v}"
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
-      - name: govulncheck
-        uses: golang/govulncheck-action@v1
-        with:
-          go-version-input: ${{ steps.goversion.outputs.version }}
-          check-latest: false
-          repo-checkout: false
+          test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
+          # PINNED. v1.7.0 is the newest release that builds on go 1.25.
+          # Bump together with the go directive and golangci-lint.
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          ver_out="$(govulncheck -version)"
+          echo "$ver_out"
+          grep -qE '^Scanner: govulncheck@v1\.7\.0$' <<<"$ver_out" || { echo "govulncheck is NOT v1.7.0"; exit 1; }
+          govulncheck ./...
 
       - name: Test (race + coverage)
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
