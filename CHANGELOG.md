@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/KlangHaus/resonans/compare/v1.8.1...v1.8.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* **ci:** declare and verify the go toolchain Jenkins fetches ([#48](https://github.com/KlangHaus/resonans/issues/48)) ([d5956d3](https://github.com/KlangHaus/resonans/commit/d5956d31ebeb8da1940bbd8c5e84574990d37415))
+
 ## [1.8.1](https://github.com/KlangHaus/resonans/compare/v1.8.0...v1.8.1) (2026-09-16)
 
 
