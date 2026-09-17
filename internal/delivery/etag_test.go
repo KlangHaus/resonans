@@ -16,7 +16,8 @@ func TestETagChangesWithUpdatedAtAtSameVersion(t *testing.T) {
 	if etagFor("da", before) == etagFor("da", after) {
 		t.Fatalf("ETag unchanged across a write at the same version: %s", etagFor("da", before))
 	}
-	if etagFor("da", before) != etagFor("da", before) {
+	same := content.Document{Version: 3, UpdatedAt: t0}
+	if etagFor("da", before) != etagFor("da", same) {
 		t.Fatal("ETag not stable for an unchanged document")
 	}
 	if etagFor("da", before) == etagFor("en", before) {
