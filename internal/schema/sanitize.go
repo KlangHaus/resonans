@@ -58,7 +58,9 @@ func SanitizeDocument(r *Registry, docType string, body json.RawMessage) (json.R
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return nil, fmt.Errorf("%w: body is not a JSON object: %w", ErrInvalid, err)
 	}
-	sanitizeFields(r, dt.Fields, obj, false, false)
+	if err := sanitizeFields(r, dt.Fields, obj, false, false, docType); err != nil {
+		return nil, err
+	}
 	out, err := json.Marshal(obj)
 	if err != nil {
 		return nil, fmt.Errorf("schema: marshal sanitized body: %w", err)
@@ -68,40 +70,51 @@ func SanitizeDocument(r *Registry, docType string, body json.RawMessage) (json.R
 
 // inBlock: the fields belong to a block (or something nested in one).
 // htmlFormat: that block is a rich_text block declaring format "html".
-func sanitizeFields(r *Registry, fields []Field, obj map[string]any, inBlock, htmlFormat bool) {
+func sanitizeFields(r *Registry, fields []Field, obj map[string]any, inBlock, htmlFormat bool, path string) error {
 	for _, f := range fields {
 		v, ok := obj[f.Name]
 		if !ok || v == nil {
 			continue
 		}
-		obj[f.Name] = sanitizeValue(r, f, v, inBlock, htmlFormat)
+		clean, err := sanitizeValue(r, f, v, inBlock, htmlFormat, path+"."+f.Name)
+		if err != nil {
+			return err
+		}
+		obj[f.Name] = clean
 	}
+	return nil
 }
 
-func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool) any {
+func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool, path string) (any, error) {
 	switch f.Type {
 	case TypeRichText:
 		isHTML := !inBlock || htmlFormat
 		if f.I18n {
 			if m, ok := v.(map[string]any); ok {
 				for loc, lv := range m {
-					m[loc] = sanitizeRich(lv, isHTML)
+					clean, err := sanitizeRich(lv, isHTML, path+"."+loc)
+					if err != nil {
+						return nil, err
+					}
+					m[loc] = clean
 				}
-				return m
+				return m, nil
 			}
 		}
-		return sanitizeRich(v, isHTML)
+		return sanitizeRich(v, isHTML, path)
 	case TypeArray:
 		if arr, ok := v.([]any); ok {
-			for _, el := range arr {
+			for i, el := range arr {
 				if o, ok := el.(map[string]any); ok {
-					sanitizeFields(r, f.Of, o, inBlock, htmlFormat)
+					if err := sanitizeFields(r, f.Of, o, inBlock, htmlFormat, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
 	case TypeBlocks:
 		if arr, ok := v.([]any); ok {
-			for _, el := range arr {
+			for i, el := range arr {
 				blk, ok := el.(map[string]any)
 				if !ok {
 					continue
@@ -112,26 +125,39 @@ func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool) any {
 					continue
 				}
 				format, _ := blk["format"].(string)
-				sanitizeFields(r, def.Fields, blk, true, bt == "rich_text" && format == "html")
+				if err := sanitizeFields(r, def.Fields, blk, true, bt == "rich_text" && format == "html", fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
-	return v
+	return v, nil
 }
 
-// sanitizeRich handles both rich-text forms. An HTML string is sanitized only
-// when isHTML; structured data never has its text touched, only unsafe hrefs
-// removed.
-func sanitizeRich(v any, isHTML bool) any {
-	switch t := v.(type) {
-	case string:
-		if isHTML {
-			return SanitizeRichText(t)
+// sanitizeRich handles both rich-text forms.
+//
+// 🔴 In HTML position ONLY A STRING is accepted. A consumer that renders HTML
+// does `String(value)` — an array ["<img onerror>", "<p>ok</p>"] becomes markup
+// that no string check ever looked at ([sikkerhed], bypass measured on the
+// previous version). So any other JSON type there is rejected (400), not
+// guessed at. Outside HTML position structured data keeps its text; only an
+// unsafe href is removed.
+func sanitizeRich(v any, isHTML bool, path string) (any, error) {
+	if isHTML {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s is HTML rich text and must be a string, got %s", ErrInvalid, path, jsonType(v))
 		}
-		return t
+		return SanitizeRichText(s), nil
+	}
+	return stripUnsafeHrefs(v), nil
+}
+
+func stripUnsafeHrefs(v any) any {
+	switch t := v.(type) {
 	case []any:
 		for i, el := range t {
-			t[i] = sanitizeRich(el, false)
+			t[i] = stripUnsafeHrefs(el)
 		}
 	case map[string]any:
 		for k, el := range t {
@@ -141,8 +167,25 @@ func sanitizeRich(v any, isHTML bool) any {
 				}
 				continue
 			}
-			t[k] = sanitizeRich(el, false)
+			t[k] = stripUnsafeHrefs(el)
 		}
 	}
 	return v
+}
+
+func jsonType(v any) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	case float64:
+		return "number"
+	case bool:
+		return "boolean"
+	default:
+		return fmt.Sprintf("%T", v)
+	}
 }

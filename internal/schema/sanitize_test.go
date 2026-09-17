@@ -2,8 +2,10 @@ package schema
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestSanitizeRichTextCells(t *testing.T) {
@@ -106,14 +108,14 @@ func TestSanitizeDocumentOnlyDeclaredHTML(t *testing.T) {
 
 // Structured rich text: unsafe hrefs removed, text untouched.
 func TestSanitizeStructuredRichTextHref(t *testing.T) {
-	v := sanitizeRich([]any{map[string]any{
+	v, _ := sanitizeRich([]any{map[string]any{
 		"markDefs": []any{
 			map[string]any{"_type": "link", "href": "javascript:alert(1)"},
 			map[string]any{"_type": "link", "href": " javascript:alert(1)"},
 			map[string]any{"_type": "link", "href": "https://ok.example"},
 		},
 		"children": []any{map[string]any{"text": "Tom & Jerry <3 'x'"}},
-	}}, false)
+	}}, false, "t")
 	b, _ := json.Marshal(v)
 	s := string(b)
 	if strings.Contains(s, "javascript:") {
@@ -124,5 +126,66 @@ func TestSanitizeStructuredRichTextHref(t *testing.T) {
 	}
 	if !strings.Contains(s, `Tom \u0026 Jerry \u003c3 'x'`) {
 		t.Errorf("structured text changed: %s", s)
+	}
+}
+
+// In HTML position every JSON type other than string is rejected, wherever the
+// position is: i18n map, plain value, nested in columns, or rich text outside
+// blocks. Outside HTML position the same values are accepted unchanged.
+func TestHTMLPositionRejectsNonStrings(t *testing.T) {
+	blocksReg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	topReg, err := Load(fstest.MapFS{
+		"types/article.yaml": {Data: []byte("type: article\nfields:\n  - { name: intro, type: richtext, i18n: true }\n  - { name: note, type: richtext }\n")},
+		"blocks.yaml":        {Data: []byte("blocks: []\n")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonStrings := map[string]any{
+		"array":   []any{"<img src=x onerror=alert(1)>", "<p>ok</p>"},
+		"object":  map[string]any{"html": "<img src=x onerror=alert(1)>"},
+		"number":  float64(1),
+		"boolean": true,
+		"null":    nil,
+	}
+	for name, v := range nonStrings {
+		cases := map[string]struct {
+			reg     *Registry
+			docType string
+			body    map[string]any
+		}{
+			"i18n html block": {blocksReg, "page", map[string]any{"body": []any{
+				map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": v}},
+			}}},
+			"nested in columns": {blocksReg, "page", map[string]any{"body": []any{
+				map[string]any{"_type": "columns", "columns": []any{map[string]any{"content": []any{
+					map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": v}},
+				}}}},
+			}}},
+			"top-level i18n richtext": {topReg, "article", map[string]any{"intro": map[string]any{"da": v}}},
+		}
+		if name != "null" { // a field-level null is an absent value, not HTML
+			cases["top-level plain richtext"] = struct {
+				reg     *Registry
+				docType string
+				body    map[string]any
+			}{topReg, "article", map[string]any{"note": v}}
+		}
+		for where, c := range cases {
+			raw, _ := json.Marshal(c.body)
+			if _, err := SanitizeDocument(c.reg, c.docType, raw); !errors.Is(err, ErrInvalid) {
+				t.Errorf("%s / %s: err = %v, want ErrInvalid", name, where, err)
+			}
+		}
+		// Same value outside HTML position (portable_text) is accepted.
+		raw, _ := json.Marshal(map[string]any{"body": []any{
+			map[string]any{"_type": "rich_text", "format": "portable_text", "value": map[string]any{"da": v}},
+		}})
+		if _, err := SanitizeDocument(blocksReg, "page", raw); err != nil {
+			t.Errorf("%s / portable_text: err = %v, want accepted", name, err)
+		}
 	}
 }

@@ -354,3 +354,30 @@ func TestPlainTextUnchangedOnSave(t *testing.T) {
 		}
 	}
 }
+
+// [sikkerhed]'s bypass: an ARRAY in HTML position was stored unsanitized and a
+// consumer's String(value) turned it into markup. Now 400, and nothing stored.
+func TestHTMLRichTextArrayRejectedOnSave(t *testing.T) {
+	h := testRouter(t)
+	arr := []any{"<img src=x onerror=alert(1)>", "<p>ok</p>"}
+	bodies := map[string]map[string]any{
+		"i18n": {"body": []any{map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": arr}}}},
+		"columns": {"body": []any{map[string]any{"_type": "columns", "columns": []any{map[string]any{"content": []any{
+			map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": arr}},
+		}}}}}},
+	}
+	for name, body := range bodies {
+		rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{"type": "page", "slug": "a-" + name, "title": "A", "body": body})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: create = %d, want 400 (%s)", name, rec.Code, rec.Body)
+		}
+	}
+	list := do(t, h, http.MethodGet, "/api/v1/documents?type=page", tenantA, nil)
+	var docs struct {
+		Documents []any `json:"documents"`
+	}
+	_ = json.Unmarshal(list.Body.Bytes(), &docs)
+	if len(docs.Documents) != 0 {
+		t.Errorf("rejected bodies were stored: %d", len(docs.Documents))
+	}
+}
