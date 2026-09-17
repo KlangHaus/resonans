@@ -13,6 +13,7 @@ const props = defineProps<{
   modelValue: unknown
   allow?: string[]
   blockDefs: BlockType[]
+  path?: string // body path of this blocks field, e.g. "body"
 }>()
 const emit = defineEmits<{ 'update:modelValue': [Block[]] }>()
 
@@ -67,7 +68,12 @@ function fieldsOf(block: Block): Field[] {
   <div class="rz-be">
     <div v-if="!blocks.length" class="rz-be__empty">Ingen blokke endnu.</div>
 
-    <div v-for="(block, i) in blocks" :key="i" class="rz-be__block">
+    <div
+      v-for="(block, i) in blocks"
+      :key="i"
+      class="rz-be__block"
+      :data-field-path="path ? `${path}.${i}` : undefined"
+    >
       <div class="rz-be__head">
         <span class="rz-be__type">{{ block._type }}</span>
         <span v-if="!defFor(block._type)" class="rz-be__unknown">ukendt blok — ikke i schemaet</span>
@@ -83,6 +89,7 @@ function fieldsOf(block: Block): Field[] {
           :key="f.name"
           :field="f"
           :block-defs="blockDefs"
+          :path="path ? `${path}.${i}.${f.name}` : undefined"
           :model-value="block[f.name]"
           @update:model-value="(v) => setField(i, f.name, v)"
         />

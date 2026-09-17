@@ -53,6 +53,14 @@ export interface Document {
   updatedAt: string
 }
 
+export interface PreviewSettings {
+  previewUrl: string
+  // The ONLY origin the Studio exchanges postMessages with ("" = not usable).
+  previewOrigin: string
+  // URL stored AND preview tokens can be signed on the server.
+  previewReady: boolean
+}
+
 export interface CreateInput {
   type: string
   slug: string
@@ -117,6 +125,26 @@ export function useResonans() {
       fd.append('file', file)
       return req('/api/v1/assets', { method: 'POST', body: fd })
     },
+    getPreviewSettings: () => req<PreviewSettings>('/api/v1/settings/preview'),
+    putPreviewSettings: (previewUrl: string) =>
+      req<PreviewSettings>('/api/v1/settings/preview', {
+        method: 'PUT',
+        body: { previewUrl },
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    previewToken: (type: string, slug: string) =>
+      req<{ token: string; expiresInSeconds: number }>('/api/v1/preview-token', {
+        method: 'POST',
+        body: { type, slug },
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    // Delivery envelope of an UNSAVED body — what the preview iframe renders.
+    previewEnvelope: (input: { type: string; slug: string; title: string; locale?: string; body: Record<string, unknown> }) =>
+      req<Record<string, unknown>>('/api/v1/preview/envelope', {
+        method: 'POST',
+        body: input,
+        headers: { 'Content-Type': 'application/json' },
+      }),
     getSettings: () =>
       req<{ enabledTypes: string[]; allTypes: string[] }>('/api/v1/settings'),
     putSettings: (enabledTypes: string[]) =>

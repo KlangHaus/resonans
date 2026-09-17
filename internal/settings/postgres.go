@@ -83,3 +83,34 @@ func (s *PostgresStore) SetEnabledTypes(ctx context.Context, tenantID uuid.UUID,
 		return nil
 	})
 }
+
+func (s *PostgresStore) PreviewURL(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	var out string
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx,
+			`select preview_url from tenant_settings where tenant_id = $1`, tenantID,
+		).Scan(&out)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("settings: read preview url: %w", err)
+		}
+		return nil
+	})
+	return out, err
+}
+
+func (s *PostgresStore) SetPreviewURL(ctx context.Context, tenantID uuid.UUID, template string) error {
+	return s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			`insert into tenant_settings (tenant_id, preview_url, updated_at)
+			 values ($1, $2, now())
+			 on conflict (tenant_id) do update set preview_url = excluded.preview_url, updated_at = now()`,
+			tenantID, template)
+		if err != nil {
+			return fmt.Errorf("settings: upsert preview url: %w", err)
+		}
+		return nil
+	})
+}

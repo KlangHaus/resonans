@@ -7,7 +7,10 @@ import type { BlockType, Field } from '~/composables/useResonans'
 // the rich-text editor; `blocks` uses the visual BlockEditor (Fase 4). `array`
 // still falls back to a validated JSON editor (next increment). blockDefs is the
 // schema block-registry, threaded down so BlockEditor can render nested blocks.
-const props = defineProps<{ field: Field; modelValue: unknown; blockDefs?: BlockType[] }>()
+// `path` is the field's location in the document body ("seoTitle",
+// "body.2.heading"). Visual editing uses it to jump from a click in the preview
+// to this field; it is optional so the field still works outside the editor.
+const props = defineProps<{ field: Field; modelValue: unknown; blockDefs?: BlockType[]; path?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [unknown] }>()
 
 // Active locales — v1 hardcoded; later resolved from the tenant config.
@@ -56,7 +59,7 @@ const scalar = computed(() => String(props.modelValue ?? ''))
 </script>
 
 <template>
-  <div class="rz-field">
+  <div class="rz-field" :data-field-path="path">
     <label class="rz-field__label">
       {{ field.name }}
       <span v-if="field.required" style="color: var(--rz-danger)">*</span>
@@ -141,6 +144,7 @@ const scalar = computed(() => String(props.modelValue ?? ''))
       :model-value="modelValue"
       :allow="field.allow"
       :block-defs="blockDefs || []"
+      :path="path"
       @update:model-value="(v) => set(v)"
     />
 

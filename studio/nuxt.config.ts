@@ -7,6 +7,16 @@ export default defineNuxtConfig({
   ssr: false, // admin editor = SPA; no SSR needed
   devtools: { enabled: false },
   css: ['~/assets/theme.css'],
+  // The Studio frames tenant frontends (visual editing), but must never be
+  // framed itself: a framed editor could be clickjacked into saving or publishing.
+  routeRules: {
+    '/**': {
+      headers: {
+        'Content-Security-Policy': "frame-ancestors 'none'",
+        'X-Frame-Options': 'DENY',
+      },
+    },
+  },
   // Local dev: proxy /api → the Resonans backend so the SPA is same-origin (no
   // CORS). Override the target via RESONANS_DEV_API. Prod serves Studio behind
   // the same origin as the API, so this proxy is dev-only.
