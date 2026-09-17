@@ -284,7 +284,7 @@ func TestRichTextSanitizedOnSave(t *testing.T) {
 	evil := `<p>ok</p><img src=x onerror="alert(1)"><a href="javascript:alert(1)">l</a>`
 	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
 		"type": "page", "slug": "x", "title": "X",
-		"body": map[string]any{"body": []any{map[string]any{"_type": "rich_text", "value": map[string]any{"da": evil}}}},
+		"body": map[string]any{"body": []any{map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": evil}}}},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", rec.Code, rec.Body)
@@ -314,11 +314,43 @@ func TestRichTextSanitizedOnSave(t *testing.T) {
 	check("create", got.Body.String())
 
 	rec = do(t, h, http.MethodPut, "/api/v1/documents/"+d.ID, tenantA, map[string]any{
-		"body": map[string]any{"body": []any{map[string]any{"_type": "rich_text", "value": map[string]any{"da": evil}}}},
+		"body": map[string]any{"body": []any{map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": evil}}}},
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update = %d %s", rec.Code, rec.Body)
 	}
 	got = do(t, h, http.MethodGet, "/api/v1/documents/"+d.ID, tenantA, nil)
 	check("update", got.Body.String())
+}
+
+// Plain text survives a save byte-identical ([sikkerhed]'s correctness cell):
+// no &#39; / &amp; / &lt; appears in a callout or in non-html rich text.
+func TestPlainTextUnchangedOnSave(t *testing.T) {
+	h := testRouter(t)
+	const plain = `Husk: 'organisk' betyder ikke "levende" & 2 < 3`
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "page", "slug": "p", "title": "P",
+		"body": map[string]any{"body": []any{
+			map[string]any{"_type": "callout", "value": map[string]any{"da": plain}},
+			map[string]any{"_type": "rich_text", "format": "portable_text", "value": map[string]any{"da": plain}},
+		}},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", rec.Code, rec.Body)
+	}
+	var doc struct {
+		Body struct {
+			Body []struct {
+				Value map[string]string `json:"value"`
+			} `json:"body"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for i, b := range doc.Body.Body {
+		if b.Value["da"] != plain {
+			t.Errorf("block %d stored %q, want byte-identical %q", i, b.Value["da"], plain)
+		}
+	}
 }
