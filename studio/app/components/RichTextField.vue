@@ -11,24 +11,31 @@
 const props = defineProps<{ modelValue: string; placeholder?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
 
+import { sanitizeRichText } from '~/utils/sanitize'
+
 const el = ref<HTMLElement | null>(null)
+
+// 🔴 Every innerHTML write goes through the sanitizer: the stored body is
+// written by other editors, and unsanitized it ran onerror/onbegin handlers in
+// the Studio's own origin. Emits are sanitized too, so what is saved is clean.
 
 // Sync prop → DOM only when it diverges AND the field isn't being edited, so we
 // never clobber the caret mid-type.
 watch(
   () => props.modelValue,
   (v) => {
-    if (el.value && document.activeElement !== el.value && el.value.innerHTML !== (v || '')) {
-      el.value.innerHTML = v || ''
+    const clean = sanitizeRichText(v || '')
+    if (el.value && document.activeElement !== el.value && el.value.innerHTML !== clean) {
+      el.value.innerHTML = clean
     }
   },
 )
 onMounted(() => {
-  if (el.value) el.value.innerHTML = props.modelValue || ''
+  if (el.value) el.value.innerHTML = sanitizeRichText(props.modelValue || '')
 })
 
 function emitHtml() {
-  if (el.value) emit('update:modelValue', el.value.innerHTML)
+  if (el.value) emit('update:modelValue', sanitizeRichText(el.value.innerHTML))
 }
 
 // Constrained command set — mirrors the blog renderer's allow-list so authors

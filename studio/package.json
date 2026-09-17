@@ -18,6 +18,7 @@
     "vue-tsc": "^2.1.10"
   },
   "dependencies": {
-    "@sentry/vue": "^10.68.0"
+    "@sentry/vue": "^10.68.0",
+    "dompurify": "3.4.15"
   }
 }

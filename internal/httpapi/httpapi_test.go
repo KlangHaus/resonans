@@ -276,3 +276,108 @@ func TestContentProfile(t *testing.T) {
 		t.Fatalf("re-enabled schema: %d types, want 7", len(sch.DocTypes))
 	}
 }
+
+// Rich text is sanitized before it is stored, on create AND update, so a body
+// written straight to the API cannot carry script to an editor's Studio.
+func TestRichTextSanitizedOnSave(t *testing.T) {
+	h := testRouter(t)
+	evil := `<p>ok</p><img src=x onerror="alert(1)"><a href="javascript:alert(1)">l</a>`
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "page", "slug": "x", "title": "X",
+		"body": map[string]any{"body": []any{map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": evil}}}},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", rec.Code, rec.Body)
+	}
+	var d struct {
+		ID   string          `json:"id"`
+		Body json.RawMessage `json:"body"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &d)
+	check := func(stage string, raw string) {
+		t.Helper()
+		var doc struct {
+			Body struct {
+				Body []struct {
+					Value map[string]string `json:"value"`
+				} `json:"body"`
+			} `json:"body"`
+		}
+		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+			t.Fatalf("%s: decode: %v", stage, err)
+		}
+		if got := doc.Body.Body[0].Value["da"]; got != "<p>ok</p>l" {
+			t.Errorf("%s: stored rich text = %q, want %q", stage, got, "<p>ok</p>l")
+		}
+	}
+	got := do(t, h, http.MethodGet, "/api/v1/documents/"+d.ID, tenantA, nil)
+	check("create", got.Body.String())
+
+	rec = do(t, h, http.MethodPut, "/api/v1/documents/"+d.ID, tenantA, map[string]any{
+		"body": map[string]any{"body": []any{map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": evil}}}},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update = %d %s", rec.Code, rec.Body)
+	}
+	got = do(t, h, http.MethodGet, "/api/v1/documents/"+d.ID, tenantA, nil)
+	check("update", got.Body.String())
+}
+
+// Plain text survives a save byte-identical ([sikkerhed]'s correctness cell):
+// no &#39; / &amp; / &lt; appears in a callout or in non-html rich text.
+func TestPlainTextUnchangedOnSave(t *testing.T) {
+	h := testRouter(t)
+	const plain = `Husk: 'organisk' betyder ikke "levende" & 2 < 3`
+	rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{
+		"type": "page", "slug": "p", "title": "P",
+		"body": map[string]any{"body": []any{
+			map[string]any{"_type": "callout", "value": map[string]any{"da": plain}},
+			map[string]any{"_type": "rich_text", "format": "portable_text", "value": map[string]any{"da": plain}},
+		}},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", rec.Code, rec.Body)
+	}
+	var doc struct {
+		Body struct {
+			Body []struct {
+				Value map[string]string `json:"value"`
+			} `json:"body"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for i, b := range doc.Body.Body {
+		if b.Value["da"] != plain {
+			t.Errorf("block %d stored %q, want byte-identical %q", i, b.Value["da"], plain)
+		}
+	}
+}
+
+// [sikkerhed]'s bypass: an ARRAY in HTML position was stored unsanitized and a
+// consumer's String(value) turned it into markup. Now 400, and nothing stored.
+func TestHTMLRichTextArrayRejectedOnSave(t *testing.T) {
+	h := testRouter(t)
+	arr := []any{"<img src=x onerror=alert(1)>", "<p>ok</p>"}
+	bodies := map[string]map[string]any{
+		"i18n": {"body": []any{map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": arr}}}},
+		"columns": {"body": []any{map[string]any{"_type": "columns", "columns": []any{map[string]any{"content": []any{
+			map[string]any{"_type": "rich_text", "format": "html", "value": map[string]any{"da": arr}},
+		}}}}}},
+	}
+	for name, body := range bodies {
+		rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{"type": "page", "slug": "a-" + name, "title": "A", "body": body})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: create = %d, want 400 (%s)", name, rec.Code, rec.Body)
+		}
+	}
+	list := do(t, h, http.MethodGet, "/api/v1/documents?type=page", tenantA, nil)
+	var docs struct {
+		Documents []any `json:"documents"`
+	}
+	_ = json.Unmarshal(list.Body.Bytes(), &docs)
+	if len(docs.Documents) != 0 {
+		t.Errorf("rejected bodies were stored: %d", len(docs.Documents))
+	}
+}
