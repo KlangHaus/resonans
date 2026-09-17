@@ -25,9 +25,16 @@ func NewService(store Store, backend StorageBackend, url *URLBuilder) *Service {
 	return &Service{store: store, backend: backend, url: url}
 }
 
-// Upload stores the bytes and records the asset for the tenant. For images it
-// detects width/height from the header.
-func (s *Service) Upload(ctx context.Context, tenantID uuid.UUID, filename, mime string, data []byte) (Asset, error) {
+// Upload stores the bytes and records the asset for the tenant. The stored MIME
+// type and the storage key's extension come from the CONTENT (DetectType), not
+// from the client: the claimed MIME type (the unnamed parameter) is ignored, so a
+// PNG-looking name on an HTML file, or an HTML name on PNG bytes, cannot make a
+// CDN serve markup. For images it detects width/height from the header.
+func (s *Service) Upload(ctx context.Context, tenantID uuid.UUID, filename, _ string, data []byte) (Asset, error) {
+	mime, ext, err := DetectType(data)
+	if err != nil {
+		return Asset{}, err
+	}
 	a := Asset{
 		Kind:      KindFile,
 		Filename:  filename,
@@ -41,7 +48,7 @@ func (s *Service) Upload(ctx context.Context, tenantID uuid.UUID, filename, mime
 			a.Width, a.Height = &w, &h
 		}
 	}
-	a.StorageKey = storageKey(tenantID, filename)
+	a.StorageKey = storageKey(tenantID, filename, ext)
 	if err := s.backend.Put(ctx, a.StorageKey, mime, data); err != nil {
 		return Asset{}, err
 	}
@@ -61,9 +68,20 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]Asset, error)
 // URL builds the CDN URL for an asset with an optional transform.
 func (s *Service) URL(a Asset, t Transform) string { return s.url.AssetURL(a, t) }
 
-// storageKey produces a unique, tenant-prefixed object key.
-func storageKey(tenantID uuid.UUID, filename string) string {
-	return tenantID.String() + "/" + uuid.NewString() + "-" + sanitizeFilename(filename)
+// storageKey produces a unique, tenant-prefixed object key whose extension is
+// the one for the DETECTED type. CDNs commonly pick Content-Type from the key's
+// extension, so the client's extension must not survive: "x.html" holding PNG
+// bytes is stored as "…-x_html.png".
+func storageKey(tenantID uuid.UUID, filename, ext string) string {
+	base := sanitizeFilename(filename)
+	if i := strings.LastIndexByte(base, '.'); i > 0 {
+		base = base[:i] + "_" + base[i+1:]
+	}
+	base = strings.ReplaceAll(base, ".", "_")
+	if len(base)+len(ext) > 120 {
+		base = base[:120-len(ext)]
+	}
+	return tenantID.String() + "/" + uuid.NewString() + "-" + base + ext
 }
 
 // sanitizeFilename keeps a safe subset of characters for an object key segment.

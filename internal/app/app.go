@@ -74,9 +74,25 @@ func Run(ctx context.Context) error {
 	logger.Info("observability_initialized", "otel", cfg.OTelEnabled || observability.Enabled())
 
 	// --- JWT verifier (Beslutning D + K) ---
+	// Dev auth is a positive opt-in (RESONANS_DEV_AUTH=1), never the absence of
+	// NODE_ENV=production: the check runs before anything is served.
+	editorDevAuth, err := cfg.EditorDevAuth()
+	if err != nil {
+		return err
+	}
+	deliveryDevAuth, err := cfg.DeliveryDevAuth()
+	if err != nil {
+		return err
+	}
 	var verifier auth.Verifier
-	switch {
-	case cfg.AuthEnabled():
+	if editorDevAuth {
+		// Named event, so an environment can be MEASURED for dev auth in its logs.
+		logger.Warn("dev_auth_active", "surface", "editor", "header", "X-Dev-Tenant",
+			"detail", "RESONANS_DEV_AUTH=1 and no JWT config — JWT auth DISABLED (dev/test only)")
+	} else {
+		if cfg.DevAuth {
+			logger.Warn("RESONANS_DEV_AUTH=1 ignored for the editor API: JWT is configured, X-Dev-Tenant is not read")
+		}
 		verifier, err = auth.NewVerifier(ctx, auth.VerifierConfig{
 			Issuer:  cfg.JWTIssuer,
 			JWKSURL: cfg.JWKSURL,
@@ -85,14 +101,6 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("jwt verifier: %w", err)
 		}
 		logger.Info("jwt_verifier_active", "issuer", cfg.JWTIssuer)
-	case cfg.IsProduction():
-		// Serving content without verifying the tenant claim would break tenant
-		// isolation (Beslutning K) — refuse to boot with open endpoints.
-		return errors.New(
-			"RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set in production — refusing to start with unauthenticated endpoints",
-		)
-	default:
-		logger.Warn("RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set — JWT auth DISABLED; tenant via X-Dev-Tenant header (dev/test only)")
 	}
 
 	// --- Content store (Beslutning K — own content-DB, multi-tenant + RLS) ---
@@ -136,15 +144,10 @@ func Run(ctx context.Context) error {
 	}
 
 	// --- Delivery service-auth (Beslutning: trusted service-to-service) ---
-	if cfg.DeliveryToken == "" && cfg.IsProduction() {
-		// Without a service token the /delivery endpoints would trust an
-		// unauthenticated X-Scope-OrgID header — a cross-tenant read hole.
-		return errors.New(
-			"RESONANS_DELIVERY_TOKEN not set in production — refusing to start with an unauthenticated content-delivery surface",
-		)
-	}
-	if cfg.DeliveryToken == "" {
-		logger.Warn("RESONANS_DELIVERY_TOKEN not set — /delivery trusts X-Scope-OrgID directly (dev/test only)")
+	// Decided above with the editor gate (DeliveryDevAuth), before any I/O.
+	if deliveryDevAuth {
+		logger.Warn("dev_auth_active", "surface", "delivery", "header", "X-Scope-OrgID",
+			"detail", "RESONANS_DEV_AUTH=1 and no RESONANS_DELIVERY_TOKEN — /delivery trusts the header (dev/test only)")
 	}
 
 	// --- Schema-registry (kode-defineret content-model, Fase 1) ---

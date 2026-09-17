@@ -312,11 +312,16 @@ func (h *Handlers) uploadAsset(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errBody("could not read upload"))
 		return
 	}
-	mime := header.Header.Get("Content-Type")
-	if mime == "" {
-		mime = "application/octet-stream"
+	// The client's Content-Type is passed along but not trusted: the media
+	// service decides the type from the bytes (KH-1011).
+	a, err := h.media.Upload(r.Context(), tid, header.Filename, header.Header.Get("Content-Type"), data)
+	if errors.Is(err, media.ErrUnsupportedType) {
+		writeJSON(w, http.StatusUnsupportedMediaType, map[string]any{
+			"error":   "unsupported file type (judged from the file content, not its name)",
+			"allowed": media.AllowedTypes(),
+		})
+		return
 	}
-	a, err := h.media.Upload(r.Context(), tid, header.Filename, mime, data)
 	if err != nil {
 		if h.log != nil {
 			h.log.Error("asset_upload_error", "err", err)
