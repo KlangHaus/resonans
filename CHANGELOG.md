@@ -1,3 +1,10 @@
+## [1.9.2](https://github.com/KlangHaus/resonans/compare/v1.9.1...v1.9.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* stored XSS in Studio rich text — sanitize at render and at save ([#52](https://github.com/KlangHaus/resonans/issues/52)) ([0c2a034](https://github.com/KlangHaus/resonans/commit/0c2a034de6a9b928379d48520831097956108e7e)), closes [#39](https://github.com/KlangHaus/resonans/issues/39) [#39](https://github.com/KlangHaus/resonans/issues/39)
+
 ## [1.9.1](https://github.com/KlangHaus/resonans/compare/v1.9.0...v1.9.1) (2026-09-17)
 
 
