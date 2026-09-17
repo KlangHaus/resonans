@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/KlangHaus/resonans/internal/auth"
+	"github.com/KlangHaus/resonans/internal/bridge"
 	"github.com/KlangHaus/resonans/internal/config"
 	"github.com/KlangHaus/resonans/internal/content"
 	"github.com/KlangHaus/resonans/internal/delivery"
@@ -201,6 +202,7 @@ func Run(ctx context.Context) error {
 		Verifier:      verifier,
 		Settings:      settingsStore,
 		PreviewSecret: cfg.PreviewSecret,
+		Assets:        &mediaAssetResolver{media: mediaSvc},
 		Logger:        logger,
 	})
 
@@ -217,6 +219,8 @@ func Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiRouter)
 	mux.Handle("/delivery/", deliveryRouter)
+	// Visual-editing bridge script (public, no tenant data).
+	mux.Handle(bridge.Path, bridge.Handler())
 
 	// HTTP probes used by the Docker HEALTHCHECK + Caddy (unauthenticated).
 	// Build identity is marshaled once at boot: it never changes, and a probe

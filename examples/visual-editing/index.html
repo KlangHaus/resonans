@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preview</title>
+  <style>
+    body { margin: 0; font: 16px/1.6 system-ui, sans-serif; color: #1a1a2e; background: #fbfaf7; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 80px; }
+    h1 { font-size: 40px; line-height: 1.15; margin: 0 0 8px; }
+    .seo { color: #6b6b78; font-size: 14px; margin: 0 0 32px; }
+    .block { margin: 0 0 28px; }
+    .hero { padding: 40px 28px; border-radius: 14px; background: #1a1a2e; color: #fff; }
+    .hero h2 { font-size: 30px; margin: 0 0 8px; }
+    .callout, .quote { padding: 16px 20px; border-left: 4px solid #e94560; background: #fff; border-radius: 8px; }
+    .cta a { display: inline-block; padding: 10px 18px; border-radius: 8px; background: #e94560; color: #fff; text-decoration: none; }
+    .unknown { color: #6b6b78; font-size: 13px; font-family: ui-monospace, monospace; }
+    .err { color: #b00020; }
+  </style>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="__BRIDGE_SRC__"></script>
+  <script>
+    // Rendering ONLY via textContent / attributes — never innerHTML with draft
+    // strings, so a draft cannot inject markup into the preview.
+    var initial = __ENVELOPE__
+    var app = document.getElementById('app')
+
+    function el(tag, cls, path, text) {
+      var n = document.createElement(tag)
+      if (cls) n.className = cls
+      if (path) n.setAttribute('data-resonans-path', path)
+      if (text != null) n.textContent = String(text)
+      return n
+    }
+
+    function str(v) {
+      return typeof v === 'string' ? v : ''
+    }
+
+    // Rich text may be HTML or portable text; the example shows plain text.
+    function plain(v) {
+      if (typeof v === 'string') return v.replace(/<[^>]*>/g, ' ')
+      return v ? JSON.stringify(v) : ''
+    }
+
+    function renderBlock(b, i) {
+      var p = 'components.' + i
+      var wrap = el('section', 'block ' + (b._type || ''), p)
+      switch (b._type) {
+        case 'hero':
+          wrap.appendChild(el('h2', null, p + '.heading', str(b.heading)))
+          wrap.appendChild(el('p', null, p + '.subheading', str(b.subheading)))
+          break
+        case 'rich_text':
+          wrap.appendChild(el('p', null, p + '.value', plain(b.value)))
+          break
+        case 'callout':
+          wrap.className += ' callout'
+          wrap.appendChild(el('p', null, p + '.value', plain(b.value)))
+          break
+        case 'quote':
+          wrap.className += ' quote'
+          wrap.appendChild(el('p', null, p + '.quote', str(b.quote)))
+          wrap.appendChild(el('small', null, p + '.author', str(b.author)))
+          break
+        case 'cta':
+          wrap.className += ' cta'
+          wrap.appendChild(el('h3', null, p + '.heading', str(b.heading)))
+          var a = el('a', null, p + '.label', str(b.label) || 'Knap')
+          a.href = '#'
+          wrap.appendChild(a)
+          break
+        default:
+          wrap.appendChild(el('div', 'unknown', null, 'blok: ' + b._type))
+      }
+      return wrap
+    }
+
+    function render(env) {
+      app.textContent = ''
+      if (!env || env.error) {
+        app.appendChild(el('p', 'err', null, (env && env.error) || 'intet indhold'))
+        return
+      }
+      var data = env.data || {}
+      app.appendChild(el('h1', null, 'data.title', str(data.title)))
+      app.appendChild(el('p', 'seo', 'data.seoTitle', str(data.seoTitle) || '(ingen SEO-titel)'))
+      ;(env.components || []).forEach(function (b, i) {
+        app.appendChild(renderBlock(b, i))
+      })
+    }
+
+    render(initial)
+    if (window.ResonansBridge) {
+      window.ResonansBridge.init({ studioOrigin: __STUDIO_ORIGIN__, onUpdate: render })
+    }
+  </script>
+</body>
+</html>

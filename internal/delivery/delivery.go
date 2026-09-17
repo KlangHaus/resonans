@@ -31,8 +31,11 @@ import (
 // maxList caps a catalog response until cursor pagination lands (follow-up).
 const maxList = 200
 
-// defaultLocale is used when a request omits ?locale and as the i18n fallback.
-const defaultLocale = "da"
+// DefaultLocale is used when a request omits ?locale and as the i18n fallback.
+// Exported for the editor's live preview, which must fall back identically.
+const DefaultLocale = "da"
+
+const defaultLocale = DefaultLocale
 
 // Deps are the collaborators the delivery API needs.
 type Deps struct {

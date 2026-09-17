@@ -21,6 +21,7 @@ import (
 
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/content"
+	"github.com/KlangHaus/resonans/internal/delivery"
 	"github.com/KlangHaus/resonans/internal/media"
 	"github.com/KlangHaus/resonans/internal/preview"
 	"github.com/KlangHaus/resonans/internal/schema"
@@ -39,7 +40,11 @@ type Deps struct {
 	Verifier      auth.Verifier       // nil in dev/test (X-Dev-Tenant header path)
 	Settings      settings.Store      // per-tenant content profile
 	PreviewSecret string              // signs preview tokens; empty disables preview
-	Logger        *slog.Logger
+	// Assets resolves asset ids in live-preview envelopes, exactly as delivery
+	// does, so the frontend renders the draft with the same shape it gets in
+	// production. nil = asset fields are left unresolved.
+	Assets delivery.AssetResolver
+	Logger *slog.Logger
 }
 
 // Handlers holds the wired dependencies for the route handlers.
@@ -50,13 +55,14 @@ type Handlers struct {
 	video         media.VideoProvider
 	settings      settings.Store
 	previewSecret []byte
+	assets        delivery.AssetResolver
 	log           *slog.Logger
 }
 
 // NewRouter builds the API handler: content routes wrapped in the JWT-auth
 // middleware (which resolves the tenant onto the request context).
 func NewRouter(d Deps) http.Handler {
-	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, settings: d.Settings, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
+	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, settings: d.Settings, previewSecret: []byte(d.PreviewSecret), assets: d.Assets, log: d.Logger}
 
 	mux := http.NewServeMux()
 	// Schema (editor form/palette source) — filtered to the tenant's enabled
@@ -66,6 +72,9 @@ func NewRouter(d Deps) http.Handler {
 	// Per-tenant settings (content profile: enabled doc-types).
 	mux.HandleFunc("GET /api/v1/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/v1/settings", h.putSettings)
+	// Visual editing: the tenant's frontend preview URL template.
+	mux.HandleFunc("GET /api/v1/settings/preview", h.getPreviewSettings)
+	mux.HandleFunc("PUT /api/v1/settings/preview", h.putPreviewSettings)
 	// Documents — tenant-scoped authoring.
 	mux.HandleFunc("GET /api/v1/documents", h.listDocuments)
 	mux.HandleFunc("GET /api/v1/documents/{id}", h.getDocument)
@@ -85,6 +94,9 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/documents/{id}/rollback/{version}", h.rollbackDocument)
 	// Preview token issuance (Fase 5 preview).
 	mux.HandleFunc("POST /api/v1/preview-token", h.previewToken)
+	// Live preview: the delivery envelope of an UNSAVED body, pushed by the
+	// Studio into the preview iframe on every edit (visual editing).
+	mux.HandleFunc("POST /api/v1/preview/envelope", h.previewEnvelope)
 
 	return auth.Middleware(d.Verifier, d.Logger)(mux)
 }
@@ -117,6 +129,120 @@ func (h *Handlers) previewToken(w http.ResponseWriter, r *http.Request) {
 		Tenant: tid.String(), Type: in.Type, Slug: in.Slug, Exp: exp.Unix(),
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"token": tok, "expiresInSeconds": 900})
+}
+
+// previewEnvelope builds the delivery envelope for a body the editor has not
+// saved yet. The body is capped by decodeJSON (1 MiB), as for a saved document. Nothing is persisted and nothing is read from the store: the body
+// comes from the request and the tenant from the verified actor, so the only
+// tenant data it can touch is asset resolution, which is tenant-scoped.
+// The doc-type must exist AND be enabled for the tenant, like createDocument.
+func (h *Handlers) previewEnvelope(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Type   string          `json:"type"`
+		Slug   string          `json:"slug"`
+		Title  string          `json:"title"`
+		Locale string          `json:"locale"`
+		Body   json.RawMessage `json:"body"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.Type == "" {
+		writeJSON(w, http.StatusBadRequest, errBody("type required"))
+		return
+	}
+	if _, ok := h.registry.DocType(in.Type); !ok {
+		writeJSON(w, http.StatusBadRequest, errBody("unknown doc-type: "+in.Type))
+		return
+	}
+	enabled, err := h.enabledTypes(r, tid)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	if !settings.Enabled(enabled, in.Type) {
+		writeJSON(w, http.StatusBadRequest, errBody("doc-type not enabled: "+in.Type))
+		return
+	}
+	body := in.Body
+	if len(body) == 0 {
+		body = json.RawMessage("{}")
+	}
+	var probe map[string]any
+	if err := json.Unmarshal(body, &probe); err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("body must be a JSON object"))
+		return
+	}
+	locale := in.Locale
+	if locale == "" {
+		locale = delivery.DefaultLocale
+	}
+	doc := content.Document{TenantID: tid, Type: in.Type, Slug: in.Slug, Title: in.Title, Body: body, Status: content.StatusDraft}
+	env := delivery.BuildEnvelope(r.Context(), tid, doc, h.registry, locale, delivery.DefaultLocale, h.assets)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, env)
+}
+
+// getPreviewSettings returns the preview URL template and the origin derived
+// from it (the Studio's postMessage allow-list of one).
+func (h *Handlers) getPreviewSettings(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	if h.settings == nil {
+		writeJSON(w, http.StatusNotImplemented, errBody("settings store not configured"))
+		return
+	}
+	tpl, err := h.settings.PreviewURL(r.Context(), tid)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	origin := ""
+	if tpl != "" {
+		// A stored value that no longer validates (rule tightened later) is
+		// reported without an origin, so the Studio refuses to talk to it.
+		origin, _ = settings.ValidatePreviewURL(tpl)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"previewUrl":    tpl,
+		"previewOrigin": origin,
+		"previewReady":  origin != "" && len(h.previewSecret) > 0,
+	})
+}
+
+// putPreviewSettings validates and stores the template ("" = turn off).
+func (h *Handlers) putPreviewSettings(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	if h.settings == nil {
+		writeJSON(w, http.StatusNotImplemented, errBody("settings store not configured"))
+		return
+	}
+	var in struct {
+		PreviewURL string `json:"previewUrl"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.PreviewURL != "" {
+		if _, err := settings.ValidatePreviewURL(in.PreviewURL); err != nil {
+			writeJSON(w, http.StatusBadRequest, errBody("previewUrl must be an absolute https URL (http only for localhost) with a fixed host and a {token} placeholder"))
+			return
+		}
+	}
+	if err := h.settings.SetPreviewURL(r.Context(), tid, in.PreviewURL); err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	h.getPreviewSettings(w, r)
 }
 
 func (h *Handlers) listVersions(w http.ResponseWriter, r *http.Request) {

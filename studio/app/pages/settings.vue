@@ -3,7 +3,7 @@
 // (Allan-beslutning 2026-07-28: undervisning og web skal kunne til-/fravælges).
 // Grupperingen er PRÆSENTATION — backend'en er stadig type-agnostisk; typer
 // udenfor grupperne (fra fremtidige schemas) lander automatisk i "Andet".
-const { getSettings, putSettings } = useResonans()
+const { getSettings, putSettings, getPreviewSettings, putPreviewSettings } = useResonans()
 
 const GROUPS: { label: string; types: string[] }[] = [
   { label: 'Web (blog + sider)', types: ['post', 'page'] },
@@ -57,6 +57,30 @@ async function save() {
     saving.value = false
   }
 }
+
+// --- Visuel redigering: sitets preview-URL ---
+const previewUrl = ref('')
+const previewMsg = ref('')
+const previewSaving = ref(false)
+const { data: preview, refresh: refreshPreview } = await useAsyncData('preview-settings', () =>
+  getPreviewSettings().catch(() => null),
+)
+watch(preview, (p) => { previewUrl.value = p?.previewUrl ?? '' }, { immediate: true })
+
+async function savePreview() {
+  previewSaving.value = true
+  previewMsg.value = ''
+  try {
+    await putPreviewSettings(previewUrl.value.trim())
+    await refreshPreview()
+    previewMsg.value = 'Gemt'
+  } catch (e) {
+    const data = (e as { data?: { error?: string } }).data
+    previewMsg.value = `Fejl: ${data?.error ?? (e as Error).message}`
+  } finally {
+    previewSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -84,6 +108,29 @@ async function save() {
     <div style="display: flex; gap: 10px; align-items: center; margin-top: 16px">
       <button class="rz-btn rz-btn--primary" :disabled="saving" @click="save">Gem profil</button>
       <span class="rz-field__hint">{{ msg }}</span>
+    </div>
+
+    <h2 style="margin: 32px 0 6px; font-size: 18px">Visuel redigering</h2>
+    <p class="rz-field__hint" style="margin: 0 0 12px">
+      Sitets preview-URL. Studio viser den i editoren og opdaterer den live mens du skriver.
+      Pladsholdere: <code>{type}</code> <code>{slug}</code> <code>{locale}</code> og
+      <code>{token}</code> (påkrævet). Kun https — http kun for localhost.
+    </p>
+    <input
+      v-model="previewUrl"
+      class="rz-input"
+      placeholder="https://www.example.dk/preview/{type}/{slug}?token={token}"
+      spellcheck="false"
+    />
+    <p v-if="preview?.previewOrigin" class="rz-field__hint" style="margin: 6px 0 0">
+      Studio taler kun med <code>{{ preview.previewOrigin }}</code>.
+      <span v-if="!preview.previewReady" style="color: var(--rz-danger)">
+        Serveren har ingen preview-nøgle (RESONANS_PREVIEW_SECRET), så preview kan ikke åbnes.
+      </span>
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px">
+      <button class="rz-btn rz-btn--primary" :disabled="previewSaving" @click="savePreview">Gem preview-URL</button>
+      <span class="rz-field__hint">{{ previewMsg }}</span>
     </div>
   </div>
 </template>
