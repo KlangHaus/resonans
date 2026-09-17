@@ -118,3 +118,40 @@ func Run(ctx context.Context, st Store, reg *schema.Registry, apply bool) ([]Rep
 	}
 	return out, nil
 }
+
+// SlugRow is one document's slug.
+type SlugRow struct {
+	ID       uuid.UUID
+	TenantID uuid.UUID
+	Type     string
+	Slug     string
+}
+
+// SlugScanner lists every document's slug across tenants.
+type SlugScanner interface {
+	ScanSlugs(ctx context.Context, fn func(SlugRow) error) error
+}
+
+// SlugReport counts slugs that the API now rejects at create
+// (content.ValidSlug). Read-only: nothing is renamed, because a slug is part of
+// a public URL and changing it is an editorial decision, not a cleanup.
+type SlugReport struct {
+	Scanned  int
+	Invalid  int
+	Findings []string // "<id> <tenant> <type> <quoted slug>"
+}
+
+// AuditSlugs reports invalid slugs.
+func AuditSlugs(ctx context.Context, sc SlugScanner, valid func(string) bool) (SlugReport, error) {
+	var rep SlugReport
+	err := sc.ScanSlugs(ctx, func(r SlugRow) error {
+		rep.Scanned++
+		if !valid(r.Slug) {
+			rep.Invalid++
+			rep.Findings = append(rep.Findings, fmt.Sprintf("%s %s %s %q", r.ID, r.TenantID, r.Type, r.Slug))
+		}
+		return nil
+	})
+	sort.Strings(rep.Findings)
+	return rep, err
+}

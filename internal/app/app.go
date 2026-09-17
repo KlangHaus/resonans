@@ -368,6 +368,27 @@ func SanitizeBackfill(ctx context.Context, apply bool) error {
 	return err
 }
 
+// SlugAudit reports stored slugs that create now rejects (read-only). Runs as
+// the migrator role, like sanitize-backfill.
+func SlugAudit(ctx context.Context) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required for slug-audit")
+	}
+	pool, err := persistence.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect db: %w", err)
+	}
+	defer pool.Close()
+	rep, err := backfill.AuditSlugs(ctx, backfill.PostgresStore{Pool: pool}, content.ValidSlug)
+	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).
+		Info("slug_audit", "scanned", rep.Scanned, "invalid", rep.Invalid, "findings", rep.Findings)
+	return err
+}
+
 // mediaAssetResolver adapts the media service to delivery.AssetResolver: it
 // expands a stored asset id to `{url, width?, height?}` (Bunny CDN URL) so the
 // delivery envelope carries ready-to-render assets.

@@ -12,6 +12,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +33,18 @@ var (
 	ErrNotFound     = errors.New("content: document not found")
 	ErrSlugConflict = errors.New("content: slug already exists for (tenant, dataset, type)")
 	ErrInvalid      = errors.New("content: invalid input")
+	// ErrInvalidSlug wraps ErrInvalid (still a 400) with the reason.
+	ErrInvalidSlug = fmt.Errorf("%w: slug must be lowercase a-z, 0-9 and single hyphens (1-200 chars)", ErrInvalid)
 )
+
+// slugPattern is the only slug shape stored. Frontends build links as
+// "/" + slug: a slug starting with "/" or "\\" made "//host" — an off-site
+// link on blog (measured, riff re6owzgdd7vbkxhbvqb0rqok). It is exactly what the
+// Studio's slugify produces, and every seed and fixture slug matches it.
+var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// ValidSlug reports whether s is a storable slug.
+func ValidSlug(s string) bool { return len(s) <= 200 && slugPattern.MatchString(s) }
 
 // Document is a single piece of content, scoped to a tenant + dataset. Its
 // `Type` (course, lesson, page, post, ...) and JSON `Body` are validated against
@@ -70,6 +83,9 @@ type CreateInput struct {
 func (in *CreateInput) Validate() error {
 	if in.Type == "" || in.Slug == "" || in.Title == "" {
 		return ErrInvalid
+	}
+	if !ValidSlug(in.Slug) {
+		return ErrInvalidSlug
 	}
 	if len(in.Body) == 0 {
 		in.Body = json.RawMessage(`{}`)
