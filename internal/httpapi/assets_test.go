@@ -99,3 +99,24 @@ func TestVideoEmbed(t *testing.T) {
 		t.Errorf("video resp = %+v", resp)
 	}
 }
+
+func TestAssetUploadRejectsSVGAndHTML(t *testing.T) {
+	h := testRouter(t)
+	for name, c := range map[string]struct{ filename, mime, body string }{
+		"svg":           {"logo.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`},
+		"html as image": {"photo.png", "image/png", `<html><script>alert(1)</script></html>`},
+	} {
+		rec := uploadAsset(t, h, tenantA, c.filename, c.mime, []byte(c.body))
+		if rec.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("%s: status = %d, want 415 (%s)", name, rec.Code, rec.Body)
+		}
+	}
+	rec := do(t, h, http.MethodGet, "/api/v1/assets", tenantA, nil)
+	var list struct {
+		Assets []assetResponse `json:"assets"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list.Assets) != 0 {
+		t.Errorf("rejected uploads were recorded: %d", len(list.Assets))
+	}
+}
