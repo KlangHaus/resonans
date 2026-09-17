@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/KlangHaus/resonans/compare/v1.8.2...v1.9.0) (2026-09-17)
+
+
+### Features
+
+* visual editing — live preview in the Studio with two-way selection ([#50](https://github.com/KlangHaus/resonans/issues/50)) ([4558a6d](https://github.com/KlangHaus/resonans/commit/4558a6d671da0208b352154c1ddefdaa0a640af6))
+
 ## [1.8.2](https://github.com/KlangHaus/resonans/compare/v1.8.1...v1.8.2) (2026-09-16)
 
 
