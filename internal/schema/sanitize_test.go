@@ -108,7 +108,7 @@ func TestSanitizeDocumentOnlyDeclaredHTML(t *testing.T) {
 
 // Structured rich text: unsafe hrefs removed, text untouched.
 func TestSanitizeStructuredRichTextHref(t *testing.T) {
-	v, _ := sanitizeRich([]any{map[string]any{
+	v, _ := (&walk{}).sanitizeRich([]any{map[string]any{
 		"markDefs": []any{
 			map[string]any{"_type": "link", "href": "javascript:alert(1)"},
 			map[string]any{"_type": "link", "href": " javascript:alert(1)"},

@@ -31,6 +31,8 @@ func main() {
 			os.Exit(runMigrate())
 		case "seed":
 			os.Exit(runSeed())
+		case "sanitize-backfill":
+			os.Exit(runSanitizeBackfill(os.Args[2:]))
 		case "help", "-h", "--help":
 			usage(os.Stdout)
 			return
@@ -114,6 +116,27 @@ func runSeed() int {
 	return 0
 }
 
+// runSanitizeBackfill cleans stored rich text. Dry-run unless --apply.
+func runSanitizeBackfill(args []string) int {
+	apply := false
+	for _, a := range args {
+		switch a {
+		case "--apply":
+			apply = true
+		default:
+			fmt.Fprintf(os.Stderr, "sanitize-backfill: unknown argument %q (only --apply)\n", a)
+			return 2
+		}
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := app.SanitizeBackfill(ctx, apply); err != nil {
+		slog.Error("sanitize-backfill failed", "error", err)
+		return 1
+	}
+	return 0
+}
+
 func usage(w *os.File) {
 	_, _ = fmt.Fprintln(w, `resonans — KlangHaus headless CMS server
 
@@ -121,6 +144,9 @@ Usage:
   resonans              run the server
   resonans migrate      run pending DB migrations and exit (as migrator role)
   resonans seed         insert the explainers demo dataset (RESONANS_SEED_TENANT) and exit
+  resonans sanitize-backfill [--apply]
+                        clean stored rich text in documents + document_versions
+                        (dry-run unless --apply; as migrator role)
   resonans healthcheck  probe /healthz on $PORT and exit 0 (ok) / 1 (fail)
   resonans version      print the build version
   resonans help         show this message`)

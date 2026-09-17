@@ -58,7 +58,7 @@ func SanitizeDocument(r *Registry, docType string, body json.RawMessage) (json.R
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return nil, fmt.Errorf("%w: body is not a JSON object: %w", ErrInvalid, err)
 	}
-	if err := sanitizeFields(r, dt.Fields, obj, false, false, docType); err != nil {
+	if err := sanitizeFields(&walk{}, r, dt.Fields, obj, false, false, docType); err != nil {
 		return nil, err
 	}
 	out, err := json.Marshal(obj)
@@ -68,15 +68,22 @@ func SanitizeDocument(r *Registry, docType string, body json.RawMessage) (json.R
 	return out, nil
 }
 
+// walk carries how a non-string in HTML position is handled: rejected (the API,
+// on save) or blanked and recorded (the backfill, for rows already stored).
+type walk struct {
+	blank   bool
+	blanked []string
+}
+
 // inBlock: the fields belong to a block (or something nested in one).
 // htmlFormat: that block is a rich_text block declaring format "html".
-func sanitizeFields(r *Registry, fields []Field, obj map[string]any, inBlock, htmlFormat bool, path string) error {
+func sanitizeFields(w *walk, r *Registry, fields []Field, obj map[string]any, inBlock, htmlFormat bool, path string) error {
 	for _, f := range fields {
 		v, ok := obj[f.Name]
 		if !ok || v == nil {
 			continue
 		}
-		clean, err := sanitizeValue(r, f, v, inBlock, htmlFormat, path+"."+f.Name)
+		clean, err := sanitizeValue(w, r, f, v, inBlock, htmlFormat, path+"."+f.Name)
 		if err != nil {
 			return err
 		}
@@ -85,14 +92,14 @@ func sanitizeFields(r *Registry, fields []Field, obj map[string]any, inBlock, ht
 	return nil
 }
 
-func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool, path string) (any, error) {
+func sanitizeValue(w *walk, r *Registry, f Field, v any, inBlock, htmlFormat bool, path string) (any, error) {
 	switch f.Type {
 	case TypeRichText:
 		isHTML := !inBlock || htmlFormat
 		if f.I18n {
 			if m, ok := v.(map[string]any); ok {
 				for loc, lv := range m {
-					clean, err := sanitizeRich(lv, isHTML, path+"."+loc)
+					clean, err := w.sanitizeRich(lv, isHTML, path+"."+loc)
 					if err != nil {
 						return nil, err
 					}
@@ -101,12 +108,12 @@ func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool, path s
 				return m, nil
 			}
 		}
-		return sanitizeRich(v, isHTML, path)
+		return w.sanitizeRich(v, isHTML, path)
 	case TypeArray:
 		if arr, ok := v.([]any); ok {
 			for i, el := range arr {
 				if o, ok := el.(map[string]any); ok {
-					if err := sanitizeFields(r, f.Of, o, inBlock, htmlFormat, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+					if err := sanitizeFields(w, r, f.Of, o, inBlock, htmlFormat, fmt.Sprintf("%s[%d]", path, i)); err != nil {
 						return nil, err
 					}
 				}
@@ -125,7 +132,7 @@ func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool, path s
 					continue
 				}
 				format, _ := blk["format"].(string)
-				if err := sanitizeFields(r, def.Fields, blk, true, bt == "rich_text" && format == "html", fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
+				if err := sanitizeFields(w, r, def.Fields, blk, true, bt == "rich_text" && format == "html", fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
 					return nil, err
 				}
 			}
@@ -142,9 +149,13 @@ func sanitizeValue(r *Registry, f Field, v any, inBlock, htmlFormat bool, path s
 // previous version). So any other JSON type there is rejected (400), not
 // guessed at. Outside HTML position structured data keeps its text; only an
 // unsafe href is removed.
-func sanitizeRich(v any, isHTML bool, path string) (any, error) {
+func (w *walk) sanitizeRich(v any, isHTML bool, path string) (any, error) {
 	if isHTML {
 		s, ok := v.(string)
+		if !ok && w.blank {
+			w.blanked = append(w.blanked, path+" ("+jsonType(v)+")")
+			return "", nil
+		}
 		if !ok {
 			return nil, fmt.Errorf("%w: %s is HTML rich text and must be a string, got %s", ErrInvalid, path, jsonType(v))
 		}
@@ -188,4 +199,41 @@ func jsonType(v any) string {
 	default:
 		return fmt.Sprintf("%T", v)
 	}
+}
+
+// RepairResult describes what RepairDocument did to a stored body.
+type RepairResult struct {
+	Body    json.RawMessage
+	Changed bool
+	// Blanked lists the paths (with the JSON type found) of non-string values
+	// in HTML position that were replaced by "" — the named handling for data
+	// the API now rejects on save. Never the values themselves.
+	Blanked []string
+}
+
+// RepairDocument is SanitizeDocument for a body that is ALREADY stored: instead
+// of rejecting a non-string in HTML position (which would leave the row as it
+// is, dirty), it blanks the value and records where. Changed compares the
+// canonical JSON of input and output, so a clean row is reported unchanged and
+// a second run changes nothing (idempotent).
+func RepairDocument(r *Registry, docType string, body json.RawMessage) (RepairResult, error) {
+	dt, ok := r.DocType(docType)
+	if !ok {
+		return RepairResult{}, fmt.Errorf("%w: %q", ErrUnknownType, docType)
+	}
+	var obj, orig map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return RepairResult{}, fmt.Errorf("%w: body is not a JSON object: %w", ErrInvalid, err)
+	}
+	_ = json.Unmarshal(body, &orig)
+	w := &walk{blank: true}
+	if err := sanitizeFields(w, r, dt.Fields, obj, false, false, docType); err != nil {
+		return RepairResult{}, err
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return RepairResult{}, fmt.Errorf("schema: marshal repaired body: %w", err)
+	}
+	before, _ := json.Marshal(orig)
+	return RepairResult{Body: out, Changed: string(before) != string(out), Blanked: w.blanked}, nil
 }

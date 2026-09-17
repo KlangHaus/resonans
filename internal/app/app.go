@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/KlangHaus/resonans/internal/auth"
+	"github.com/KlangHaus/resonans/internal/backfill"
 	"github.com/KlangHaus/resonans/internal/bridge"
 	"github.com/KlangHaus/resonans/internal/config"
 	"github.com/KlangHaus/resonans/internal/content"
@@ -329,6 +330,42 @@ func Migrate(ctx context.Context) error {
 	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).
 		Info("migrations_complete", "applied", applied)
 	return nil
+}
+
+// SanitizeBackfill runs the rich-text backfill over documents and
+// document_versions (internal/backfill). Dry-run unless apply; writes a report
+// with counts and ids/paths only. Must run as the migrator role (BYPASSRLS).
+func SanitizeBackfill(ctx context.Context, apply bool) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required for sanitize-backfill")
+	}
+	registry, err := schema.DefaultRegistry()
+	if err != nil {
+		return fmt.Errorf("schema: %w", err)
+	}
+	pool, err := persistence.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect db: %w", err)
+	}
+	defer pool.Close()
+
+	logger := newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv)
+	mode := "dry-run"
+	if apply {
+		mode = "apply"
+	}
+	reports, err := backfill.Run(ctx, backfill.PostgresStore{Pool: pool}, registry, apply)
+	for _, r := range reports {
+		logger.Info("sanitize_backfill", "mode", mode, "table", r.Table, "scanned", r.Scanned,
+			"unchanged", r.Unchanged, "changed", r.Changed, "blanked", r.Blanked,
+			"skipped_concurrent", r.SkippedConcurrent,
+			"unknown_type", r.UnknownType, "invalid", r.Invalid, "findings", r.Findings)
+	}
+	return err
 }
 
 // mediaAssetResolver adapts the media service to delivery.AssetResolver: it
