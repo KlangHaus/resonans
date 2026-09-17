@@ -173,8 +173,7 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	// ETag from the revision counter — Etude caches per tenant/doc/locale/version.
-	etag := fmt.Sprintf(`"%s.v%d"`, h.locale(r), d.Version)
+	etag := etagFor(h.locale(r), d)
 	if r.Header.Get("If-None-Match") == etag {
 		w.Header().Set("ETag", etag)
 		w.WriteHeader(http.StatusNotModified)
@@ -190,6 +189,15 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 	writeJSON(w, http.StatusOK, env)
+}
+
+// etagFor is the delivery ETag: locale, revision counter AND last-write time.
+// The counter alone was not enough: a body rewritten without a version bump
+// (the sanitize-backfill, resonans#53) kept its ETag, so a revalidating cache
+// got 304 and kept the dirty copy. Every write sets updated_at, so any change
+// to the stored body changes the ETag. Etude caches per tenant/doc/locale/ETag.
+func etagFor(locale string, d content.Document) string {
+	return fmt.Sprintf(`"%s.v%d.%d"`, locale, d.Version, d.UpdatedAt.UnixMicro())
 }
 
 // expandCourseTree replaces course.data.modules (an array of module refs) with

@@ -28,7 +28,10 @@ var updateSQL = map[string]string{
 	// `and body = $4`: only if the row still holds the body that was SCANNED. An
 	// editor's save (or a rollback) between scan and update must not be
 	// overwritten with the old body cleaned ([sikkerhed], lost write).
-	TableDocuments: `update resonans_app.documents set body = $1 where id = $2 and tenant_id = $3 and body = $4::jsonb`,
+	// updated_at = now(): the delivery ETag includes it, so a cache revalidating
+	// a cleaned document gets the new body instead of 304 on the dirty copy.
+	// The version counter is NOT bumped: it numbers the history snapshots.
+	TableDocuments: `update resonans_app.documents set body = $1, updated_at = now() where id = $2 and tenant_id = $3 and body = $4::jsonb`,
 	TableVersions:  `update resonans_app.document_versions set body = $1 where id = $2 and tenant_id = $3 and body = $4::jsonb`,
 }
 
