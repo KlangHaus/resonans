@@ -25,8 +25,11 @@ var scanSQL = map[string]string{
 }
 
 var updateSQL = map[string]string{
-	TableDocuments: `update resonans_app.documents set body = $1 where id = $2 and tenant_id = $3`,
-	TableVersions:  `update resonans_app.document_versions set body = $1 where id = $2 and tenant_id = $3`,
+	// `and body = $4`: only if the row still holds the body that was SCANNED. An
+	// editor's save (or a rollback) between scan and update must not be
+	// overwritten with the old body cleaned ([sikkerhed], lost write).
+	TableDocuments: `update resonans_app.documents set body = $1 where id = $2 and tenant_id = $3 and body = $4::jsonb`,
+	TableVersions:  `update resonans_app.document_versions set body = $1 where id = $2 and tenant_id = $3 and body = $4::jsonb`,
 }
 
 func (s PostgresStore) Scan(ctx context.Context, table string, fn func(Row) error) error {
@@ -72,13 +75,17 @@ func (s PostgresStore) Update(ctx context.Context, table string, row Row, body j
 		if _, err := tx.Exec(ctx, "select set_config('app.tenant_id', $1, true)", row.TenantID.String()); err != nil {
 			return fmt.Errorf("set tenant guc: %w", err)
 		}
-		tag, err := tx.Exec(ctx, q, []byte(body), row.ID, row.TenantID)
+		tag, err := tx.Exec(ctx, q, []byte(body), row.ID, row.TenantID, []byte(row.Body))
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() != 1 {
+		switch tag.RowsAffected() {
+		case 1:
+			return nil
+		case 0:
+			return ErrConcurrentChange
+		default:
 			return fmt.Errorf("expected 1 row updated, got %d", tag.RowsAffected())
 		}
-		return nil
 	})
 }

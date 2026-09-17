@@ -362,6 +362,7 @@ func SanitizeBackfill(ctx context.Context, apply bool) error {
 	for _, r := range reports {
 		logger.Info("sanitize_backfill", "mode", mode, "table", r.Table, "scanned", r.Scanned,
 			"unchanged", r.Unchanged, "changed", r.Changed, "blanked", r.Blanked,
+			"skipped_concurrent", r.SkippedConcurrent,
 			"unknown_type", r.UnknownType, "invalid", r.Invalid, "findings", r.Findings)
 	}
 	return err

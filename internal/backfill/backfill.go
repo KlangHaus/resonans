@@ -20,6 +20,10 @@ import (
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
+// ErrConcurrentChange is returned by Store.Update when the row no longer holds
+// the scanned body: someone saved in between. The row is skipped, not written.
+var ErrConcurrentChange = errors.New("backfill: row changed since scan")
+
 // Tables in scan order.
 const (
 	TableDocuments = "documents"
@@ -38,20 +42,24 @@ type Row struct {
 type Store interface {
 	// Scan calls fn for every row of table, across all tenants.
 	Scan(ctx context.Context, table string, fn func(Row) error) error
-	// Update replaces one row's body, scoped to its tenant.
+	// Update replaces one row's body, scoped to its tenant, ONLY if the row still
+	// holds row.Body; otherwise it returns ErrConcurrentChange and writes nothing.
 	Update(ctx context.Context, table string, row Row, body json.RawMessage) error
 }
 
 // Report counts per table. Every scanned row lands in exactly one of
-// Unchanged, Changed, UnknownType or Invalid.
+// Unchanged, Changed, SkippedConcurrent, UnknownType or Invalid.
 type Report struct {
-	Table       string
-	Scanned     int
-	Unchanged   int
-	Changed     int // would be (dry-run) / was (apply) rewritten
-	Blanked     int // of Changed: rows with a non-string in HTML position set to ""
-	UnknownType int // doc-type no longer in the registry: left untouched
-	Invalid     int // body is not a JSON object: left untouched
+	Table     string
+	Scanned   int
+	Unchanged int
+	Changed   int // would be (dry-run) / was (apply) rewritten
+	// SkippedConcurrent (apply only): changed since the scan, so not written.
+	// Run the backfill again to clean the row's new body.
+	SkippedConcurrent int
+	Blanked           int // of Changed: rows with a non-string in HTML position set to ""
+	UnknownType       int // doc-type no longer in the registry: left untouched
+	Invalid           int // body is not a JSON object: left untouched
 	// Findings are "<row id> <path> (<json type>)" for blanked values, and
 	// "<row id> unknown type <t>" / "<row id> invalid body": ids and paths only,
 	// never content.
@@ -82,16 +90,22 @@ func Run(ctx context.Context, st Store, reg *schema.Registry, apply bool) ([]Rep
 				rep.Unchanged++
 				return nil
 			}
+			if apply {
+				err := st.Update(ctx, table, row, res.Body)
+				if errors.Is(err, ErrConcurrentChange) {
+					rep.SkippedConcurrent++
+					rep.Findings = append(rep.Findings, fmt.Sprintf("%s skipped: changed since scan", row.ID))
+					return nil
+				}
+				if err != nil {
+					return fmt.Errorf("backfill: update %s %s: %w", table, row.ID, err)
+				}
+			}
 			rep.Changed++
 			if len(res.Blanked) > 0 {
 				rep.Blanked++
 				for _, p := range res.Blanked {
 					rep.Findings = append(rep.Findings, fmt.Sprintf("%s %s", row.ID, p))
-				}
-			}
-			if apply {
-				if err := st.Update(ctx, table, row, res.Body); err != nil {
-					return fmt.Errorf("backfill: update %s %s: %w", table, row.ID, err)
 				}
 			}
 			return nil

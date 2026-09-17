@@ -14,6 +14,8 @@ import (
 type memStore struct {
 	rows    map[string][]Row
 	updates int
+	// editBeforeUpdate simulates a save between scan and update for this row.
+	editBeforeUpdate uuid.UUID
 }
 
 func (m *memStore) Scan(_ context.Context, table string, fn func(Row) error) error {
@@ -26,11 +28,19 @@ func (m *memStore) Scan(_ context.Context, table string, fn func(Row) error) err
 }
 
 func (m *memStore) Update(_ context.Context, table string, row Row, body json.RawMessage) error {
-	m.updates++
 	for i := range m.rows[table] {
-		if m.rows[table][i].ID == row.ID {
-			m.rows[table][i].Body = body
+		r := &m.rows[table][i]
+		if r.ID != row.ID {
+			continue
 		}
+		if r.ID == m.editBeforeUpdate {
+			r.Body = json.RawMessage(`{"body":[]}`) // the editor's newer save
+		}
+		if string(r.Body) != string(row.Body) {
+			return ErrConcurrentChange
+		}
+		m.updates++
+		r.Body = body
 	}
 	return nil
 }
@@ -96,7 +106,7 @@ func TestDryRunCountsAndWritesNothing(t *testing.T) {
 		t.Errorf("findings = %q", found)
 	}
 	for _, rep := range reps {
-		if rep.Unchanged+rep.Changed+rep.UnknownType+rep.Invalid != rep.Scanned {
+		if rep.Unchanged+rep.Changed+rep.SkippedConcurrent+rep.UnknownType+rep.Invalid != rep.Scanned {
 			t.Errorf("%s: buckets do not add up: %+v", rep.Table, rep)
 		}
 	}
@@ -127,5 +137,28 @@ func TestApplyCleansAndIsIdempotent(t *testing.T) {
 	}
 	if st.updates != 0 || reps[0].Changed != 0 || reps[1].Changed != 0 {
 		t.Errorf("second run changed rows: updates=%d reports=%+v", st.updates, reps)
+	}
+}
+
+// A save between scan and update wins: the row is skipped and counted, and the
+// editor's newer body is NOT overwritten with the old body cleaned.
+func TestApplySkipsRowChangedSinceScan(t *testing.T) {
+	reg, _ := schema.DefaultRegistry()
+	st := fixture(t)
+	edited := st.rows[TableDocuments][0].ID
+	st.editBeforeUpdate = edited
+	reps, err := Run(context.Background(), st, reg, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(st.rows[TableDocuments][0].Body) != `{"body":[]}` {
+		t.Errorf("editor's save was overwritten: %s", st.rows[TableDocuments][0].Body)
+	}
+	docs := reps[0]
+	if docs.SkippedConcurrent != 1 || docs.Changed != 1 {
+		t.Errorf("documents report = %+v, want 1 skipped + 1 changed", docs)
+	}
+	if !strings.Contains(strings.Join(docs.Findings, "\n"), edited.String()+" skipped: changed since scan") {
+		t.Errorf("findings = %v", docs.Findings)
 	}
 }
