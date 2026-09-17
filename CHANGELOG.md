@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/KlangHaus/resonans/compare/v1.10.0...v1.10.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* allow only [a-z0-9] slugs with single hyphens; add read-only slug-audit ([#54](https://github.com/KlangHaus/resonans/issues/54)) ([65ea6d0](https://github.com/KlangHaus/resonans/commit/65ea6d0751d31715dd948ab2e821c9a8777961b9))
+
 # [1.10.0](https://github.com/KlangHaus/resonans/compare/v1.9.2...v1.10.0) (2026-09-17)
 
 
