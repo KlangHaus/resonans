@@ -57,6 +57,8 @@ export function parseBridgeMessage(
   expectedOrigin: string,
   expectedSource: unknown,
 ): BridgeMessage | null {
+  // The fallback preview runs in an opaque origin, which the browser reports as
+  // the string "null"; it is accepted ONLY together with the exact frame window.
   if (!expectedOrigin || e.origin !== expectedOrigin) return null
   if (!expectedSource || e.source !== expectedSource) return null
   const d = e.data as Record<string, unknown> | null
