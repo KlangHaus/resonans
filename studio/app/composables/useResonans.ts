@@ -77,10 +77,13 @@ export function useResonans() {
   }
 
   function req<T>(path: string, opts: Record<string, unknown> = {}): Promise<T> {
+    // `headers` goes LAST: spread after `...opts`, a caller's own headers
+    // (e.g. Content-Type) replaced the merged set and dropped the tenant header,
+    // so every write with a body got 403 while every read worked.
     return $fetch<T>(`${base}${path}`, {
       credentials: 'include',
-      headers: headers(opts.headers as Record<string, string>),
       ...opts,
+      headers: headers(opts.headers as Record<string, string>),
     })
   }
 
