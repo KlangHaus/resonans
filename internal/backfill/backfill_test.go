@@ -162,3 +162,30 @@ func TestApplySkipsRowChangedSinceScan(t *testing.T) {
 		t.Errorf("findings = %v", docs.Findings)
 	}
 }
+
+type slugStore []SlugRow
+
+func (s slugStore) ScanSlugs(_ context.Context, fn func(SlugRow) error) error {
+	for _, r := range s {
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestAuditSlugsCountsInvalidOnly(t *testing.T) {
+	valid := func(s string) bool { return s == "ok-slug" }
+	rep, err := AuditSlugs(context.Background(), slugStore{
+		{ID: uuid.New(), Slug: "ok-slug"}, {ID: uuid.New(), Slug: "/evil.example"}, {ID: uuid.New(), Slug: `\\evil`},
+	}, valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Scanned != 3 || rep.Invalid != 2 || len(rep.Findings) != 2 {
+		t.Errorf("report = %+v", rep)
+	}
+	if !strings.Contains(strings.Join(rep.Findings, "\n"), `"/evil.example"`) {
+		t.Errorf("findings = %v", rep.Findings)
+	}
+}

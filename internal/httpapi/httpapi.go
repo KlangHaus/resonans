@@ -700,6 +700,8 @@ func (h *Handlers) writeErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, errBody("not found"))
 	case errors.Is(err, content.ErrSlugConflict):
 		writeJSON(w, http.StatusConflict, errBody("slug already exists"))
+	case errors.Is(err, content.ErrInvalidSlug):
+		writeJSON(w, http.StatusBadRequest, errBody("invalid slug: lowercase a-z, 0-9 and single hyphens (1-200 chars)"))
 	case errors.Is(err, content.ErrInvalid):
 		writeJSON(w, http.StatusBadRequest, errBody("invalid input"))
 	default:

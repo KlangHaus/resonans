@@ -92,3 +92,21 @@ func (s PostgresStore) Update(ctx context.Context, table string, row Row, body j
 		}
 	})
 }
+
+func (s PostgresStore) ScanSlugs(ctx context.Context, fn func(SlugRow) error) error {
+	rows, err := s.Pool.Query(ctx, `select id, tenant_id, type, slug from resonans_app.documents order by id`)
+	if err != nil {
+		return fmt.Errorf("backfill: scan slugs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r SlugRow
+		if err := rows.Scan(&r.ID, &r.TenantID, &r.Type, &r.Slug); err != nil {
+			return fmt.Errorf("backfill: read slug: %w", err)
+		}
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}

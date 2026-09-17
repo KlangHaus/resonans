@@ -33,6 +33,8 @@ func main() {
 			os.Exit(runSeed())
 		case "sanitize-backfill":
 			os.Exit(runSanitizeBackfill(os.Args[2:]))
+		case "slug-audit":
+			os.Exit(runSlugAudit())
 		case "help", "-h", "--help":
 			usage(os.Stdout)
 			return
@@ -137,6 +139,17 @@ func runSanitizeBackfill(args []string) int {
 	return 0
 }
 
+// runSlugAudit lists stored slugs that create now rejects. Read-only.
+func runSlugAudit() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := app.SlugAudit(ctx); err != nil {
+		slog.Error("slug-audit failed", "error", err)
+		return 1
+	}
+	return 0
+}
+
 func usage(w *os.File) {
 	_, _ = fmt.Fprintln(w, `resonans — KlangHaus headless CMS server
 
@@ -147,6 +160,7 @@ Usage:
   resonans sanitize-backfill [--apply]
                         clean stored rich text in documents + document_versions
                         (dry-run unless --apply; as migrator role)
+  resonans slug-audit   list stored slugs that create now rejects (read-only; as migrator role)
   resonans healthcheck  probe /healthz on $PORT and exit 0 (ok) / 1 (fail)
   resonans version      print the build version
   resonans help         show this message`)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/KlangHaus/resonans/internal/content"
@@ -379,5 +380,20 @@ func TestHTMLRichTextArrayRejectedOnSave(t *testing.T) {
 	_ = json.Unmarshal(list.Body.Bytes(), &docs)
 	if len(docs.Documents) != 0 {
 		t.Errorf("rejected bodies were stored: %d", len(docs.Documents))
+	}
+}
+
+// A slug that is not [a-z0-9] with single hyphens is rejected at create: blog
+// built "//evil.example" from "/" + "/evil.example" (riff re6owzgdd7vbkxhbvqb0rqok).
+func TestCreateRejectsUnsafeSlug(t *testing.T) {
+	h := testRouter(t)
+	for _, slug := range []string{"/evil.example", `\evil.example`, "UPPER", "a b"} {
+		rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{"type": "page", "slug": slug, "title": "T"})
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid slug") {
+			t.Errorf("slug %q: %d %s, want 400 invalid slug", slug, rec.Code, rec.Body)
+		}
+	}
+	if rec := do(t, h, http.MethodPost, "/api/v1/documents", tenantA, map[string]any{"type": "page", "slug": "organisk-kemi", "title": "T"}); rec.Code != http.StatusCreated {
+		t.Errorf("valid slug: %d %s", rec.Code, rec.Body)
 	}
 }
