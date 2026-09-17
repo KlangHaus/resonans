@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/KlangHaus/resonans/compare/v1.9.2...v1.10.0) (2026-09-17)
+
+
+### Features
+
+* sanitize-backfill for rich text stored before save-side sanitizing ([#53](https://github.com/KlangHaus/resonans/issues/53)) ([b734329](https://github.com/KlangHaus/resonans/commit/b7343296aa45ae06656f8ed7fcf2d8ab3b1492e4))
+
 ## [1.9.2](https://github.com/KlangHaus/resonans/compare/v1.9.1...v1.9.2) (2026-09-17)
 
 
