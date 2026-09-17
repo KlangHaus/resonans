@@ -24,7 +24,9 @@ Produkt-brief: `klanghaus/docs/product-briefs/resonans/index.md`.
   det **verificerede `org`-claim** — aldrig fra request-body/header (anti-spoof). Postgres
   **RLS** håndhæver isolationen i databasen (fail-closed: GUC `app.tenant_id` sat pr.
   transaktion).
-- **Dev uden JWT:** sæt tenant via `X-Dev-Tenant`-header (KUN når auth er deaktiveret).
+- **Dev uden JWT:** sæt tenant via `X-Dev-Tenant`-header. Kræver det eksplicitte opt-in
+  `RESONANS_DEV_AUTH=1`; uden JWT og uden opt-in nægter serveren at starte, uanset `NODE_ENV`.
+  Opt-in i `NODE_ENV=production` afvises også.
 - **Prod:** boot-fejler uden `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` (ingen åbne endpoints)
   og uden `DATABASE_URL` (ingen ikke-persistent/uisoleret store).
 
@@ -32,7 +34,7 @@ Produkt-brief: `klanghaus/docs/product-briefs/resonans/index.md`.
 
 ```bash
 # Uden DB (in-memory store, dev only) — tenant via X-Dev-Tenant:
-go run ./cmd/resonans
+RESONANS_DEV_AUTH=1 go run ./cmd/resonans
 
 # Med Postgres + boot-migrations + RLS via Compose:
 docker compose -f docker-compose.tilt.yml up --build

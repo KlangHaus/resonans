@@ -9,6 +9,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -38,6 +39,13 @@ type Config struct {
 	// to enable auth; in production both MUST be set or boot fails.
 	JWTIssuer string
 	JWKSURL   string
+	// DevAuth is the POSITIVE opt-in for the unauthenticated dev paths:
+	// X-Dev-Tenant on /api and X-Scope-OrgID without a service token on
+	// /delivery. It used to be implied by NODE_ENV != "production" — and an
+	// empty NODE_ENV defaults to "development", so a prod deploy that forgot one
+	// variable opened both paths. A missing value must never open a gate.
+	// RESONANS_DEV_AUTH=1.
+	DevAuth bool
 
 	// PreviewSecret signs short-lived preview tokens (editor draft-preview). Empty
 	// disables the preview endpoints. In production it should be set (SOPS).
@@ -111,8 +119,11 @@ func Load() (*Config, error) {
 		PublicURL:   getenv("PUBLIC_URL", "http://localhost:3000"),
 		DatabaseURL: getenvOptional("DATABASE_URL"),
 
-		JWTIssuer:     getenvOptional("RESONANS_JWT_ISSUER"),
-		JWKSURL:       getenvOptional("RESONANS_JWKS_URL"),
+		JWTIssuer: getenvOptional("RESONANS_JWT_ISSUER"),
+		JWKSURL:   getenvOptional("RESONANS_JWKS_URL"),
+		// Exactly "1" opens it. Not getbool: "true", "yes" and "" stay closed, so
+		// only one positively declared value can open an auth gate.
+		DevAuth:       strings.TrimSpace(os.Getenv("RESONANS_DEV_AUTH")) == "1",
 		DeliveryToken: getenvOptional("RESONANS_DELIVERY_TOKEN"),
 		PreviewSecret: getenvOptional("RESONANS_PREVIEW_SECRET"),
 
@@ -161,6 +172,46 @@ func (c *Config) IsProduction() bool { return c.NodeEnv == "production" }
 // AuthEnabled reports whether the JWT middleware should be wired (both issuer
 // and JWKS URL present).
 func (c *Config) AuthEnabled() bool { return c.JWTIssuer != "" && c.JWKSURL != "" }
+
+// ErrNoEditorAuth and ErrNoDeliveryAuth name the refusal to start with an
+// unauthenticated surface that nobody opted into.
+var (
+	ErrNoEditorAuth   = errors.New("RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set and RESONANS_DEV_AUTH is not 1 — refusing to start with unauthenticated editor endpoints (X-Dev-Tenant)")
+	ErrNoDeliveryAuth = errors.New("RESONANS_DELIVERY_TOKEN not set and RESONANS_DEV_AUTH is not 1 — refusing to start with an unauthenticated content-delivery surface (X-Scope-OrgID)")
+	ErrDevAuthInProd  = errors.New("RESONANS_DEV_AUTH=1 with NODE_ENV=production — refusing to start: dev auth is never allowed in production")
+)
+
+// EditorDevAuth decides whether the editor API may run WITHOUT JWT (tenant via
+// X-Dev-Tenant). JWT configured → false: the header is never read, whatever
+// DevAuth says. Otherwise only an explicit RESONANS_DEV_AUTH=1 outside
+// production opens it; anything else is an error, so the server does not start.
+func (c *Config) EditorDevAuth() (bool, error) {
+	if c.DevAuth && c.IsProduction() {
+		return false, ErrDevAuthInProd
+	}
+	if c.AuthEnabled() {
+		return false, nil
+	}
+	if !c.DevAuth {
+		return false, ErrNoEditorAuth
+	}
+	return true, nil
+}
+
+// DeliveryDevAuth is the same rule for /delivery: no service token requires
+// the explicit opt-in (and never in production).
+func (c *Config) DeliveryDevAuth() (bool, error) {
+	if c.DevAuth && c.IsProduction() {
+		return false, ErrDevAuthInProd
+	}
+	if c.DeliveryToken != "" {
+		return false, nil
+	}
+	if !c.DevAuth {
+		return false, ErrNoDeliveryAuth
+	}
+	return true, nil
+}
 
 // ListenAddr returns the host:port the HTTP server binds to.
 func (c *Config) ListenAddr() string {

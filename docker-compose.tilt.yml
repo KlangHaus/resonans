@@ -39,7 +39,9 @@ services:
       RESONANS_VIDEO_PROVIDER: vimeo # enables /api/v1/video/embed
       RESONANS_PREVIEW_SECRET: dev-preview-secret # enables preview endpoints
       # Auth + delivery-token intentionally UNSET in dev → tenant via
-      # X-Dev-Tenant (editor) / X-Scope-OrgID (delivery) headers.
+      # X-Dev-Tenant (editor) / X-Scope-OrgID (delivery) headers. That needs the
+      # explicit opt-in: without it the server refuses to start.
+      RESONANS_DEV_AUTH: "1"
     ports:
       - "3000:3000"
     depends_on:
