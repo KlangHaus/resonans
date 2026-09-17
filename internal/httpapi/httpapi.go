@@ -514,6 +514,17 @@ func (h *Handlers) schemaOne(w http.ResponseWriter, r *http.Request) {
 
 // validateBody checks a document body against its doc-type schema. Schema
 // errors (unknown type / invalid body) map to 400.
+// sanitizeBody strips everything but formatting markup from rich-text fields
+// before a body is stored (defense in depth with the Studio's own sanitizing).
+func (h *Handlers) sanitizeBody(w http.ResponseWriter, docType string, body json.RawMessage) (json.RawMessage, bool) {
+	clean, err := schema.SanitizeDocument(h.registry, docType, body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody(err.Error()))
+		return nil, false
+	}
+	return clean, true
+}
+
 func (h *Handlers) validateBody(w http.ResponseWriter, docType string, body []byte) bool {
 	if err := schema.ValidateDocument(h.registry, docType, body); err != nil {
 		writeJSON(w, http.StatusBadRequest, errBody(err.Error()))
@@ -614,6 +625,10 @@ func (h *Handlers) createDocument(w http.ResponseWriter, r *http.Request) {
 	if !h.validateBody(w, in.Type, body) {
 		return
 	}
+	if body, ok = h.sanitizeBody(w, in.Type, body); !ok {
+		return
+	}
+	in.Body = body
 	d, err := h.store.Create(r.Context(), tid, in)
 	if err != nil {
 		h.writeErr(w, err)
@@ -646,6 +661,11 @@ func (h *Handlers) updateDocument(w http.ResponseWriter, r *http.Request) {
 		if !h.validateBody(w, existing.Type, *in.Body) {
 			return
 		}
+		clean, ok := h.sanitizeBody(w, existing.Type, *in.Body)
+		if !ok {
+			return
+		}
+		in.Body = &clean
 	}
 	d, err := h.store.Update(r.Context(), tid, id, in)
 	if err != nil {
