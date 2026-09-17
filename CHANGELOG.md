@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/KlangHaus/resonans/compare/v1.9.0...v1.9.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* dev auth requires RESONANS_DEV_AUTH=1; upload type is sniffed from content ([#51](https://github.com/KlangHaus/resonans/issues/51)) ([af29fd3](https://github.com/KlangHaus/resonans/commit/af29fd32c3d849b625932d4b4f10a11ca463e880))
+
 # [1.9.0](https://github.com/KlangHaus/resonans/compare/v1.8.2...v1.9.0) (2026-09-17)
 
 
