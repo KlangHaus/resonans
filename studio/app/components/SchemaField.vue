@@ -91,7 +91,7 @@ const scalar = computed(() => String(props.modelValue ?? ''))
     <template v-else-if="isI18nRich">
       <div v-for="loc in LOCALES" :key="loc" style="margin-bottom: 8px">
         <div class="rz-field__hint" style="margin-bottom: 3px">{{ loc }}</div>
-        <RichTextField :model-value="i18nVal(loc)" @update:model-value="(v) => setI18n(loc, v)" />
+        <RichTextField :model-value="i18nVal(loc)" @update:model-value="(v: string) => setI18n(loc, v)" />
       </div>
     </template>
 
@@ -99,7 +99,7 @@ const scalar = computed(() => String(props.modelValue ?? ''))
     <RichTextField
       v-else-if="field.type === 'richtext'"
       :model-value="scalar"
-      @update:model-value="(v) => set(v)"
+      @update:model-value="(v: unknown) => set(v)"
     />
 
     <!-- non-i18n scalars -->
@@ -145,7 +145,7 @@ const scalar = computed(() => String(props.modelValue ?? ''))
       :allow="field.allow"
       :block-defs="blockDefs || []"
       :path="path"
-      @update:model-value="(v) => set(v)"
+      @update:model-value="(v: unknown) => set(v)"
     />
 
     <!-- array (non-block): JSON fallback until a repeater UI lands -->
