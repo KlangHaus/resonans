@@ -16,15 +16,23 @@ name: Semantic Release
 # GITHUB_TOKEN (tag/release/CHANGELOG virker; image bygges når App er provisioneret).
 
 on:
-  # workflow_run (ikke push): release skal ALDRIG tagge/publicere før CI (Go)
-  # har verificeret commit'et på main. `branches: [main]` filtrerer på den
-  # trigger-branch workflow_run rapporterer (push til develop/PR-runs mod
-  # main matcher ikke). Bugbot-fund PR #57: push-trigger kørte uafhængigt af
-  # CI (Go) og kunne tagge/publicere et image FØR lint/test/integration var
-  # bekræftet grønt.
-  workflow_run:
-    workflows: ['CI (Go)']
-    types: [completed]
+  # 🔴 TRIGGEREN FLYTTEDE FRA `workflow_run` TIL `push`, OG GATEN FULGTE MED.
+  # Før hang hele release-kæden på at Actions-workflowet ved navn 'CI (Go)'
+  # fuldførte. Den kobling var også en fælde: sletter man ci-go.yml, fyrer
+  # semantic-release aldrig igen — ingen rød check, ingen fejlet kørsel, bare
+  # ingen releases. Et fravær af hændelse kan ikke skelnes fra "intet at lave"
+  # (samme klasse som de otte tags der gav nul semver-images, se release.yml).
+  #
+  # Nu kører den på push til main og MÅLER i stedet, før den skærer noget:
+  # `scripts/release_gate.py` kræver at `jenkins/Lint + Test` fra app 4785909
+  # er SUCCESS på præcis dette sha. Enhver måde ikke at vide på er sin egen
+  # exit-kode, og ingen af dem er 0 — fraværende, uafsluttet, ikke-grøn og
+  # instrument-fejl er fire forskellige udfald, ikke ét.
+  #
+  # Bugbot-fundet fra PR #57 er stadig opfyldt: dengang var problemet en
+  # push-trigger UDEN verifikation. Gaten er verifikationen, og den læser
+  # check-runs på commit'et frem for at stole på en hændelses-rækkefølge.
+  push:
     branches: [main]
   workflow_dispatch:
 
@@ -44,9 +52,13 @@ jobs:
     outputs:
       # Empty when this run cut no release — the build job is skipped then.
       tag: ${{ steps.released.outputs.tag }}
-    # workflow_dispatch har intet workflow_run-payload (manuel nødbremse,
-    # kør altid); workflow_run skal have et succesfuldt CI (Go)-run bagved.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # 🔴 Release-commit'et bærer selv `[skip ci]`, og GitHub springer
+    # push-udløste kørsler over på sådan et commit — men den adfærd er
+    # implicit, og en implicit løkke-bremse er ikke en bremse man kan læse.
+    # Betingelsen står derfor EKSPLICIT: en kørsel udløst af vores egen
+    # release-commit stopper her, synligt, uanset hvad GitHub gør.
+    # (workflow_dispatch har intet head_commit — derfor default til '').
+    if: ${{ !contains(github.event.head_commit.message || '', '[skip ci]') }}
     steps:
       - name: Mint GitHub App-token (best-effort — trigger release.yml på tag-push)
         id: app-token
@@ -93,8 +105,29 @@ jobs:
           # token = App-token når tilgængeligt (så tag-pushet trigger
           # release.yml), ellers GITHUB_TOKEN.
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.sha }}
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      # 🔴 GATEN. Intet skæres, før den Jenkins-check der faktisk verificerer
+      # DETTE commit, siger success. Beslutningen er en ren funktion af
+      # check-runs-svaret og er celle-testet mod ti fixturer (grøn, fraværende,
+      # tom, uafsluttet, fejlet, `skipped`, fremmed app, genkørsel begge veje,
+      # misdannet svar) — se `jenkins/release gate`.
+      #
+      # `timeout-seconds` på TRINNET er et bagstop for scriptets egen timeout:
+      # fejler scriptet at afslutte, dør trinnet alligevel rødt frem for at
+      # hænge et job der har `contents: write`.
+      - name: Jenkins skal være grøn på dette commit
+        timeout-minutes: 35
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/release_gate.py \
+            --repo "${{ github.repository }}" \
+            --sha "${{ github.sha }}" \
+            --check 'jenkins/Lint + Test' \
+            --app-id 4785909 \
+            --timeout-seconds 1800
 
       - uses: actions/setup-node@v7
         with:
