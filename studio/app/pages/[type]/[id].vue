@@ -173,15 +173,17 @@ watch(
       {{ envelopeError }}
     </p>
 
-    <template v-if="visual && previewSettings?.previewReady">
+    <template v-if="visual">
       <div class="ve-canvas">
         <VisualPreview
           v-model:locale="locale"
-          :settings="previewSettings"
+          :settings="previewSettings ?? { previewUrl: '', previewOrigin: '', previewReady: false }"
           :type="doc.type"
           :slug="doc.slug"
           :envelope="envelope"
           :selected="selectedInPreview"
+          :doc-fields="docType?.fields || []"
+          :block-defs="sch?.blocks || []"
           @select="onPreviewSelect"
           @back="setView('form')"
         >
@@ -201,16 +203,6 @@ watch(
         </VisualPreview>
       </div>
     </template>
-
-    <div v-else-if="visual" class="ve-empty">
-      <div style="font-size: 30px; margin-bottom: 8px">🖥</div>
-      <strong>Ingen preview-URL for dette space</strong>
-      <p class="rz-field__hint" style="max-width: 44ch; margin: 6px auto 12px">
-        Visuel redigering viser jeres frontend i draft-mode. Angiv sitets preview-URL under
-        Indstillinger — og sitet skal indlæse Resonans' bridge-script på preview-ruten.
-      </p>
-      <NuxtLink to="/settings" class="rz-btn">Gå til Indstillinger</NuxtLink>
-    </div>
 
     <div v-else style="max-width: 720px; margin-top: 16px">
       <SchemaField
@@ -265,14 +257,6 @@ watch(
   flex: 1;
   min-height: 0;
   margin-top: 8px;
-}
-.ve-empty {
-  margin: 40px auto;
-  text-align: center;
-  border: 1px dashed var(--rz-border);
-  border-radius: 12px;
-  padding: 40px 20px;
-  background: var(--rz-bg-subtle);
 }
 /* Forlæg: .pv__blk--on — the selected block card. */
 .ve-editor :deep(.ve-blk-on) {

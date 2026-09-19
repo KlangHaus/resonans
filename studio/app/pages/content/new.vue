@@ -44,6 +44,10 @@ function slugify(s: string): string {
     .replaceAll('å', 'aa')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+    // The API rejects slugs over 200 chars (content.ValidSlug): cut at 200 and
+    // drop a trailing hyphen the cut may leave, so a long title still creates.
+    .slice(0, 200)
+    .replace(/-+$/, '')
 }
 watch(title, (t) => {
   if (!slugTouched.value) slug.value = slugify(t)
