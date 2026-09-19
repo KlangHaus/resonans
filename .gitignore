@@ -13,3 +13,6 @@ coverage/
 # Go
 /resonans
 coverage.out
+
+# Tools the Jenkins checks install into the workspace.
+.ci-tools/
