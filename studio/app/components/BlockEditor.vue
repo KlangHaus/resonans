@@ -91,7 +91,7 @@ function fieldsOf(block: Block): Field[] {
           :block-defs="blockDefs"
           :path="path ? `${path}.${i}.${f.name}` : undefined"
           :model-value="block[f.name]"
-          @update:model-value="(v) => setField(i, f.name, v)"
+          @update:model-value="(v: unknown) => setField(i, f.name, v)"
         />
       </div>
     </div>

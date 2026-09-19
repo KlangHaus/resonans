@@ -84,7 +84,11 @@ export function useResonans() {
     return h
   }
 
-  function req<T>(path: string, opts: Record<string, unknown> = {}): Promise<T> {
+  // No explicit `Promise<T>` return type: $fetch resolves to
+  // TypedInternalResponse<…, T, "get">, which is T for these plain URLs but is
+  // not assignable to Promise<T> by name. Inferring keeps the callers' types
+  // without casting away the difference.
+  function req<T>(path: string, opts: Record<string, unknown> = {}) {
     // `headers` goes LAST: spread after `...opts`, a caller's own headers
     // (e.g. Content-Type) replaced the merged set and dropped the tenant header,
     // so every write with a body got 403 while every read worked.
