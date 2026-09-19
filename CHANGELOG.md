@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/KlangHaus/resonans/compare/v1.10.1...v1.11.0) (2026-09-19)
+
+
+### Features
+
+* **studio:** generisk fallback-preview + fuldskærm i visuel redigering ([#58](https://github.com/KlangHaus/resonans/issues/58)) ([435ed42](https://github.com/KlangHaus/resonans/commit/435ed42b54dcde711bc2af1b0c374c95d66728a0)), closes [#4](https://github.com/KlangHaus/resonans/issues/4) [#54](https://github.com/KlangHaus/resonans/issues/54)
+
 ## [1.10.1](https://github.com/KlangHaus/resonans/compare/v1.10.0...v1.10.1) (2026-09-17)
 
 
