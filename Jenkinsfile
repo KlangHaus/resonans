@@ -130,6 +130,31 @@ klanghausPipeline(
       when: { ctx -> ctx.isPR },
     ],
 
+    // ─── release-gaten (semantic-release.yml) · celle-tabel ─────────────
+    [
+      // 🔴 DETTE CHECK ER BEVISET FOR EN GATE DER IKKE KAN VISES I DRIFT.
+      //    Release-gaten kører kun på et push til main, altså EFTER merge —
+      //    en PR kan derfor aldrig vise at den virker. Det den KAN vise, er at
+      //    beslutningen er rigtig: tabellen kører den rene beslutningsfunktion
+      //    mod ti fixturer og fejler, hvis blot én celle svarer forkert.
+      //
+      //    Nævneren er med vilje en del af udfaldet: en tom fixture-mappe
+      //    FEJLER frem for at melde grønt på nul celler.
+      //
+      //    Celler: grøn · fraværende · tomt svar · uafsluttet · fejlet ·
+      //    `skipped` (som GitHub ellers tæller som opfyldt) · check-run fra en
+      //    FREMMED app med samme navn · genkørsel hvor den nyeste er rød ·
+      //    genkørsel hvor den nyeste er grøn · misdannet svar.
+      //    Muteret tre gange lokalt (skipped=success · app-id-filteret fjernet
+      //    · første run frem for nyeste) → 1, 1 og 2 celler røde; umuteret grøn.
+      context: 'release gate',
+      cmd: '''
+        set -euo pipefail
+        command -v python3 >/dev/null 2>&1 || { echo "python3 mangler paa agenten"; exit 10; }
+        python3 scripts/release_gate.py --selftest scripts/testdata/release-gate
+      ''',
+    ],
+
     // ─── commitlint.yml · commitlint ────────────────────────────────────
     [
       context: 'commitlint',
