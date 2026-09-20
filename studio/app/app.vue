@@ -21,6 +21,18 @@ function backToSpaces() {
   navigateTo('/')
 }
 
+const auth = useAuth()
+// Initials from the signed-in address; '?' when there is no session, so the
+// avatar never shows someone else's letters from a previous login.
+const initials = computed(() => {
+  const mail = auth.user.value?.email || ''
+  return mail ? mail.slice(0, 2).toUpperCase() : '?'
+})
+async function logOut() {
+  await auth.signOut()
+  await navigateTo('/login')
+}
+
 // --- What's New (overlay, Storyblok-style) ---
 const showNews = ref(false)
 
@@ -106,7 +118,25 @@ const NEWS = [
           </button>
         </div>
 
-        <div class="sb-rail__item sb-rail__account" title="Min konto">
+        <!--
+          The account row is the only place the Studio says WHO it thinks you
+          are. With login enabled it shows the signed-in address and can sign
+          out; in dev mode (no auth service configured) it keeps the old static
+          label rather than claiming an identity nobody proved.
+        -->
+        <div
+          v-if="auth.enabled.value"
+          class="sb-rail__item sb-rail__account"
+          :title="auth.user.value?.email || 'Ikke logget ind'"
+          role="button"
+          tabindex="0"
+          @click="logOut"
+          @keydown.enter="logOut"
+        >
+          <span class="sb-rail__avatar">{{ initials }}</span>
+          <span class="sb-rail__label">{{ auth.user.value?.email || 'Log ind' }} · Log ud</span>
+        </div>
+        <div v-else class="sb-rail__item sb-rail__account" title="Min konto (udviklingstilstand — intet login)">
           <span class="sb-rail__avatar">AC</span> <span class="sb-rail__label">Min konto</span>
         </div>
       </div>

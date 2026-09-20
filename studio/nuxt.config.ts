@@ -39,6 +39,14 @@ export default defineNuxtConfig({
       // the BetterAuth session/JWT supplies the tenant; never trust this header
       // server-side in prod.
       devTenant: '',
+      // 🔴 THE LOGIN SWITCH, AND IT IS A POSITIVE OPT-IN.
+      // Empty = no auth service for this environment: no login, dev tenant
+      // header, exactly as before. Set = login required and every editor call
+      // carries a Bearer token. Which host owns the session is a DEPLOYMENT
+      // decision (staging and prod answer on different names), so it is
+      // runtime config — never read from the URL, which would let a page that
+      // frames us point the login somewhere else.
+      authBase: '',
     },
   },
 })
