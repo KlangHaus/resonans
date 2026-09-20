@@ -186,10 +186,24 @@ klanghausPipeline(
       //    npm does not run for registry tarballs) and 0 declare postinstall,
       //    but that is a property of today's tree, not a guarantee.
       //
-      //    Parity caveat, named rather than hidden: this makes OUR half
-      //    deterministic, not the two halves identical — the Actions side runs
-      //    the wagoid action's own bundled tree, which we do not control. Full
-      //    parity arrives when the Actions side goes away.
+      //    Parity caveat, named rather than hidden, and bigger than "the CLI
+      //    wrapper differs": the Actions side runs the wagoid action's own
+      //    bundled tree, and measured in our lockfile vs the action's,
+      //    @commitlint/LINT is 19.8.1 here against 19.1.0 there — that is the
+      //    RULE ENGINE, not just the wrapper. config-conventional is 19.1.0 on
+      //    both sides, so the difference is probably without effect; "probably"
+      //    is the honest word until someone measures a verdict that differs.
+      //    This change makes OUR half deterministic, not the two halves
+      //    identical. Full parity arrives when the Actions side goes away.
+      //
+      //    Measured on the lockfile (by [sikkerhed] on the artefact, re-measured
+      //    by me): 122 packages entries, 121 with a sha512 (the root "" entry
+      //    has none by definition), 0 with a weaker hash, 0 resolved outside
+      //    registry.npmjs.org, and `hasInstallScript: true` on 0 of 121 — npm's
+      //    OWN marking of exactly what --ignore-scripts protects against, which
+      //    is a better object than counting `prepare` in the manifests. It is
+      //    still a property of today's tree; the flag is what makes it a
+      //    property of the command.
       selfInstalls: ['@commitlint/cli': '19.8.1', '@commitlint/config-conventional': '19.1.0'],
       cmd: '''
         set -euo pipefail
@@ -208,9 +222,6 @@ klanghausPipeline(
         [ -n "${KH_MERGE_BASE:-}" ] || exit 13
         [ -f package-lock.json ] || { echo "package-lock.json mangler — pinnet kan ikke haandhaeves"; exit 14; }
 
-        # 🔴 ASSERT THE LOCKFILE, NOT THE ARGUMENTS. The rules live in
-        # config-conventional, so that is the version worth gating on — and the
-        # lockfile is the object npm actually installs from.
         # 🔴 ASSERT THE LOCKFILE, NOT THE ARGUMENTS. The rules live in
         # config-conventional, so that is the version worth gating on — and the
         # lockfile is the object npm actually installs from. One line, no
