@@ -36,10 +36,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 🔴 EN permissions-BLOK ER UDTØMMENDE: alt der ikke står her, er `none`.
+# Release-gaten læser check-runs, og den rettighed stod ikke på listen, så
+# GitHub gav 403 på hvert eneste opslag — i 1800 sekunder, på et check der
+# beviseligt var grønt efter 2 min 46 s (kørsel 35494091081, sikkerheds
+# måling på resonans#62). Tilføjer man et trin der LÆSER noget nyt, skal man
+# spørge hvad blokken siger om præcis dét — ikke om det, der stod der før.
 permissions:
   contents: write # opret tags + commit CHANGELOG
   issues: write # kommentér på released issues
   pull-requests: write # kommentér på released PRs
+  checks: read # release-gaten læser jenkins/Lint + Test på dette sha
 
 concurrency:
   group: semantic-release-${{ github.ref }}
