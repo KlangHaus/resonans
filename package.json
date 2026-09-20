@@ -3,5 +3,12 @@
   "version": "0.0.0-semantic-release",
   "private": true,
   "description": "semantic-release-anker (Go-service; ingen npm-publish). Version styres af git-tags.",
-  "repository": { "type": "git", "url": "https://github.com/KlangHaus/resonans.git" }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KlangHaus/resonans.git"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.1.0"
+  }
 }

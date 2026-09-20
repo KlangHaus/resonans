@@ -164,46 +164,73 @@ klanghausPipeline(
       when: { ctx -> ctx.isPR },
       // The merge base comes from the library's own facility: it binds the
       // checkout credential, deepens the clone until the histories meet, and
-      // treats an EMPTY merge base as an error rather than a result. After a
-      // shallow fetch `origin/main` exists while the merge base is empty, and
-      // commitlint would then lint a different interval — green without
-      // measuring the branch's commits.
+      // treats an EMPTY merge base as an error rather than a result.
       needsMergeBase: true,
-      // Actions runs `wagoid/commitlint-github-action@v6`, which bundles its
-      // own copies. [permissions] measured them in the action's COMMITTED
-      // package-lock.json (not guessed from its `^19.1.0` range):
-      //     @commitlint/lint                = 19.1.0
-      //     @commitlint/config-conventional = 19.1.0
-      // config-conventional carries the RULES, hence the verdicts, so it is
-      // pinned to 19.1.0. The CLI wrapper is a different package from the
-      // action's direct `lint()` call; that difference is named rather than
-      // hidden. Same pins as notifications and permissions.
+      // Actions runs `wagoid/commitlint-github-action@v6`, which bundles its own
+      // copies. [permissions] measured them in the action's COMMITTED
+      // package-lock.json: @commitlint/lint and @commitlint/config-conventional
+      // are 19.1.0. config-conventional carries the RULES, hence the verdicts.
+      //
+      // 🔴 THE VERSIONS ARE NOW PINNED BY A LOCKFILE, NOT BY TWO ARGUMENTS.
+      //    `npm install @commitlint/cli@19.8.1 …` pinned the two direct
+      //    versions and let everything else float: measured 104 packages with
+      //    118 floating dependency ranges against 4 exact ones. Two installs in
+      //    the same minute produced identical trees — which says the registry
+      //    answers consistently right now, not that a run next month will.
+      //    Stability over minutes is not a pin.
+      //    `package-lock.json` pins all 121 entries with a sha512 integrity
+      //    each, and `npm ci` REFUSES to run when package.json and the lockfile
+      //    disagree (measured: EUSAGE, exit 1) — so the lockfile is a gate
+      //    rather than decoration. `--ignore-scripts` makes "no code runs at
+      //    install time" structural: today 8 packages declare `prepare` (which
+      //    npm does not run for registry tarballs) and 0 declare postinstall,
+      //    but that is a property of today's tree, not a guarantee.
+      //
+      //    Parity caveat, named rather than hidden: this makes OUR half
+      //    deterministic, not the two halves identical — the Actions side runs
+      //    the wagoid action's own bundled tree, which we do not control. Full
+      //    parity arrives when the Actions side goes away.
       selfInstalls: ['@commitlint/cli': '19.8.1', '@commitlint/config-conventional': '19.1.0'],
       cmd: '''
         set -euo pipefail
-        # 🔴 `npx --package` DOES NOT WORK here, and the failure looks like a
-        # lint finding: commitlint.config.mjs has
-        # `extends: ['@commitlint/config-conventional']`, and extends resolves
-        # from the WORKING DIRECTORY. With npx the package sits in npx' own temp
-        # dir, so the lookup fails with exit 1 — the same code a real violation
-        # gives. Install into the workspace so extends resolves from there.
-        #
         # Diagnosis by exit code, because the check-run summary shows only
-        # `kode N`:
+        # `kode N`. Each state is its own code, and none of them is 0:
         #   10 = node/npm missing on the agent
-        #   11 = npm install failed (network/registry)
-        #   12 = wrong commitlint version
+        #   11 = npm ci failed for another reason (network/registry)
+        #   12 = wrong commitlint version after install
         #   13 = KH_MERGE_BASE empty despite needsMergeBase
+        #   14 = package.json and package-lock.json disagree (EUSAGE)
+        #   15 = the lockfile does not pin config-conventional 19.1.0
         #    1 = commitlint found actual violations  <- the ONLY real finding
         mkdir -p .ci-tools
         command -v node >/dev/null 2>&1 || exit 10
         command -v npm  >/dev/null 2>&1 || exit 10
         [ -n "${KH_MERGE_BASE:-}" ] || exit 13
+        [ -f package-lock.json ] || { echo "package-lock.json mangler — pinnet kan ikke haandhaeves"; exit 14; }
 
-        npm install --no-save --no-audit --no-fund --silent \
-          @commitlint/cli@19.8.1 @commitlint/config-conventional@19.1.0 || exit 11
-        ./node_modules/.bin/commitlint --version > .ci-tools/cl.txt 2>&1 || exit 11
-        grep -qE '(^|[^0-9.])19\\.8\\.1($|[^0-9.])' .ci-tools/cl.txt || exit 12
+        # 🔴 ASSERT THE LOCKFILE, NOT THE ARGUMENTS. The rules live in
+        # config-conventional, so that is the version worth gating on — and the
+        # lockfile is the object npm actually installs from.
+        # 🔴 ASSERT THE LOCKFILE, NOT THE ARGUMENTS. The rules live in
+        # config-conventional, so that is the version worth gating on — and the
+        # lockfile is the object npm actually installs from. One line, no
+        # heredoc: an indented heredoc body would reach python3 with its
+        # indentation and die on IndentationError, which is a failure about the
+        # quoting and not about the lockfile.
+        lock_ver="$(python3 -c "import json;print((json.load(open('package-lock.json')).get('packages',{}).get('node_modules/@commitlint/config-conventional',{}) or {}).get('version',''))")"
+        [ "$lock_ver" = "19.1.0" ] || { echo "lockfilen pinner config-conventional '$lock_ver', forventet 19.1.0"; exit 15; }
+
+        if ! npm ci --ignore-scripts --no-audit --no-fund > .ci-tools/npmci.log 2>&1; then
+          # EUSAGE is npm's own error CODE for a lockfile that disagrees with
+          # package.json — a stabler signal than its sentence, and a different
+          # world from a registry that is down.
+          if grep -q 'EUSAGE' .ci-tools/npmci.log; then
+            echo "package.json og package-lock.json er ikke i sync (npm EUSAGE)"; tail -3 .ci-tools/npmci.log; exit 14
+          fi
+          echo "npm ci fejlede"; tail -5 .ci-tools/npmci.log; exit 11
+        fi
+        ver_out="$(./node_modules/.bin/commitlint --version 2>&1 || true)"
+        grep -qE '(^|[^0-9.])19\\.8\\.1($|[^0-9.])' <<<"$ver_out" || { echo "commitlint er IKKE 19.8.1: $ver_out"; exit 12; }
 
         ./node_modules/.bin/commitlint --from "$KH_MERGE_BASE" --to HEAD --config commitlint.config.mjs
       ''',
