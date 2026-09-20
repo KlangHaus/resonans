@@ -47,6 +47,19 @@ func (s *MemoryStore) List(_ context.Context, tenantID uuid.UUID, f ListFilter) 
 		if f.Status != "" && d.Status != f.Status {
 			continue
 		}
+		// The bin is a separate axis from status: a deleted document keeps the
+		// status it had, so filtering on status alone would show it again.
+		switch f.Deleted {
+		case DeletedExclude:
+			if d.DeletedAt != nil {
+				continue
+			}
+		case DeletedOnly:
+			if d.DeletedAt == nil {
+				continue
+			}
+		case DeletedInclude:
+		}
 		out = append(out, cloneDoc(d))
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -72,7 +85,7 @@ func (s *MemoryStore) GetPublished(_ context.Context, tenantID uuid.UUID, typ, s
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, d := range s.byID {
-		if d.TenantID == tenantID && d.Type == typ && d.Slug == slug && d.Status == StatusPublished {
+		if d.TenantID == tenantID && d.Type == typ && d.Slug == slug && d.Status == StatusPublished && d.DeletedAt == nil {
 			return cloneDoc(d), nil
 		}
 	}
@@ -83,7 +96,7 @@ func (s *MemoryStore) GetBySlug(_ context.Context, tenantID uuid.UUID, typ, slug
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, d := range s.byID {
-		if d.TenantID == tenantID && d.Type == typ && d.Slug == slug {
+		if d.TenantID == tenantID && d.Type == typ && d.Slug == slug && d.DeletedAt == nil {
 			return cloneDoc(d), nil
 		}
 	}
@@ -97,8 +110,11 @@ func (s *MemoryStore) Create(_ context.Context, tenantID uuid.UUID, in CreateInp
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Only LIVE documents reserve a slug — the same rule the partial unique
+	// index enforces in Postgres (migrations/0008). A page in the bin must not
+	// block recreating it, or the bin becomes a trap instead of an undo.
 	for _, d := range s.byID {
-		if d.TenantID == tenantID && d.Dataset == DefaultDataset && d.Type == in.Type && d.Slug == in.Slug {
+		if d.TenantID == tenantID && d.Dataset == DefaultDataset && d.Type == in.Type && d.Slug == in.Slug && d.DeletedAt == nil {
 			return Document{}, ErrSlugConflict
 		}
 	}
@@ -132,6 +148,9 @@ func (s *MemoryStore) Update(_ context.Context, tenantID, id uuid.UUID, in Updat
 	if !ok || d.TenantID != tenantID {
 		return Document{}, ErrNotFound
 	}
+	if d.DeletedAt != nil {
+		return Document{}, ErrDeleted
+	}
 	if in.Type != nil {
 		d.Type = *in.Type
 	}
@@ -154,6 +173,9 @@ func (s *MemoryStore) Publish(_ context.Context, tenantID, id uuid.UUID) (Docume
 	d, ok := s.byID[id]
 	if !ok || d.TenantID != tenantID {
 		return Document{}, ErrNotFound
+	}
+	if d.DeletedAt != nil {
+		return Document{}, ErrDeleted
 	}
 	now := s.now().UTC()
 	d.Status = StatusPublished
@@ -192,6 +214,9 @@ func (s *MemoryStore) Rollback(_ context.Context, tenantID, docID uuid.UUID, ver
 	if !ok || d.TenantID != tenantID {
 		return Document{}, ErrNotFound
 	}
+	if d.DeletedAt != nil {
+		return Document{}, ErrDeleted
+	}
 	var snap *Version
 	for i := range s.versions {
 		if s.versions[i].DocumentID == docID && s.versions[i].Version == version {
@@ -221,4 +246,54 @@ func cloneDoc(d Document) Document {
 		c.PublishedAt = &t
 	}
 	return c
+}
+
+// SoftDelete puts a document in the bin. The row, its versions and its history
+// stay; only `DeletedAt` changes. Version is NOT bumped: deleting is not an
+// edit of the content, and bumping it would make the ETag change for a
+// document nobody can read any more.
+func (s *MemoryStore) SoftDelete(_ context.Context, tenantID, id uuid.UUID) (Document, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	d, ok := s.byID[id]
+	if !ok || d.TenantID != tenantID {
+		return Document{}, ErrNotFound
+	}
+	if d.DeletedAt != nil {
+		return Document{}, ErrDeleted
+	}
+	now := s.now().UTC()
+	d.DeletedAt = &now
+	d.UpdatedAt = now
+	s.byID[id] = d
+	return cloneDoc(d), nil
+}
+
+// Restore takes a document back out of the bin — unless a live document has
+// taken its slug in the meantime, in which case the LIVE one keeps it and the
+// restore fails. Silently renaming either document would be worse: one of them
+// would stop answering on the URL its readers use.
+func (s *MemoryStore) Restore(_ context.Context, tenantID, id uuid.UUID) (Document, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	d, ok := s.byID[id]
+	if !ok || d.TenantID != tenantID {
+		return Document{}, ErrNotFound
+	}
+	if d.DeletedAt == nil {
+		return Document{}, ErrNotDeleted
+	}
+	for _, other := range s.byID {
+		if other.ID != d.ID && other.TenantID == tenantID && other.Dataset == d.Dataset &&
+			other.Type == d.Type && other.Slug == d.Slug && other.DeletedAt == nil {
+			return Document{}, ErrSlugConflict
+		}
+	}
+	now := s.now().UTC()
+	d.DeletedAt = nil
+	d.UpdatedAt = now
+	s.byID[id] = d
+	return cloneDoc(d), nil
 }

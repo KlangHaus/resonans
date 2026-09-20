@@ -14,7 +14,8 @@ import { bodyToEnvelopePath, envelopeToBodyPath } from '~/utils/visualEditing'
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params.id as string)
-const { schema, getDocument, updateDocument, publishDocument, getPreviewSettings, previewEnvelope } = useResonans()
+const { schema, getDocument, updateDocument, publishDocument, deleteDocument, getPreviewSettings, previewEnvelope } =
+  useResonans()
 
 const { data: sch } = await useAsyncData('schema-edit', () => schema())
 const { data: doc, refresh } = await useAsyncData(() => `doc-${id.value}`, () => getDocument(id.value), { watch: [id] })
@@ -39,6 +40,27 @@ async function save() {
     msg.value = `Fejl: ${(e as Error).message}`
   } finally {
     saving.value = false
+  }
+}
+
+// 🔴 SLETNING ER EN PAPIRKURV, IKKE EN UDSLETNING (Allan 20/9). Derfor
+// spørger vi én gang og siger hvad der faktisk sker — "kan gendannes" er
+// forskellen på en advarsel folk læser og en de klikker forbi.
+const deleting = ref(false)
+async function remove() {
+  if (!doc.value || deleting.value) return
+  const ok = confirm(
+    `Flyt "${doc.value.title}" til papirkurven?\n\nDen forsvinder fra listen og fra jeres sites med det samme. Du kan gendanne den fra Papirkurv-filteret i Content.`,
+  )
+  if (!ok) return
+  deleting.value = true
+  try {
+    await deleteDocument(doc.value.id)
+    await navigateTo('/content')
+  } catch (e: unknown) {
+    msg.value = `Kunne ikke slette: ${(e as { message?: string })?.message ?? 'ukendt fejl'}`
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -167,6 +189,9 @@ watch(
         <span class="rz-field__hint">{{ msg }}</span>
         <button class="rz-btn" :disabled="saving" @click="save">Gem</button>
         <button class="rz-btn rz-btn--primary" @click="publish">Udgiv</button>
+        <button class="rz-btn rz-btn--danger" :disabled="deleting" title="Flyt til papirkurven" @click="remove">
+          {{ deleting ? 'Sletter…' : 'Slet' }}
+        </button>
       </div>
     </div>
     <p v-if="visual && envelopeError" class="rz-field__hint" style="color: var(--rz-danger); margin: 0 0 6px">
@@ -273,5 +298,16 @@ watch(
   .ve-canvas {
     height: 90vh;
   }
+}
+</style>
+
+<style scoped>
+/* The only destructive action in the editor: it must not look like Gem. */
+.rz-btn--danger {
+  color: #b3261e;
+  border-color: color-mix(in srgb, #b3261e 35%, var(--rz-border));
+}
+.rz-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #b3261e 8%, transparent);
 }
 </style>

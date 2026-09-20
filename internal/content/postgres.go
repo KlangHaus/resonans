@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,7 +16,7 @@ import (
 // uniqueViolation is the Postgres SQLSTATE for a unique-constraint breach.
 const uniqueViolation = "23505"
 
-const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, version, published_at, created_at, updated_at`
+const documentColumns = `id, tenant_id, dataset, type, slug, title, body, status, version, published_at, created_at, updated_at, deleted_at`
 
 // PostgresStore is the persistent, RLS-backed Store. Every operation runs in a
 // transaction that first sets the tenant GUC (set_config('app.tenant_id', …,
@@ -67,6 +68,15 @@ func (s *PostgresStore) List(ctx context.Context, tenantID uuid.UUID, f ListFilt
 		args = append(args, f.Status)
 		conds = append(conds, fmt.Sprintf("status = $%d", len(args)))
 	}
+	// The bin is its own axis, not a status: a deleted document keeps the
+	// status it had, so a status filter alone would list it again.
+	switch f.Deleted {
+	case DeletedExclude:
+		conds = append(conds, "deleted_at is null")
+	case DeletedOnly:
+		conds = append(conds, "deleted_at is not null")
+	case DeletedInclude:
+	}
 	q := "select " + documentColumns + " from resonans_app.documents where " +
 		strings.Join(conds, " and ") + " order by created_at desc, id asc"
 
@@ -109,7 +119,7 @@ func (s *PostgresStore) GetPublished(ctx context.Context, tenantID uuid.UUID, ty
 	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx,
 			"select "+documentColumns+" from resonans_app.documents "+
-				"where dataset = $1 and type = $2 and slug = $3 and status = 'published'",
+				"where dataset = $1 and type = $2 and slug = $3 and status = 'published' and deleted_at is null",
 			DefaultDataset, typ, slug)
 		var scanErr error
 		d, scanErr = scanDocRow(row)
@@ -123,7 +133,7 @@ func (s *PostgresStore) GetBySlug(ctx context.Context, tenantID uuid.UUID, typ, 
 	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx,
 			"select "+documentColumns+" from resonans_app.documents "+
-				"where dataset = $1 and type = $2 and slug = $3", DefaultDataset, typ, slug)
+				"where dataset = $1 and type = $2 and slug = $3 and deleted_at is null", DefaultDataset, typ, slug)
 		var scanErr error
 		d, scanErr = scanDocRow(row)
 		return scanErr
@@ -173,11 +183,14 @@ func (s *PostgresStore) Update(ctx context.Context, tenantID, id uuid.UUID, in U
 			  body       = coalesce($4, body),
 			  version    = version + 1,
 			  updated_at = now()
-			where id = $1
+			where id = $1 and deleted_at is null
 			returning `+documentColumns,
 			id, in.Type, in.Title, body)
 		var scanErr error
 		d, scanErr = scanDocRow(row)
+		if errors.Is(scanErr, ErrNotFound) {
+			return classifyMiss(ctx, tx, id)
+		}
 		return scanErr
 	})
 	return d, err
@@ -192,10 +205,13 @@ func (s *PostgresStore) Publish(ctx context.Context, tenantID, id uuid.UUID) (Do
 			  published_at = now(),
 			  version      = version + 1,
 			  updated_at   = now()
-			where id = $1
+			where id = $1 and deleted_at is null
 			returning `+documentColumns, id)
 		var scanErr error
 		d, scanErr = scanDocRow(row)
+		if errors.Is(scanErr, ErrNotFound) {
+			return classifyMiss(ctx, tx, id)
+		}
 		if scanErr != nil {
 			return scanErr
 		}
@@ -267,7 +283,7 @@ func scanDoc(sc scanner) (Document, error) {
 	var d Document
 	if err := sc.Scan(
 		&d.ID, &d.TenantID, &d.Dataset, &d.Type, &d.Slug, &d.Title,
-		&d.Body, &d.Status, &d.Version, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt,
+		&d.Body, &d.Status, &d.Version, &d.PublishedAt, &d.CreatedAt, &d.UpdatedAt, &d.DeletedAt,
 	); err != nil {
 		return Document{}, err
 	}
@@ -281,6 +297,89 @@ func scanDocRow(row pgx.Row) (Document, error) {
 			return Document{}, ErrNotFound
 		}
 		return Document{}, fmt.Errorf("content: scan: %w", err)
+	}
+	return d, nil
+}
+
+// classifyMiss turns "the update matched no row" into the RIGHT error. Without
+// it, an operation on a deleted document would report ErrNotFound — truthful
+// about the query, misleading about the world: the editor would recreate
+// content that is one click from coming back. The lookup runs in the SAME
+// transaction, so RLS scopes it exactly like the statement that missed.
+func classifyMiss(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	var deleted *time.Time
+	err := tx.QueryRow(ctx, "select deleted_at from resonans_app.documents where id = $1", id).Scan(&deleted)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return ErrNotFound
+	case err != nil:
+		return fmt.Errorf("content: classify miss: %w", err)
+	case deleted != nil:
+		return ErrDeleted
+	default:
+		// The row exists, is live, and still did not match: that is not a
+		// state this code knows, so it must not be reported as one it does.
+		return fmt.Errorf("content: update matched no row for a live document %s", id)
+	}
+}
+
+// SoftDelete puts a document in the bin. `version` is deliberately NOT bumped:
+// deleting is not an edit of the content, and the version numbers the history
+// snapshots. The row, its versions and its history stay.
+func (s *PostgresStore) SoftDelete(ctx context.Context, tenantID, id uuid.UUID) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			update resonans_app.documents set
+			  deleted_at = now(),
+			  updated_at = now()
+			where id = $1 and deleted_at is null
+			returning `+documentColumns, id)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		if errors.Is(scanErr, ErrNotFound) {
+			return classifyMiss(ctx, tx, id)
+		}
+		return scanErr
+	})
+	return d, err
+}
+
+// Restore takes a document back out of the bin. The partial unique index
+// (migrations/0008) covers live rows only, so a slug taken in the meantime
+// makes this fail with ErrSlugConflict — the LIVE document keeps the slug,
+// because renaming either one would break a URL its readers already use.
+func (s *PostgresStore) Restore(ctx context.Context, tenantID, id uuid.UUID) (Document, error) {
+	var d Document
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			update resonans_app.documents set
+			  deleted_at = null,
+			  updated_at = now()
+			where id = $1 and deleted_at is not null
+			returning `+documentColumns, id)
+		var scanErr error
+		d, scanErr = scanDocRow(row)
+		if errors.Is(scanErr, ErrNotFound) {
+			// Either the id is unknown, or the document was never deleted.
+			var deleted *time.Time
+			e := tx.QueryRow(ctx, "select deleted_at from resonans_app.documents where id = $1", id).Scan(&deleted)
+			if errors.Is(e, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			if e != nil {
+				return fmt.Errorf("content: restore classify: %w", e)
+			}
+			return ErrNotDeleted
+		}
+		return scanErr
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+			return Document{}, ErrSlugConflict
+		}
+		return Document{}, err
 	}
 	return d, nil
 }
