@@ -1,3 +1,15 @@
+# [1.12.0](https://github.com/KlangHaus/resonans/compare/v1.11.1...v1.12.0) (2026-09-20)
+
+
+### Bug Fixes
+
+* **ci:** release gate needs checks:read — 403 killed the release on main ([#64](https://github.com/KlangHaus/resonans/issues/64)) ([2176aa6](https://github.com/KlangHaus/resonans/commit/2176aa68a307d5e5b4027274c943df53f11ab08e)), closes [#62](https://github.com/KlangHaus/resonans/issues/62) [resonans#62](https://github.com/resonans/issues/62)
+
+
+### Features
+
+* **studio:** log in against BetterAuth and send the JWT the API requires ([#63](https://github.com/KlangHaus/resonans/issues/63)) ([f8abf34](https://github.com/KlangHaus/resonans/commit/f8abf3451d3e234d03e993cfa86b58369bcd592f))
+
 ## [1.11.1](https://github.com/KlangHaus/resonans/compare/v1.11.0...v1.11.1) (2026-09-19)
 
 
