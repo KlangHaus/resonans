@@ -156,3 +156,71 @@ func TestAssetRouteServesStoredBytesAndRefusesTheRest(t *testing.T) {
 		t.Fatalf("planted markup: status %d, want 404", rec.Code)
 	}
 }
+
+// The traversal table above measures safeKey: path.Clean has already absorbed
+// every climb by the time os.Root would see it, so that test never reaches the
+// kernel boundary. A SYMLINK is the case safeKey cannot see — the key is an
+// ordinary name, and only os.Root refuses to follow it out of the volume. This
+// is the cell for that second mechanism; without it, os.Root would be armed
+// against nothing measured.
+func TestASymlinkOutOfTheVolumeIsNotFollowed(t *testing.T) {
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.png")
+	original := []byte("do not touch")
+	if err := os.WriteFile(secret, original, 0o600); err != nil {
+		t.Fatalf("seed outside file: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "tenant-a"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(secret, filepath.Join(dir, "tenant-a", "escape.png")); err != nil {
+		t.Skipf("symlinks unavailable on this filesystem: %v", err)
+	}
+
+	b, err := NewDiskBackend(dir)
+	if err != nil {
+		t.Fatalf("new disk backend: %v", err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+
+	// Positive control in the same run: an ordinary key in the same directory
+	// must still work, or "everything fails" would pass the assertions below.
+	const ok = "tenant-a/ordinary.png"
+	if err := b.Put(context.Background(), ok, "image/png", pngBytes(t, 2, 2)); err != nil {
+		t.Fatalf("an ordinary key in the same directory was refused: %v", err)
+	}
+	if _, _, err := b.Open(ok); err != nil {
+		t.Fatalf("an ordinary key in the same directory could not be read: %v", err)
+	}
+
+	if _, _, err := b.Open("tenant-a/escape.png"); err == nil {
+		t.Fatal("Open read through a symlink pointing out of the volume")
+	}
+
+	// Put is allowed to SUCCEED here: the rename replaces the link entry itself
+	// rather than writing through it, which is a safe outcome and the one Go's
+	// os.Root actually produces. The property under test is not "Put errors" —
+	// asserting that would pin an implementation detail instead of the security
+	// boundary. It is that nothing outside the volume changed, and that what we
+	// wrote is readable back from INSIDE it.
+	payload := pngBytes(t, 3, 3)
+	if err := b.Put(context.Background(), "tenant-a/escape.png", "image/png", payload); err != nil {
+		t.Logf("Put refused the symlinked name: %v", err)
+	}
+	got, err := os.ReadFile(secret)
+	if err != nil {
+		t.Fatalf("read outside file: %v", err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("the file outside the volume was modified through the symlink: %q", got)
+	}
+	inside, err := os.Lstat(filepath.Join(dir, "tenant-a", "escape.png"))
+	if err != nil {
+		t.Fatalf("stat inside the volume: %v", err)
+	}
+	if inside.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("the entry inside the volume is still a symlink out of it")
+	}
+}

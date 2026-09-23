@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // StorageBackend stores asset bytes under a key. The metadata lives in the
@@ -150,7 +152,16 @@ type ByteServer interface {
 // directory. It is what makes Resonans self-hostable without a CDN account: a
 // mounted volume is the only dependency, and the bytes survive a restart —
 // which the in-memory backend does not.
-type DiskBackend struct{ root string }
+//
+// Every path operation goes through os.Root, so the root is enforced by the
+// KERNEL rather than by safeKey's string check. Both are kept: safeKey rejects
+// a malformed key early and with a distinguishable error, while os.Root is what
+// still holds if safeKey is ever weakened, or if a symlink inside the volume
+// points somewhere else — a case no amount of key parsing can see.
+type DiskBackend struct {
+	root *os.Root
+	dir  string
+}
 
 // NewDiskBackend constructs a disk backend rooted at dir, creating it if needed.
 func NewDiskBackend(dir string) (*DiskBackend, error) {
@@ -158,52 +169,52 @@ func NewDiskBackend(dir string) (*DiskBackend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("media: disk root: %w", err)
 	}
-	if err := os.MkdirAll(abs, 0o750); err != nil {
+	if err := os.MkdirAll(abs, 0o700); err != nil {
 		return nil, fmt.Errorf("media: disk root: %w", err)
 	}
-	return &DiskBackend{root: abs}, nil
+	root, err := os.OpenRoot(abs)
+	if err != nil {
+		return nil, fmt.Errorf("media: disk root: %w", err)
+	}
+	return &DiskBackend{root: root, dir: abs}, nil
 }
 
 // Name identifies the backend.
 func (b *DiskBackend) Name() string { return "disk" }
 
-func (b *DiskBackend) pathFor(key string) (string, error) {
-	clean, err := safeKey(key)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(b.root, filepath.FromSlash(clean)), nil
-}
+// Close releases the root directory handle.
+func (b *DiskBackend) Close() error { return b.root.Close() }
 
-// Put writes data under key. The write is atomic — a temp file in the target
-// directory, then a rename — so a reader never sees a half-written asset and a
-// failed upload leaves no truncated file behind under the real name.
+// Put writes data under key. The write is atomic — a uniquely named temp file
+// in the target directory, then a rename — so a reader never observes a
+// half-written asset and a failed upload leaves no truncated file behind under
+// the real name.
 func (b *DiskBackend) Put(_ context.Context, key, _ string, data []byte) error {
-	name, err := b.pathFor(key)
+	name, err := safeKey(key)
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(name)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("media: disk put: %w", err)
+	if dir := path.Dir(name); dir != "." {
+		if err := b.root.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("media: disk put: %w", err)
+		}
 	}
-	tmp, err := os.CreateTemp(dir, ".upload-*")
+	tmp := path.Join(path.Dir(name), ".upload-"+uuid.NewString())
+	// O_EXCL makes the create fail rather than clobber, so two uploads racing on
+	// the same name cannot write into one file.
+	f, err := b.root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("media: disk put: %w", err)
 	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }() // a no-op once the rename succeeded
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
+	defer func() { _ = b.root.Remove(tmp) }() // a no-op once the rename succeeded
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("media: disk put: %w", err)
 	}
-	if err := tmp.Close(); err != nil {
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("media: disk put: %w", err)
 	}
-	if err := os.Chmod(tmpName, 0o640); err != nil {
-		return fmt.Errorf("media: disk put: %w", err)
-	}
-	if err := os.Rename(tmpName, name); err != nil {
+	if err := b.root.Rename(tmp, name); err != nil {
 		return fmt.Errorf("media: disk put: %w", err)
 	}
 	return nil
@@ -212,11 +223,11 @@ func (b *DiskBackend) Put(_ context.Context, key, _ string, data []byte) error {
 // Open returns the stored bytes for key. A missing object reports fs.ErrNotExist
 // so the caller can answer 404 without inspecting the message.
 func (b *DiskBackend) Open(key string) (io.ReadSeekCloser, int64, error) {
-	name, err := b.pathFor(key)
+	name, err := safeKey(key)
 	if err != nil {
 		return nil, 0, err
 	}
-	f, err := os.Open(name) //nolint:gosec // key is validated by safeKey above
+	f, err := b.root.Open(name)
 	if err != nil {
 		return nil, 0, err
 	}
