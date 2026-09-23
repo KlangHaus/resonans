@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/KlangHaus/resonans/compare/v1.13.0...v1.14.0) (2026-09-23)
+
+
+### Features
+
+* **media:** a disk backend so Resonans self-hosts without a CDN account ([#68](https://github.com/KlangHaus/resonans/issues/68)) ([68b967b](https://github.com/KlangHaus/resonans/commit/68b967beed0cabb1197846e4975f4048d1829f43))
+
 # [1.13.0](https://github.com/KlangHaus/resonans/compare/v1.12.0...v1.13.0) (2026-09-23)
 
 
