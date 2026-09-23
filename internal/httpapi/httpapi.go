@@ -82,6 +82,11 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/documents", h.createDocument)
 	mux.HandleFunc("PUT /api/v1/documents/{id}", h.updateDocument)
 	mux.HandleFunc("POST /api/v1/documents/{id}/publish", h.publishDocument)
+	// Soft delete (Allan 2026-09-20): the bin, not an erasure. DELETE puts the
+	// document away; restore takes it back. Both are editor actions, both are
+	// tenant-scoped by the verified actor like every other route here.
+	mux.HandleFunc("DELETE /api/v1/documents/{id}", h.deleteDocument)
+	mux.HandleFunc("POST /api/v1/documents/{id}/restore", h.restoreDocument)
 	// Media assets — tenant-scoped.
 	mux.HandleFunc("POST /api/v1/assets", h.uploadAsset)
 	mux.HandleFunc("GET /api/v1/assets", h.listAssets)
@@ -559,6 +564,15 @@ func (h *Handlers) listDocuments(w http.ResponseWriter, r *http.Request) {
 		Type:   r.URL.Query().Get("type"),
 		Status: r.URL.Query().Get("status"),
 	}
+	// ?deleted=only lists the bin, ?deleted=include lists both. Anything else
+	// — including a typo — lists only live documents, because the failure
+	// direction that matters is never showing deleted content by accident.
+	switch r.URL.Query().Get("deleted") {
+	case "only":
+		f.Deleted = content.DeletedOnly
+	case "include":
+		f.Deleted = content.DeletedInclude
+	}
 	docs, err := h.store.List(r.Context(), tid, f)
 	if err != nil {
 		h.writeErr(w, err)
@@ -675,6 +689,45 @@ func (h *Handlers) updateDocument(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, d)
 }
 
+func (h *Handlers) deleteDocument(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	// The deleted document is returned, not an empty 204: the editor needs
+	// `deletedAt` to show "in the bin since …" and to offer the undo without a
+	// second round trip.
+	d, err := h.store.SoftDelete(r.Context(), tid, id)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *Handlers) restoreDocument(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	d, err := h.store.Restore(r.Context(), tid, id)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
 func (h *Handlers) publishDocument(w http.ResponseWriter, r *http.Request) {
 	tid, ok := h.tenant(w, r)
 	if !ok {
@@ -700,6 +753,12 @@ func (h *Handlers) writeErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, errBody("not found"))
 	case errors.Is(err, content.ErrSlugConflict):
 		writeJSON(w, http.StatusConflict, errBody("slug already exists"))
+	// 🔴 409, NOT 404. "Deleted" and "never existed" are different worlds for
+	// the person reading the message: one of them means "press undo".
+	case errors.Is(err, content.ErrDeleted):
+		writeJSON(w, http.StatusConflict, errBody("document is deleted; restore it first"))
+	case errors.Is(err, content.ErrNotDeleted):
+		writeJSON(w, http.StatusConflict, errBody("document is not deleted"))
 	case errors.Is(err, content.ErrInvalidSlug):
 		writeJSON(w, http.StatusBadRequest, errBody("invalid slug: lowercase a-z, 0-9 and single hyphens (1-200 chars)"))
 	case errors.Is(err, content.ErrInvalid):

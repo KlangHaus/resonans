@@ -51,6 +51,8 @@ export interface Document {
   publishedAt?: string
   createdAt: string
   updatedAt: string
+  // Absent for a live document; set while it is in the bin.
+  deletedAt?: string
 }
 
 export interface PreviewSettings {
@@ -130,6 +132,15 @@ export function useResonans() {
 
   return {
     schema: () => req<Schema>('/api/v1/schema'),
+    // The bin is a separate axis from status, so it is a separate argument:
+    // folding it into `status` would make "published" and "deleted" look like
+    // alternatives when a deleted document keeps the status it had.
+    deleteDocument: (id: string) => req<Document>(`/api/v1/documents/${id}`, { method: 'DELETE' }),
+    restoreDocument: (id: string) => req<Document>(`/api/v1/documents/${id}/restore`, { method: 'POST' }),
+    listDeletedDocuments: (type: string) =>
+      req<{ documents: Document[] }>(
+        `/api/v1/documents?type=${encodeURIComponent(type)}&deleted=only`,
+      ).then((r) => r.documents),
     listDocuments: (type: string, status?: string) =>
       req<{ documents: Document[] }>(
         `/api/v1/documents?type=${encodeURIComponent(type)}${status ? `&status=${status}` : ''}`,

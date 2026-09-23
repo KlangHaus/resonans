@@ -35,6 +35,14 @@ var (
 	ErrInvalid      = errors.New("content: invalid input")
 	// ErrInvalidSlug wraps ErrInvalid (still a 400) with the reason.
 	ErrInvalidSlug = fmt.Errorf("%w: slug must be lowercase a-z, 0-9 and single hyphens (1-200 chars)", ErrInvalid)
+	// ErrDeleted is returned when an operation is attempted on a document that
+	// is in the bin. It is NOT ErrNotFound: the editor must be able to tell
+	// "this is gone" from "this is deleted, restore it first", or they will
+	// recreate content that is one click from coming back.
+	ErrDeleted = errors.New("content: document is deleted; restore it first")
+	// ErrNotDeleted is the restore of a document that was never deleted — a
+	// no-op dressed as an action, which hides a mistaken id.
+	ErrNotDeleted = errors.New("content: document is not deleted")
 )
 
 // slugPattern is the only slug shape stored. Frontends build links as
@@ -63,13 +71,37 @@ type Document struct {
 	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
+	// DeletedAt is nil for a live document. It is omitted from JSON when nil,
+	// so a client that does not know about the bin cannot mistake a live
+	// document for a deleted one — and a client that does know gets the fact
+	// rather than having to infer it from an absence.
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 }
+
+// IsDeleted reports whether the document is in the bin.
+func (d Document) IsDeleted() bool { return d.DeletedAt != nil }
 
 // ListFilter narrows a List query within a tenant. Empty fields are ignored.
 type ListFilter struct {
 	Type   string
 	Status string
+	// Deleted selects which side of the bin to list. The zero value excludes
+	// deleted documents, so every existing caller keeps its meaning and no
+	// deleted document can appear in a listing by accident.
+	Deleted DeletedFilter
 }
+
+// DeletedFilter is a three-state selector; the zero value is the safe one.
+type DeletedFilter int
+
+const (
+	// DeletedExclude lists only live documents (default).
+	DeletedExclude DeletedFilter = iota
+	// DeletedOnly lists only the bin.
+	DeletedOnly
+	// DeletedInclude lists both, and is used by nothing on the delivery path.
+	DeletedInclude
+)
 
 // CreateInput is the payload to create a new (draft) document.
 type CreateInput struct {
@@ -143,4 +175,14 @@ type Store interface {
 	ListVersions(ctx context.Context, tenantID, docID uuid.UUID) ([]Version, error)
 	// Rollback restores a prior version's content as a new draft.
 	Rollback(ctx context.Context, tenantID, docID uuid.UUID, version int) (Document, error)
+
+	// SoftDelete puts a document in the bin: the row, its versions and its
+	// history stay, and it disappears from listings, delivery and preview.
+	// Deleting an already-deleted document is ErrDeleted rather than a silent
+	// success, so a double click is visible.
+	SoftDelete(ctx context.Context, tenantID, id uuid.UUID) (Document, error)
+	// Restore takes a document back out of the bin. It fails with
+	// ErrSlugConflict when a live document has taken the slug in the meantime
+	// — the live one keeps it, and the editor is told which one collides.
+	Restore(ctx context.Context, tenantID, id uuid.UUID) (Document, error)
 }
