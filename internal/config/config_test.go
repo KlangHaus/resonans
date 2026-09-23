@@ -136,3 +136,54 @@ func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
 		})
 	}
 }
+
+func TestStorageBackendNameMakesProductionChooseOnPurpose(t *testing.T) {
+	cases := []struct {
+		name    string
+		cfg     Config
+		want    string
+		wantErr error
+	}{
+		{"production without any storage refuses to start", Config{NodeEnv: "production"}, "", ErrNoStorage},
+		{"production with a disk root picks disk", Config{NodeEnv: "production", StorageDir: "/var/lib/resonans/assets"}, "disk", nil},
+		{"production with bunny picks bunny", Config{NodeEnv: "production", StorageEndpoint: "storage.bunnycdn.com", StorageZone: "z", StorageKey: "k"}, "bunny", nil},
+		{"bunny wins over a disk root", Config{NodeEnv: "production", StorageDir: "/var/lib/resonans/assets", StorageEndpoint: "storage.bunnycdn.com", StorageZone: "z", StorageKey: "k"}, "bunny", nil},
+		{"development without storage still gets memory", Config{NodeEnv: "development"}, "memory", nil},
+		// A half-set Bunny config is the shape a deploy actually lands in when
+		// one variable is forgotten. It must not count as configured.
+		{"production with a partial bunny config refuses to start", Config{NodeEnv: "production", StorageEndpoint: "storage.bunnycdn.com", StorageZone: "z"}, "", ErrNoStorage},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.cfg.StorageBackendName()
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("backend = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCDNBaseFollowsPublicURLWhenUnset(t *testing.T) {
+	t.Setenv("PUBLIC_URL", "https://cms.example.org/")
+	t.Setenv("BUNNY_CDN_BASE", "") // the shape `${VAR:-}` in a compose file produces
+	t.Setenv("RESONANS_DEV_AUTH", "1")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if want := "https://cms.example.org/_assets"; cfg.CDNBase != want {
+		t.Fatalf("CDNBase = %q, want %q — an empty pass-through must not fall back to localhost", cfg.CDNBase, want)
+	}
+
+	t.Setenv("BUNNY_CDN_BASE", "https://cdn.example.org")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CDNBase != "https://cdn.example.org" {
+		t.Fatalf("an explicit CDN base was overwritten: %q", cfg.CDNBase)
+	}
+}

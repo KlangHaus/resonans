@@ -165,18 +165,25 @@ func Run(ctx context.Context) error {
 	} else {
 		mediaStore = media.NewMemoryStore()
 	}
+	backendName, err := cfg.StorageBackendName()
+	if err != nil {
+		return err
+	}
 	var backend media.StorageBackend
-	switch {
-	case cfg.StorageConfigured():
+	switch backendName {
+	case "bunny":
 		backend = media.NewBunnyBackend(cfg.StorageEndpoint, cfg.StorageZone, cfg.StorageKey)
-		logger.Info("storage_backend", "backend", "bunny")
-	case cfg.IsProduction():
-		logger.Warn("BUNNY_STORAGE_* not set in production — asset bytes use non-persistent in-memory backend")
-		backend = media.NewMemoryBackend()
+	case "disk":
+		disk, err := media.NewDiskBackend(cfg.StorageDir)
+		if err != nil {
+			return err
+		}
+		backend = disk
 	default:
-		logger.Warn("BUNNY_STORAGE_* not set — using in-memory storage backend (dev/test)")
+		logger.Warn("no asset storage configured — using the in-memory backend (dev/test); uploads are lost on restart")
 		backend = media.NewMemoryBackend()
 	}
+	logger.Info("storage_backend", "backend", backend.Name(), "cdnBase", cfg.CDNBase)
 	mediaSvc := media.NewService(mediaStore, backend, media.NewURLBuilder(cfg.CDNBase))
 
 	var videoProvider media.VideoProvider
@@ -223,6 +230,14 @@ func Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiRouter)
 	mux.Handle("/delivery/", deliveryRouter)
+
+	// Serve asset bytes ourselves when no CDN holds them. Bunny is a ByteServer
+	// on purpose NOT: with a pull-zone configured the CDN answers these URLs and
+	// mounting an origin route would only invite traffic past it.
+	if server, ok := backend.(media.ByteServer); ok {
+		mux.Handle("GET "+media.AssetPath+"{key...}", media.AssetHandler(server))
+		logger.Info("asset_route_mounted", "path", media.AssetPath)
+	}
 	// Visual-editing bridge script (public, no tenant data).
 	mux.Handle(bridge.Path, bridge.Handler())
 

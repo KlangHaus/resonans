@@ -59,14 +59,22 @@ type Config struct {
 	DeliveryToken string
 
 	// Media / object storage (Fase 3). Bunny Storage holds asset bytes; the CDN
-	// base is the pull-zone URL used to build public asset URLs. Empty storage
-	// config => in-memory backend (dev/test only). VideoProvider opt-in-enables a
+	// base is the pull-zone URL used to build public asset URLs. No Bunny and no
+	// StorageDir => in-memory backend, which is dev/test only and refused in
+	// production (ErrNoStorage): it loses every upload on restart. VideoProvider opt-in-enables a
 	// video plugin (e.g. "vimeo"); empty = disabled.
 	StorageEndpoint string
 	StorageZone     string
 	StorageKey      string
 	CDNBase         string
 	VideoProvider   string
+
+	// StorageDir is the root directory of the local-disk asset backend
+	// (RESONANS_STORAGE_DIR). It is the self-host path: a mounted volume and
+	// nothing else, with Resonans serving the bytes at /_assets itself. Bunny
+	// wins when both are set — a CDN in front is strictly better than an
+	// origin serving image bytes.
+	StorageDir string
 
 	// OTel — from day one (product brief). tenant.id is set per-request on
 	// spans, never on the resource (Beslutning J2c).
@@ -130,7 +138,8 @@ func Load() (*Config, error) {
 		StorageEndpoint: getenvOptional("BUNNY_STORAGE_ENDPOINT"),
 		StorageZone:     getenvOptional("BUNNY_STORAGE_ZONE"),
 		StorageKey:      getenvOptional("BUNNY_STORAGE_KEY"),
-		CDNBase:         getenv("BUNNY_CDN_BASE", "http://localhost:3000/_assets"),
+		CDNBase:         getenvOptional("BUNNY_CDN_BASE"),
+		StorageDir:      getenvOptional("RESONANS_STORAGE_DIR"),
 		VideoProvider:   getenvOptional("RESONANS_VIDEO_PROVIDER"),
 
 		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "klanghaus-resonans"),
@@ -163,6 +172,15 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// An unset CDN base follows PUBLIC_URL to Resonans' own /_assets route
+	// (media.AssetPath). It used to default to a hardcoded localhost:3000,
+	// which a deploy inherits whenever it passes BUNNY_CDN_BASE through as an
+	// empty string: every public asset URL then pointed at the VISITOR's own
+	// machine, and the page just showed a broken image.
+	if cfg.CDNBase == "" {
+		cfg.CDNBase = strings.TrimRight(cfg.PublicURL, "/") + "/_assets"
+	}
+
 	return cfg, nil
 }
 
@@ -179,7 +197,26 @@ var (
 	ErrNoEditorAuth   = errors.New("RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set and RESONANS_DEV_AUTH is not 1 — refusing to start with unauthenticated editor endpoints (X-Dev-Tenant)")
 	ErrNoDeliveryAuth = errors.New("RESONANS_DELIVERY_TOKEN not set and RESONANS_DEV_AUTH is not 1 — refusing to start with an unauthenticated content-delivery surface (X-Scope-OrgID)")
 	ErrDevAuthInProd  = errors.New("RESONANS_DEV_AUTH=1 with NODE_ENV=production — refusing to start: dev auth is never allowed in production")
+	ErrNoStorage      = errors.New("neither BUNNY_STORAGE_* nor RESONANS_STORAGE_DIR set with NODE_ENV=production — refusing to start: the in-memory asset backend loses every upload on restart")
 )
+
+// StorageBackendName picks the asset backend and names it. Production must
+// choose one positively: the old behavior logged a warning and ran on the
+// in-memory backend, so a forgotten variable produced a CMS that accepted
+// uploads, showed them to the editor, and dropped them at the next restart —
+// a failure that only surfaces long after the deploy anyone could connect it to.
+func (c *Config) StorageBackendName() (string, error) {
+	switch {
+	case c.StorageConfigured():
+		return "bunny", nil
+	case c.StorageDir != "":
+		return "disk", nil
+	case c.IsProduction():
+		return "", ErrNoStorage
+	default:
+		return "memory", nil
+	}
+}
 
 // EditorDevAuth decides whether the editor API may run WITHOUT JWT (tenant via
 // X-Dev-Tenant). JWT configured → false: the header is never read, whatever
