@@ -98,9 +98,31 @@ til editorens doc-liste.
 
 ## Media (Fase 3)
 
-Assets (billeder + filer) er tenant-scoped (RLS, som documents). Upload → **Bunny Storage**
-(config-gated backend; in-memory i dev); metadata i `assets`-tabellen (kind, mime, dimensioner,
-hotspot). Content refererer et asset via id (`asset`-felt-type); delivery/editor bygger en
+Assets (billeder + filer) er tenant-scoped (RLS, som documents). Upload → et af **tre
+backends**; metadata i `assets`-tabellen (kind, mime, dimensioner, hotspot).
+
+### Storage backends
+
+| Backend | Selected by | Bytes served by | Survives a restart |
+| --- | --- | --- | --- |
+| `bunny` | `BUNNY_STORAGE_ENDPOINT` + `_ZONE` + `_KEY` (all three) | Bunny CDN pull-zone | yes |
+| `disk` | `RESONANS_STORAGE_DIR=/var/lib/resonans/assets` | Resonans, at `GET /_assets/<key>` | yes, with a volume |
+| `memory` | neither of the above | Resonans, at `GET /_assets/<key>` | **no** |
+
+`disk` is the self-host path: mount a volume, set one variable, and Resonans serves the
+bytes itself — no CDN account required. Bunny wins when both are configured, because a CDN
+in front of the origin is strictly better than an origin shipping image bytes.
+
+With `NODE_ENV=production` and neither configured the server **refuses to start**
+(`ErrNoStorage`). It used to log a warning and run on the in-memory backend, which produces
+a CMS that accepts an upload, shows it to the editor, and drops it at the next restart.
+
+`BUNNY_CDN_BASE` defaults to `PUBLIC_URL` + `/_assets`. Leaving it unset is the right choice
+for `disk` and `memory`; set it to the pull-zone URL for `bunny`.
+
+The `/_assets` route re-derives each Content-Type from the stored **bytes**, using the same
+allowlist the upload used, and answers 404 for anything outside it — so a byte sequence that
+reached the volume by some route other than an upload still cannot be served. Content refererer et asset via id (`asset`-felt-type); delivery/editor bygger en
 **Bunny-CDN-URL** m/ transform-params (resize på edge). **Video** = tilvælgeligt plugin (`RESONANS_VIDEO_PROVIDER=vimeo`) — video-embed-blok →
 Vimeo player-URL + **oEmbed-metadata** (titel/thumbnail/varighed via public oEmbed, ingen
 token) til den video-tunge authoring-oplevelse (explainers). Follow-up: hotspot/crop→
@@ -112,6 +134,11 @@ private videoer (Etude-boundary), image-varianter-precompute.
 Honoreres af scaffoldet — ændr ikke uden en samtidig `infra/compose`-ændring:
 
 - `DATABASE_URL` (egen content-DB) · `PUBLIC_URL=https://cms.klanghaus.dk` · lyt på `:3000`
+- Asset storage must be chosen explicitly in production: either the three `BUNNY_STORAGE_*`
+  variables or `RESONANS_STORAGE_DIR` pointing at a mounted volume. A compose file that
+  passes `BUNNY_CDN_BASE: ${VAR:-}` through as an empty string is fine — an empty value now
+  follows `PUBLIC_URL` instead of the old hardcoded `http://localhost:3000/_assets`, which
+  every visitor would have resolved against their own machine.
 
 ## Faser (roadmap)
 
