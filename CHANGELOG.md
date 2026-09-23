@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/KlangHaus/resonans/compare/v1.12.0...v1.13.0) (2026-09-23)
+
+
+### Features
+
+* soft delete — an editor can finally remove a document, and undo it ([#67](https://github.com/KlangHaus/resonans/issues/67)) ([2a81176](https://github.com/KlangHaus/resonans/commit/2a81176e52d9f22e3c4bae78f476aae9a4dcdc23))
+
 # [1.12.0](https://github.com/KlangHaus/resonans/compare/v1.11.1...v1.12.0) (2026-09-20)
 
 
