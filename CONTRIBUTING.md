@@ -11,6 +11,19 @@ go build ./...
 go test -race ./...
 ```
 
+The tenant-isolation cells need a real database and are behind a build tag, so
+`go test ./...` never needs one:
+
+```bash
+docker run -d --name pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres postgres:16-alpine
+RESONANS_TEST_DB_URL="postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable" \
+  go test -count=1 -tags=integration -v ./internal/persistence/...
+```
+
+They **fail** rather than skip when that variable is empty. A skipped test and a
+passing one look identical on a check-run, and the only way to compile these is to
+ask for them — so a missing database is a wiring mistake, not a reason to be quiet.
+
 A full local check, matching CI:
 
 ```bash
