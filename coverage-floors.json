@@ -32,6 +32,12 @@
       "OTel wiring. Exercised in every test that boots the app, but it reports 0% because",
       "the assertions are about the app, not about the exporters. UNMEASURED."
     ],
+    "github.com/KlangHaus/resonans/internal/apidocs": [
+      "Holds one file: the drift cell that keeps docs/api/openapi.yaml honest. It has tests and",
+      "NO statements of its own, which is a THIRD output shape go test prints and which this",
+      "gate was blind to until this package existed. A floor of 0 is correct here and means",
+      "'nothing to cover', not 'untested'."
+    ],
     "github.com/KlangHaus/resonans/migrations": [
       "Embedded .sql plus embed.go. The SQL is measured by applying it against a real",
       "postgres in the `RLS assertions` check, which is the only measurement that means",
@@ -41,6 +47,7 @@
 
   "floors": {
     "github.com/KlangHaus/resonans/cmd/resonans": 0,
+    "github.com/KlangHaus/resonans/internal/apidocs": 0,
     "github.com/KlangHaus/resonans/internal/app": 2,
     "github.com/KlangHaus/resonans/internal/auth": 68,
     "github.com/KlangHaus/resonans/internal/backfill": 46,
