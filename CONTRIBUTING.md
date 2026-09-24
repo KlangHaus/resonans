@@ -24,6 +24,13 @@ They **fail** rather than skip when that variable is empty. A skipped test and a
 passing one look identical on a check-run, and the only way to compile these is to
 ask for them — so a missing database is a wiring mistake, not a reason to be quiet.
 
+**They do not run in CI yet, and that is deliberate.** The shared pipeline can
+*declare* a database sidecar but does not start one — measured on the one other
+repository that declares it, whose equivalent check has been red on its last three
+commits to main. Arming a second permanently red check would teach people that red
+is background noise, which is the same failure as a red nobody reads. The check is
+written and waiting; it lands when the sidecar does.
+
 A full local check, matching CI:
 
 ```bash
