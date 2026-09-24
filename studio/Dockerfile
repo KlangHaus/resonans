@@ -1,13 +1,22 @@
 # Resonans Studio — Nuxt SPA served by the Nitro node-server, multi-stage.
-# Same VM2-ops pattern as the blog image. The node-server (not a static file
-# host) matters: it injects NUXT_PUBLIC_* runtime config (apiBase, devTenant)
-# into the served app at RUNTIME, so one image works across environments.
+# The node-server (not a static file host) matters: it injects NUXT_PUBLIC_*
+# runtime config (apiBase, authBase) into the served app at RUNTIME, so one
+# image works across environments.
 FROM node:22-slim AS build
 WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile || pnpm install
+# No glob on the lockfile: `pnpm-lock.yaml*` copies nothing when the file is
+# missing, and the build then resolves versions from scratch without anyone
+# noticing that the reviewed lockfile was never present.
+COPY package.json pnpm-lock.yaml ./
+# `|| pnpm install` used to follow. It turned a lockfile that disagrees with
+# package.json into a GREEN build on versions nobody reviewed — and it only
+# ever ran when something was already wrong, which is the worst possible
+# trigger condition for a fallback. Concretely: it could have re-resolved the
+# vulnerable transitive dependency that #70 had just removed, and the build
+# would have reported success. A disagreement must stop the build.
+RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
