@@ -25,7 +25,7 @@ COPY --from=build /out/resonans /app/resonans
 # Migrations bundled as immutable deploy artifacts (also run at boot from embed).
 COPY --from=build /src/migrations /app/migrations
 USER nonroot:nonroot
-# Content-API port. Caddy + Compose reverse-proxy to this (vm2-ops Caddyfile:
+# Content-API port. Caddy + Compose reverse-proxy to this (a reverse proxy in front:
 # reverse_proxy resonans:3000). Deploy contract — do not change without an
 # accompanying infra/compose change.
 EXPOSE 3000

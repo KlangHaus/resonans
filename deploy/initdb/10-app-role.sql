@@ -8,15 +8,45 @@
 -- to every other tenant the moment one policy is mistyped, with nothing to
 -- notice it.
 --
--- `force row level security` in the migrations binds the table OWNER too, so
--- the one remaining hole is a superuser connection. That is exactly what this
--- role is not.
+-- `force row level security` in the migrations binds the table OWNER too. Be
+-- precise about what that buys HERE, because it is easy to over-read: in this
+-- compose file the owner IS the cluster superuser, and a superuser bypasses RLS
+-- whatever `force` says. Measured: the migrator reads every tenant's rows with
+-- no tenant GUC set. So `force` adds nothing against THIS migrator connection —
+-- its value is conditional and future, for the day the schema owner is not a
+-- superuser. The migrator connection is not fenced; treat its DSN accordingly.
 --
--- RESONANS_APP_PASSWORD is required by compose.yml (`${VAR:?}`), so the stack
--- refuses to start without it rather than creating a passwordless role here.
+-- What does fence the server is this role: nosuperuser + nobypassrls.
+--
+-- One thing this role model CANNOT see: a table that carries a tenant_id and
+-- forgot `enable`/`force row level security` is fully visible to it. The role
+-- stays correct while the data leaks, so the coverage assertion in
+-- deploy/assert-rls-coverage.sql is part of the model, not an extra.
 
 \set ON_ERROR_STOP on
 \set app_password `echo "$RESONANS_APP_PASSWORD"`
+
+-- Refuse to continue on an empty password. Postgres would otherwise emit only
+-- `NOTICE: empty string is not a valid password, clearing password` and create
+-- the role WITHOUT one — and initdb notices scroll past. compose.yml already
+-- guards this with ${VAR:?}, but after publication strangers will run this file
+-- without that compose file, and a failure should name itself at init rather
+-- than as a connection error later.
+--
+-- Measured fail direction, for the record: a passwordless role still cannot
+-- authenticate from another host, where pg_hba requires scram-sha-256. It only
+-- looked permissive over the unix socket and loopback, where the image's own
+-- `trust` rule accepts any password from any role. So this check hardens a
+-- failure that was already closed to network clients — it is about a legible
+-- error, not about a hole.
+select set_config('resonans.app_password', :'app_password', false);
+do $guard$
+begin
+  if coalesce(current_setting('resonans.app_password', true), '') = '' then
+    raise exception 'RESONANS_APP_PASSWORD is empty or unset — refusing to create a passwordless resonans_app role';
+  end if;
+end
+$guard$;
 
 do $$
 begin

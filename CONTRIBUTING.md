@@ -75,9 +75,17 @@ Everything published here is, and stays, AGPL-3.0 — that is not what the parag
 about.
 
 **A contributor licence agreement will be required before we can merge code from outside
-the company, and it is not written yet.** It is being drafted with our legal counsel; until
-it exists we cannot accept an outside pull request, because merging one would leave the
-project's licensing unsettled in a way that is unpleasant to fix afterwards.
+the company, and it is not written yet.** KlangHaus decided to adopt one on 2026-09-24 and
+it is being drafted with legal counsel, tracked as KH-1200. Until it exists we cannot accept
+an outside pull request, because merging one would leave the project's licensing unsettled
+in a way that is unpleasant to fix afterwards.
+
+**What it will and will not change.** Everything published here stays AGPL-3.0. What the
+agreement covers is whether KlangHaus may additionally grant your contribution under other
+terms. Today we cannot: we hold the copyright only to what we wrote ourselves, and we
+cannot relicense someone else's contribution without asking them. The agreement is how that
+changes, and it is the whole reason it exists — we would rather you knew that now than read
+it in the small print later.
 
 We would rather tell you this before you spend an evening on a patch than after. So:
 

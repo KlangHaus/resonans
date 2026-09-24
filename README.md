@@ -82,7 +82,13 @@ have to hold, and each is checked in a different place:
 2. **Postgres enforces it.** Every content table has `enable row level security` *and*
    `force row level security`, with policies on a `app.tenant_id` GUC that the
    application sets per transaction. `force` binds the table owner too.
-3. **The application connects as a role that cannot bypass it.** RLS is ignored by any
+3. **Every tenant table actually carries the policy.** The first two hold once and stay
+   true; this one is re-decided by every migration, and a migration that forgets is
+   *invisible* to the role model — the role stays correct while the data reads across
+   tenants. Run [deploy/assert-rls-coverage.sql](deploy/assert-rls-coverage.sql) after
+   migrating; it exits non-zero and names the offending tables, and it fails rather than
+   passing if it finds no tenant table at all.
+4. **The application connects as a role that cannot bypass it.** RLS is ignored by any
    role with `SUPERUSER` or `BYPASSRLS`, which is why the shipped compose file creates two
    roles: a migrator that owns the schema, and the role the server actually uses. See
    [deploy/initdb/](deploy/initdb/). Collapsing them into one is the mistake this design
@@ -199,7 +205,11 @@ Licensed under the [GNU AGPL-3.0](LICENSE) — see [NOTICE](NOTICE).
 If you modify Resonans and offer it to users over a network, §13 says those users are
 entitled to your source. Set `RESONANS_SOURCE_URL` to your repository and `/healthz` will
 tell them where to find it — leaving it at the upstream default is only truthful if you
-changed nothing.
+changed nothing. It must be an `http(s)` URL; anything else is refused at startup.
+
+That field is **informative**: it is a string for a human to read, and tooling should not
+fetch it automatically. A scanner that followed it would be making this instance issue
+requests to an address its operator chose.
 
 KlangHaus holds the copyright to its own contributions, so we can grant a different licence
 for them. If the AGPL does not fit what you want to build, ask us.

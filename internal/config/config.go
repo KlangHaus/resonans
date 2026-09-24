@@ -3,9 +3,9 @@
 // services (permissions/notifications): "empty string means unset" coercion,
 // return-error-not-os.Exit so tests decide behavior.
 //
-// Deploy contract (infra/compose/prod/vm2-ops): DATABASE_URL + PUBLIC_URL are
-// set by Compose, Caddy reverse-proxies to resonans:3000 — so PORT defaults to
-// 3000. Resonans uses its OWN content-DB (separate from Etude's money-tier-DB).
+// Deploy contract: DATABASE_URL + PUBLIC_URL come from the environment, a
+// reverse proxy forwards to port 3000 — so PORT defaults to 3000. Resonans
+// expects its own database, not a schema inside somebody else's.
 package config
 
 import (
@@ -181,6 +181,15 @@ func Load() (*Config, error) {
 		if _, err := url.ParseRequestURI(cfg.JWKSURL); err != nil {
 			return nil, fmt.Errorf("RESONANS_JWKS_URL: must be a valid URL: %w", err)
 		}
+	}
+
+	// The source offer is published on /healthz. Today it is a JSON string read
+	// by people, so a scheme other than http(s) is merely useless — but the day
+	// anyone renders it as a link, `javascript:` or `data:` becomes a real XSS
+	// path. Validating the scheme here makes that question impossible to ask
+	// later, which is cheaper than remembering the constraint at the sink.
+	if u, err := url.Parse(cfg.SourceURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("RESONANS_SOURCE_URL: must be an http(s) URL, got %q", cfg.SourceURL)
 	}
 
 	// An unset CDN base follows PUBLIC_URL to Resonans' own /_assets route

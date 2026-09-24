@@ -62,9 +62,13 @@ Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
 
 ## Deploy
 
-Compose-workload på VM2 (ops), bag Caddy (`cms.klanghaus.dk`). Deploy-stub:
-`klanghaus/infra/compose/prod/vm2-ops/`. Kontrakt: `DATABASE_URL`, `PUBLIC_URL`,
-port `:3000`. Secrets via SOPS+age ([infra]).
+Published image, run behind a reverse proxy that terminates TLS. Contract:
+`DATABASE_URL`, `PUBLIC_URL`, one of `RESONANS_STORAGE_DIR` / `BUNNY_STORAGE_*`,
+listening on `:3000`. `compose.yml` in this repo is the reference deployment;
+secrets come from the environment, never from a file in the image.
+
+This file is published with the repository, so it names no host, no internal
+repository path and no secret store.
 
 ## Coverage-tier (Beslutning L2)
 
