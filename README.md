@@ -136,7 +136,8 @@ block palette from it.
 | `DELETE` `POST` | `/api/v1/documents/{id}` · `/api/v1/documents/{id}/restore` |
 | `GET` | `/api/v1/documents/{id}/versions` |
 | `POST` | `/api/v1/documents/{id}/rollback/{version}` |
-| `POST` `GET` | `/api/v1/assets` · `GET /api/v1/assets/{id}` |
+| `POST` `GET` | `/api/v1/assets?deleted=` · `GET /api/v1/assets/{id}` |
+| `DELETE` `POST` | `/api/v1/assets/{id}` · `/api/v1/assets/{id}/restore` |
 | `GET` | `/api/v1/video/embed?id=` · `/api/v1/video/resolve?id=` |
 | `POST` | `/api/v1/preview-token` · `/api/v1/preview/envelope` |
 
@@ -156,13 +157,28 @@ asset bytes itself.
 
 ## Deleting content
 
-`DELETE` moves a document to a bin: it disappears from every read path, and
-`?deleted=only` lists what is in there. `POST …/restore` brings it back.
+`DELETE` moves a document or an asset to a bin: it disappears from every read path, and
+`?deleted=only` lists what is in there. `POST …/restore` brings it back. Deleting twice,
+or restoring something that is already live, is a `409` rather than a quiet no-op — so a
+double click cannot overwrite the original deletion time.
 
-The slug is freed while a document sits in the bin, because a full unique index would let
-a deleted page hold its own address hostage forever. The cost is named: restoring into a
-slug someone has since taken fails with a conflict rather than silently renaming
-anything.
+A deleted item answers `409`, not `404`. "In the bin" and "never existed" are different
+answers, and an editor who gets a 404 goes looking for something that is one click from
+returning. Across tenants it *is* a `404`, because a 409 would confirm that the id exists.
+
+**Documents:** the slug is freed while a document sits in the bin, because a full unique
+index would let a deleted page hold its own address hostage forever. The cost is named:
+restoring into a slug someone has since taken fails with a conflict rather than silently
+renaming anything.
+
+**Assets:** the stored **bytes are not touched**. That is what makes the undo real — a bin
+that had already discarded the file would be a delete with extra steps. Three consequences
+are deliberate rather than missing: nothing is retracted from a CDN, there is no hard
+delete for an actual erasure request, and **deletion does not check whether a document
+references the asset**. On that last one, the cheap version would be a trap: an asset
+reference is a bare id inside a JSONB body, so `body::text like '%<uuid>%'` is an
+unindexed full scan that can also match a coincidence — and a plausible-but-wrong
+reference count is worse than none, because an editor would act on it.
 
 ## Asset storage
 

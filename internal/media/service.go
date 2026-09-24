@@ -60,9 +60,31 @@ func (s *Service) Get(ctx context.Context, tenantID, id uuid.UUID) (Asset, error
 	return s.store.Get(ctx, tenantID, id)
 }
 
-// List returns the tenant's assets.
-func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]Asset, error) {
-	return s.store.List(ctx, tenantID)
+// List returns the tenant's assets, live only unless the filter says otherwise.
+func (s *Service) List(ctx context.Context, tenantID uuid.UUID, f ListFilter) ([]Asset, error) {
+	return s.store.List(ctx, tenantID, f)
+}
+
+// SoftDelete moves an asset to the bin.
+//
+// The stored BYTES are deliberately untouched, which is what makes the undo
+// real. Two named non-goals follow from that and are not oversights:
+// retracting bytes from a CDN, and a hard delete for an actual erasure request.
+//
+// A third one is worth stating because its cheap version is a trap: this does
+// NOT check whether any document references the asset. The reference is a bare
+// string id inside a JSONB body, so the only cheap query is
+// `body::text like '%<uuid>%'` — an unindexed full scan that can also match a
+// coincidence. A plausible-but-wrong reference count is worse than none, because
+// an editor would act on it. A real answer needs an index, which is its own
+// change.
+func (s *Service) SoftDelete(ctx context.Context, tenantID, id uuid.UUID) (Asset, error) {
+	return s.store.SoftDelete(ctx, tenantID, id)
+}
+
+// Restore brings an asset back out of the bin.
+func (s *Service) Restore(ctx context.Context, tenantID, id uuid.UUID) (Asset, error) {
+	return s.store.Restore(ctx, tenantID, id)
 }
 
 // URL builds the CDN URL for an asset with an optional transform.

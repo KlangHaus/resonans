@@ -91,6 +91,8 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/assets", h.uploadAsset)
 	mux.HandleFunc("GET /api/v1/assets", h.listAssets)
 	mux.HandleFunc("GET /api/v1/assets/{id}", h.getAsset)
+	mux.HandleFunc("DELETE /api/v1/assets/{id}", h.deleteAsset)
+	mux.HandleFunc("POST /api/v1/assets/{id}/restore", h.restoreAsset)
 	// Video plugin (opt-in).
 	mux.HandleFunc("GET /api/v1/video/embed", h.videoEmbed)
 	mux.HandleFunc("GET /api/v1/video/resolve", h.videoResolve)
@@ -342,7 +344,17 @@ func (h *Handlers) listAssets(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	assets, err := h.media.List(r.Context(), tid)
+	// Same rule as documents: anything other than the two known values — a typo
+	// included — lists live assets only. The failure direction that matters is
+	// never showing deleted content by accident.
+	var f media.ListFilter
+	switch r.URL.Query().Get("deleted") {
+	case "only":
+		f.Deleted = media.DeletedOnly
+	case "include":
+		f.Deleted = media.DeletedInclude
+	}
+	assets, err := h.media.List(r.Context(), tid, f)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
 		return
@@ -366,14 +378,68 @@ func (h *Handlers) getAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	a, err := h.media.Get(r.Context(), tid, id)
 	if err != nil {
-		if errors.Is(err, media.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, errBody("not found"))
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
+		h.writeMediaErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, h.assetWithURL(a))
+}
+
+// deleteAsset moves an asset to the bin. The bytes stay in storage, which is
+// what makes the undo real — see media.Service.SoftDelete for the non-goals.
+func (h *Handlers) deleteAsset(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	a, err := h.media.SoftDelete(r.Context(), tid, id)
+	if err != nil {
+		h.writeMediaErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.assetWithURL(a))
+}
+
+// restoreAsset brings one back out of the bin.
+func (h *Handlers) restoreAsset(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("invalid id"))
+		return
+	}
+	a, err := h.media.Restore(r.Context(), tid, id)
+	if err != nil {
+		h.writeMediaErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.assetWithURL(a))
+}
+
+// writeMediaErr maps asset errors to status codes. Deleted is 409, not 404: an
+// editor who deleted a file and then cannot find it needs to know it is one
+// click from coming back, and "never existed" is a different answer.
+func (h *Handlers) writeMediaErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, media.ErrNotFound):
+		writeJSON(w, http.StatusNotFound, errBody("not found"))
+	case errors.Is(err, media.ErrDeleted):
+		writeJSON(w, http.StatusConflict, errBody("asset is deleted; restore it first"))
+	case errors.Is(err, media.ErrNotDeleted):
+		writeJSON(w, http.StatusConflict, errBody("asset is not deleted"))
+	default:
+		if h.log != nil {
+			h.log.Error("media_store_error", "err", err)
+		}
+		writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
+	}
 }
 
 func (h *Handlers) videoEmbed(w http.ResponseWriter, r *http.Request) {
