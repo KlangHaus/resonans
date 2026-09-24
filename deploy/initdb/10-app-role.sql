@@ -70,10 +70,29 @@ create schema if not exists resonans_app authorization resonans_migrator;
 
 grant usage on schema resonans_app to resonans_app;
 
--- No table exists yet, so grant on what the migrator WILL create. Default
--- privileges attach to the GRANTING role, which is why this has to run as the
--- same role the migrations run as — and they are per-SCHEMA, so the schema has
--- to be named, not inherited.
+-- No table exists yet, so grant on what the migrator WILL create.
+--
+-- 🔴 READ THIS BEFORE COPYING THESE TWO STATEMENTS ANYWHERE ELSE.
+-- `alter default privileges` attaches to the role that RUNS it. There is no
+-- `for role` clause below, and that is only correct HERE: this file is executed
+-- by the postgres image as POSTGRES_USER, and in compose.yml POSTGRES_USER *is*
+-- the migrator. So the attachment lands on the migrator implicitly.
+--
+-- Copy these lines into a runbook that a human runs as a THIRD role — a
+-- superuser at a psql prompt, say — and the attachment silently follows that
+-- third role instead. The migrator then creates the tables and the app role gets
+-- NOTHING. Measured against postgres:16-alpine, with the working variant as the
+-- control in the same run:
+--
+--   statements as written, run as superuser, tables created by the migrator
+--     -> app role: ERROR: permission denied for table documents
+--   same statements plus `for role resonans_migrator`
+--     -> app role: 0 rows, works
+--
+-- So outside this file, name the creating role explicitly:
+--   alter default privileges FOR ROLE <migrator> in schema resonans_app ...
+--
+-- They are also per-SCHEMA, so the schema is named rather than inherited.
 alter default privileges in schema resonans_app
   grant select, insert, update, delete on tables to resonans_app;
 alter default privileges in schema resonans_app

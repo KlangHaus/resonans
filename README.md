@@ -104,6 +104,12 @@ have to hold, and each is checked in a different place:
    [deploy/initdb/](deploy/initdb/). Collapsing them into one is the mistake this design
    exists to prevent.
 
+   **If you write your own provisioning instead of using that file, read its comment on
+   `alter default privileges` first.** Those grants attach to the role that *runs* them, so
+   a human executing the same statements as a superuser grants for objects the superuser
+   creates — and the app role ends up with nothing once the migrator creates the tables.
+   Name the creating role with `for role`. This has already cost one deployment plan.
+
 ## Content model
 
 Content types are declarative, in `internal/schema/schemas/` — YAML, versioned in git.
