@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/KlangHaus/resonans/compare/v1.17.0...v1.18.0) (2026-09-24)
+
+
+### Features
+
+* **docs:** describe the API, and a cell that keeps the description true ([#78](https://github.com/KlangHaus/resonans/issues/78)) ([993d985](https://github.com/KlangHaus/resonans/commit/993d9850899d616000d282da5849b074f6587268))
+
 # [1.17.0](https://github.com/KlangHaus/resonans/compare/v1.16.0...v1.17.0) (2026-09-24)
 
 
