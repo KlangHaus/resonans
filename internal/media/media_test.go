@@ -77,7 +77,7 @@ func TestStoreTenantIsolation(t *testing.T) {
 	if _, err := s.Get(ctx, tenantB, a.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-tenant Get = %v, want ErrNotFound", err)
 	}
-	list, _ := s.List(ctx, tenantB)
+	list, _ := s.List(ctx, tenantB, ListFilter{})
 	if len(list) != 0 {
 		t.Errorf("tenant B sees %d assets, want 0", len(list))
 	}
