@@ -1,3 +1,10 @@
+## [1.14.1](https://github.com/KlangHaus/resonans/compare/v1.14.0...v1.14.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **studio:** drop the one vulnerable brace-expansion resolution ([#70](https://github.com/KlangHaus/resonans/issues/70)) ([39a78da](https://github.com/KlangHaus/resonans/commit/39a78da5f17432c164546756efaa0c3e0eb6b4c2))
+
 # [1.14.0](https://github.com/KlangHaus/resonans/compare/v1.13.0...v1.14.0) (2026-09-23)
 
 
