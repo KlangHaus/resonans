@@ -1,3 +1,10 @@
+## [1.15.1](https://github.com/KlangHaus/resonans/compare/v1.15.0...v1.15.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **studio:** stop the image build when the lockfile disagrees ([#71](https://github.com/KlangHaus/resonans/issues/71)) ([dd68e01](https://github.com/KlangHaus/resonans/commit/dd68e011a341d07a46a2a776cc4e7056be51d6a3)), closes [#70](https://github.com/KlangHaus/resonans/issues/70)
+
 # [1.15.0](https://github.com/KlangHaus/resonans/compare/v1.14.1...v1.15.0) (2026-09-24)
 
 
