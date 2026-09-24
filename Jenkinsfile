@@ -246,6 +246,5 @@ klanghausPipeline(
         ./node_modules/.bin/commitlint --from "$KH_MERGE_BASE" --to HEAD --config commitlint.config.mjs
       ''',
     ],
-
   ],
 )
