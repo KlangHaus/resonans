@@ -7,7 +7,7 @@
 #   # seed the explainers demo (once, after it's up):
 #   docker compose -f docker-compose.tilt.yml --profile seed run --rm resonans-seed
 #
-# Prod runs as a workload in infra/compose/prod/vm2-ops/ against the shared
+# Production runs the published image behind a reverse proxy, against the shared
 # ops-Postgres — this file is dev-only and does NOT model that topology.
 services:
   postgres:

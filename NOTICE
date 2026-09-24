@@ -1,0 +1,26 @@
+Resonans — a self-hosted, multi-tenant headless CMS
+
+Copyright (C) 2026 KlangHaus (Asp Productions ApS, CVR 36708077, Denmark)
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+KlangHaus is the name the project is published under; Asp Productions ApS is the
+legal entity that holds the copyright and is the party able to enforce or waive
+it. Both are named on purpose: a notice carrying only a brand leaves it unclear
+who the rights holder actually is.
+
+Copyright in contributions from outside the company stays with their authors,
+licensed to everyone under the AGPL-3.0 like the rest of the work. See
+CONTRIBUTING.md.

@@ -187,3 +187,43 @@ func TestCDNBaseFollowsPublicURLWhenUnset(t *testing.T) {
 		t.Fatalf("an explicit CDN base was overwritten: %q", cfg.CDNBase)
 	}
 }
+
+// The source offer is published on an unauthenticated endpoint. Today it is read
+// by people, so a `javascript:` value is merely useless — the point of rejecting
+// it at load is that the day somebody renders the field as a link, the question
+// cannot arise. A guard placed at the sink has to be remembered; this one does not.
+func TestSourceOfferMustBeAnHTTPURL(t *testing.T) {
+	t.Setenv("RESONANS_DEV_AUTH", "1")
+
+	for _, bad := range []string{
+		"javascript:alert(1)",
+		"data:text/html,<script>alert(1)</script>",
+		"file:///etc/passwd",
+		"ftp://example.org/src",
+		"not a url",
+		"example.org/src", // no scheme: url.Parse accepts it, so it needs the Host check
+	} {
+		t.Run(bad, func(t *testing.T) {
+			t.Setenv("RESONANS_SOURCE_URL", bad)
+			if _, err := Load(); err == nil {
+				t.Fatalf("Load accepted RESONANS_SOURCE_URL=%q", bad)
+			}
+		})
+	}
+
+	// Positive control: without it, a Load that rejected EVERY value would pass
+	// all of the above.
+	for _, good := range []string{
+		"https://git.example.org/our-fork",
+		"http://git.internal.example/resonans",
+	} {
+		t.Setenv("RESONANS_SOURCE_URL", good)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load rejected a valid source URL %q: %v", good, err)
+		}
+		if cfg.SourceURL != good {
+			t.Fatalf("SourceURL = %q, want %q", cfg.SourceURL, good)
+		}
+	}
+}
