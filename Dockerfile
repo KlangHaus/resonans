@@ -25,9 +25,9 @@ COPY --from=build /out/resonans /app/resonans
 # Migrations bundled as immutable deploy artifacts (also run at boot from embed).
 COPY --from=build /src/migrations /app/migrations
 USER nonroot:nonroot
-# Content-API port. Caddy + Compose reverse-proxy to this (a reverse proxy in front:
-# reverse_proxy resonans:3000). Deploy contract — do not change without an
-# accompanying infra/compose change.
+# Content-API port. A reverse proxy forwards to this. Deploy contract — do not
+# change it without changing the deployment that forwards here; compose.yml in
+# this repository is the reference.
 EXPOSE 3000
 # Distroless ships no shell or wget/curl, so the healthcheck invokes the binary
 # itself in `healthcheck` mode (probes /healthz on the configured PORT).
