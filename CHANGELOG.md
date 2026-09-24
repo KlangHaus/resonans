@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/KlangHaus/resonans/compare/v1.16.0...v1.17.0) (2026-09-24)
+
+
+### Features
+
+* **auth:** production must fetch the JWKS over https ([#76](https://github.com/KlangHaus/resonans/issues/76)) ([01928ce](https://github.com/KlangHaus/resonans/commit/01928cefc71ad7fe317fddc2441ca2fa0dbee5be))
+
 # [1.16.0](https://github.com/KlangHaus/resonans/compare/v1.15.2...v1.16.0) (2026-09-24)
 
 
