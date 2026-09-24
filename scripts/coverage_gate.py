@@ -40,10 +40,17 @@ NAMES = {OK: "OK", MISSING: "MISSING", STALE: "STALE", BELOW: "BELOW", ERROR: "E
 # `go test -cover` prints one line per package.
 _COVER = re.compile(r"^(?:ok|---\s+FAIL)?\s*(\S+)\s+.*coverage:\s+([0-9.]+)% of statements")
 _NO_COVER = re.compile(r"^\?\s+(\S+)\s+\[no test files\]")
+# A package that HAS tests but no statements of its own — internal/apidocs is one,
+# it holds a single drift cell and no code. `go test` prints a THIRD shape for it:
+#   ok  <pkg>  (cached)  coverage: [no statements]
+# Missing this one made the gate report "checked 17 packages" while the tree had
+# 18 — a true statement about a subset the instrument had drawn for itself, and
+# the new package could therefore arrive with no floor and no MISSING.
+_NO_STATEMENTS = re.compile(r"^(?:ok|---\s+FAIL)?\s*(\S+)\s+.*coverage:\s+\[no statements\]")
 
 
 def parse_go_cover(text):
-    """Extract {package: percent} from `go test -cover ./...` output.
+    """Return ({package: percent}, [unreadable coverage lines]).
 
     A package with no test files reports "[no test files]" and no percentage. It
     is recorded as 0.0 rather than skipped: leaving it out would let a package
@@ -51,15 +58,28 @@ def parse_go_cover(text):
     catches a new untested package.
     """
     out = {}
+    unreadable = []
     for line in text.splitlines():
-        m = _COVER.match(line.strip())
+        l = line.strip()
+        m = _COVER.match(l)
         if m:
             out[m.group(1)] = float(m.group(2))
             continue
-        m = _NO_COVER.match(line.strip())
+        m = _NO_STATEMENTS.match(l)
         if m:
             out.setdefault(m.group(1), 0.0)
-    return out
+            continue
+        m = _NO_COVER.match(l)
+        if m:
+            out.setdefault(m.group(1), 0.0)
+            continue
+        # A `coverage:` line none of the patterns matched is a package this gate
+        # CANNOT SEE, and an unseen package is exactly what MISSING exists to
+        # catch. Report it rather than dropping it: three output shapes were
+        # needed before this was noticed, so a fourth should be loud.
+        if "coverage:" in l:
+            unreadable.append(l)
+    return out, unreadable
 
 
 def decide(measured, floors):
@@ -110,7 +130,13 @@ def measure(packages="./..."):
         # Do not report a coverage verdict about a run that failed: the numbers
         # would be about whichever packages happened to finish.
         return None, text
-    return parse_go_cover(text), text
+    measured, unreadable = parse_go_cover(text)
+    if unreadable:
+        print("coverage lines this gate could not parse — it cannot see these packages:", file=sys.stderr)
+        for l in unreadable:
+            print(f"  {l}", file=sys.stderr)
+        return None, text
+    return measured, text
 
 
 def load_floors(path):
@@ -156,8 +182,12 @@ def main():
         sys.exit(selftest(a.selftest))
 
     if a.decide:
-        measured = parse_go_cover(sys.stdin.read())
+        measured, unreadable = parse_go_cover(sys.stdin.read())
         log = ""
+        if unreadable:
+            for l in unreadable:
+                print(f"unparsed coverage line: {l}", file=sys.stderr)
+            sys.exit(ERROR)
     else:
         measured, log = measure(a.packages)
         if measured is None:
