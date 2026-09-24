@@ -244,7 +244,7 @@ func Run(ctx context.Context) error {
 	// HTTP probes used by the Docker HEALTHCHECK + Caddy (unauthenticated).
 	// Build identity is marshaled once at boot: it never changes, and a probe
 	// must not be able to fail on serialization.
-	healthBody, err := healthPayload()
+	healthBody, err := healthPayload(cfg.SourceURL)
 	if err != nil {
 		return fmt.Errorf("marshal health body: %w", err)
 	}
@@ -434,11 +434,16 @@ func (m *mediaAssetResolver) ResolveAsset(ctx context.Context, tenantID uuid.UUI
 // healthPayload is the /healthz body. Split out so a test can assert the probe
 // reports the STAMPED identity: the constant `{"status":"ok"}` it replaces would
 // have satisfied any test that only checked the status field.
-func healthPayload() ([]byte, error) {
+func healthPayload(sourceURL string) ([]byte, error) {
 	return json.Marshal(map[string]string{
-		"status":   "ok",
-		"service":  "resonans",
-		"version":  version,
+		"status":  "ok",
+		"service": "resonans",
+		"version": version,
+		// AGPL-3.0 §13: a user interacting with this instance over a network is
+		// entitled to its Corresponding Source. An unauthenticated probe is the
+		// one surface every such user can reach, so the offer lives here rather
+		// than only in a README nobody deploying a container will read.
+		"source":   sourceURL,
 		"revision": revision,
 	})
 }

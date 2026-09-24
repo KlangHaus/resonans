@@ -76,6 +76,15 @@ type Config struct {
 	// origin serving image bytes.
 	StorageDir string
 
+	// SourceURL is where this build's Corresponding Source can be obtained.
+	// AGPL-3.0 §13 obliges whoever OFFERS Resonans to users over a network to
+	// give those users its source — so a self-hoster who modified the code has
+	// to be able to point at THEIR repository, not ours. Defaulting to upstream
+	// and leaving it overridable is what makes the obligation satisfiable by
+	// someone other than us; hardcoding our URL would quietly make every
+	// modified deployment misdescribe itself.
+	SourceURL string
+
 	// OTel — from day one (product brief). tenant.id is set per-request on
 	// spans, never on the resource (Beslutning J2c).
 	OTelServiceName      string
@@ -141,6 +150,8 @@ func Load() (*Config, error) {
 		CDNBase:         getenvOptional("BUNNY_CDN_BASE"),
 		StorageDir:      getenvOptional("RESONANS_STORAGE_DIR"),
 		VideoProvider:   getenvOptional("RESONANS_VIDEO_PROVIDER"),
+
+		SourceURL: getenv("RESONANS_SOURCE_URL", "https://github.com/KlangHaus/resonans"),
 
 		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "klanghaus-resonans"),
 		OTelServiceNamespace: getenv("OTEL_SERVICE_NAMESPACE", "klanghaus"),

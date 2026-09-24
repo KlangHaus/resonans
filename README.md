@@ -1,155 +1,204 @@
 # Resonans
 
-KlangHaus' eget self-hostede **headless CMS** (Go) — bredt og content-type-agnostisk.
-Ét system for hele KlangHaus: **Etude-læringsindhold** (multi-tenant LMS) + **blog** +
-**marketingssider** (+ senere governance-referater + kundeservice-KB). Anti-lock-in
-(Manifest §13), EU-residens. Erstatter Sanity/Contentful. **Ikke offentligt OSS-released.**
+A self-hosted, multi-tenant **headless CMS** written in Go. One content engine behind
+many surfaces: a learning platform, a blog, marketing pages, a knowledge base. Content
+types are declared in YAML rather than compiled in, so adding a type is an edit, not a
+release.
 
-Produkt-brief: `klanghaus/docs/product-briefs/resonans/index.md`.
+Built by [KlangHaus](https://klanghaus.dk) to replace hosted CMS-as-a-service for our own
+sites, and released so you can run the same thing yourself. It is the CMS behind our
+production content — the bugs get found by us first.
 
-## Stack
+**Status:** used in production by its authors. The API is versioned (`/api/v1`) but young;
+read [CHANGELOG.md](CHANGELOG.md) before upgrading.
 
-- **Go** content-API (REST — Beslutning W).
-- **Postgres + RLS**, **multi-tenant fra dag 1** (tenant_id ≡ org_id, pool+silo,
-  Beslutning K). Egen content-DB (adskilt fra Etudes money-tier-DB). Migrations køres
-  ved boot (embedded).
-- **BetterAuth-JWT** verificeret lokalt mod cached JWKS; tenant = `org`-claim.
-- **OTel** fra dag ét (traces+metrics+logs; tenant.id per-span).
-- Distroless-image, Compose-workload på **VM2** bag Caddy (`cms.klanghaus.dk`).
+## Why this and not the others
 
-## Multi-tenancy + auth
+- **It is yours.** AGPL-3.0, no seat pricing, no API request quota, no vendor who can
+  reprice the thing your website depends on. Data lives in your Postgres.
+- **Multi-tenant from the first commit**, enforced in the database with row level
+  security — not by remembering to add `where tenant_id = …`. See
+  [Tenant isolation](#tenant-isolation).
+- **It refuses to boot into an unsafe state.** No authentication configured, no database,
+  no durable asset storage: the server exits instead of starting in a degraded mode you
+  would discover months later. Every one of those refusals exists because the permissive
+  version of it shipped first.
+- **No CDN account required.** Assets go on a volume and Resonans serves them. Put a CDN
+  in front when you want one, not to get started.
+- **Small.** One Go binary in a distroless image, plus Postgres. No Redis, no queue, no
+  search cluster.
 
-- Hvert **document** er tenant-scoped (`tenant_id`) + `dataset` (default `production`).
-- Redaktører logger ind via delt auth (BetterAuth-JWT). Middlewaren udleder tenant fra
-  det **verificerede `org`-claim** — aldrig fra request-body/header (anti-spoof). Postgres
-  **RLS** håndhæver isolationen i databasen (fail-closed: GUC `app.tenant_id` sat pr.
-  transaktion).
-- **Dev uden JWT:** sæt tenant via `X-Dev-Tenant`-header. Kræver det eksplicitte opt-in
-  `RESONANS_DEV_AUTH=1`; uden JWT og uden opt-in nægter serveren at starte, uanset `NODE_ENV`.
-  Opt-in i `NODE_ENV=production` afvises også.
-- **Prod:** boot-fejler uden `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` (ingen åbne endpoints)
-  og uden `DATABASE_URL` (ingen ikke-persistent/uisoleret store).
+It does **not** manage users or send email. It verifies JWTs from an identity provider you
+already run.
 
-## Kør lokalt
+## Quickstart
 
 ```bash
-# Uden DB (in-memory store, dev only) — tenant via X-Dev-Tenant:
-RESONANS_DEV_AUTH=1 go run ./cmd/resonans
-
-# Med Postgres + boot-migrations + RLS via Compose:
-docker compose -f docker-compose.tilt.yml up --build
+git clone https://github.com/KlangHaus/resonans.git
+cd resonans
+cp .env.example .env
+$EDITOR .env          # fill in the passwords and point the JWT settings at your IdP
+docker compose up -d
 ```
 
-| Action | Kommando               |
-| ------ | ---------------------- |
-| Lint   | `golangci-lint run`    |
-| Format | `gofumpt -w .`         |
-| Vet    | `go vet ./...`         |
-| Test   | `go test -race ./...`  |
-| Build  | `go build ./...`       |
+Editor at <http://localhost:8080>, content API at <http://localhost:3000>.
 
-## API (v1) — tenant-scoped
+`compose.yml` deliberately does **not** terminate TLS or bind to a public address. Put
+your own reverse proxy in front for that. Publishing an editor to the internet is a
+decision only you can make, so it is not a default.
 
-Alle ruter kræver en tenant (fra verificeret JWT `org`-claim, eller `X-Dev-Tenant` i dev).
+### Without Docker
 
-| Metode | Rute                                   |
-| ------ | -------------------------------------- |
-| GET    | `/api/v1/schema` · `/api/v1/schema/{type}` (editor form/palette-kilde) |
-| GET    | `/api/v1/documents?type=&status=`      |
-| GET    | `/api/v1/documents/{id}`               |
-| GET    | `/api/v1/content/{type}/{slug}`        |
-| POST   | `/api/v1/documents` (body valideres mod schema) |
-| PUT    | `/api/v1/documents/{id}` (body valideres mod schema) |
-| POST   | `/api/v1/documents/{id}/publish`       |
-| POST   | `/api/v1/assets` (multipart `file`) · GET `/api/v1/assets` · GET `/api/v1/assets/{id}` |
-| GET    | `/api/v1/video/embed?id=` · `/api/v1/video/resolve?id=` (embed + oEmbed-metadata) |
-| GET    | `/healthz`, `/readyz` (uautentificeret)|
+```bash
+RESONANS_DEV_AUTH=1 go run ./cmd/resonans
+```
 
-### Delivery-API (read, published-only) — Fase 2
+That runs with an in-memory store and no login, taking the tenant from an `X-Dev-Tenant`
+header. It is for development only, and `RESONANS_DEV_AUTH=1` together with
+`NODE_ENV=production` is refused rather than honoured.
 
-Tenant-scoped read/leverings-flade konsumeret **server-side** af vores Nuxt-sites
-(Etude-Nitro + klanghaus.dk). **Betroet service-til-service:** kalderen autentificerer
-med `RESONANS_DELIVERY_TOKEN` (bearer) og sender tenant via **`X-Scope-OrgID`** — som
-kun trustes når service-token matcher (aldrig fra en slutbruger/browser). Serverer KUN
-`published` indhold; RLS håndhæver isolationen uanset.
+## Configuration
 
-| Metode | Rute                                    | Formål |
-| ------ | --------------------------------------- | ------ |
-| GET    | `/delivery/v1/{type}`                   | katalog (published docs af type, fx `course`) |
-| GET    | `/delivery/v1/{type}/{slug}`            | ét published document (lesson/page/…) |
+Every setting is an environment variable; [.env.example](.env.example) documents all of
+them with the reasoning. The ones that decide whether the server starts at all:
 
-Follow-up: cursor-pagination (v1 soft-cap 200), reference-ekspansion (course→modules→lessons),
-draft-preview via preview-token (Fase 5).
+| Variable | Required in production | What it does |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | Postgres DSN. Unset in production the server exits: the in-memory store loses content *and* does not enforce tenant isolation. |
+| `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` | yes, both | Editor login. Either one missing and the server exits rather than exposing the editor API to an unauthenticated header. |
+| `RESONANS_DELIVERY_TOKEN` | yes | Authenticates the trusted read surface. Unset, `/delivery` would trust a tenant header from anyone. |
+| `RESONANS_STORAGE_DIR` *or* all three `BUNNY_STORAGE_*` | yes, one of them | Where asset bytes live. Neither set, the server exits instead of accepting uploads it will drop on restart. |
+| `PUBLIC_URL` | recommended | The API's externally reachable base URL. Asset URLs are built from it, so a wrong value shows up as broken images, not as an error. |
+| `RESONANS_DEV_AUTH` | never | The single value `1` opens the unauthenticated development paths, outside production only. |
 
-## Content-model + schema-registry (Fase 1)
+## Tenant isolation
 
-Content-typer er **ikke hardcodede** — de defineres deklarativt i
-`internal/schema/schemas/` (YAML, git-versioneret): doc-typer (`course → module →
-lesson`, `page`, `post`, `resource`) i `types/*.yaml` + et delt **blok-bibliotek**
-(`blocks.yaml`, 14 blokke: indhold + marketing). Hver doc-type deklarerer på sit
-`body`-felt en **`allow`-liste** (ét bibliotek, rigtige blokke pr. domæne) + `list.columns`
-til editorens doc-liste.
+Every document carries a `tenant_id` and a `dataset` (default `production`). Three things
+have to hold, and each is checked in a different place:
 
-- Registret loades ved boot; et document-body (JSONB) **valideres mod schemaet** på
-  write (required-felter, kendte felter, blok-allowlist, field-level da/en-shape,
-  nested blokke/arrays). `title`/`slug`/`status` er metadata-kolonner (ikke body-felter).
-- `GET /api/v1/schema` serverer registret til editoren (form- + palette-generering).
-- Felt-typer: `string · text · richtext · number · boolean · asset · reference · blocks · array`.
+1. **The tenant comes from a verified token.** The middleware reads the `org` claim of a
+   JWT it has verified against the issuer's JWKS. It is never read from a request body or
+   header — those are attacker-controlled.
+2. **Postgres enforces it.** Every content table has `enable row level security` *and*
+   `force row level security`, with policies on a `app.tenant_id` GUC that the
+   application sets per transaction. `force` binds the table owner too.
+3. **The application connects as a role that cannot bypass it.** RLS is ignored by any
+   role with `SUPERUSER` or `BYPASSRLS`, which is why the shipped compose file creates two
+   roles: a migrator that owns the schema, and the role the server actually uses. See
+   [deploy/initdb/](deploy/initdb/). Collapsing them into one is the mistake this design
+   exists to prevent.
 
-## Media (Fase 3)
+## Content model
 
-Assets (billeder + filer) er tenant-scoped (RLS, som documents). Upload → et af **tre
-backends**; metadata i `assets`-tabellen (kind, mime, dimensioner, hotspot).
+Content types are declarative, in `internal/schema/schemas/` — YAML, versioned in git.
+Document types live in `types/*.yaml`, and they share one block library (`blocks.yaml`).
+Each type's `body` field names an `allow` list, so a marketing page and a lesson draw
+their blocks from the same library without offering each other's.
 
-### Storage backends
+A document body is JSONB, validated against its schema on write: required fields, unknown
+fields, the block allowlist, per-field shape, nested blocks and arrays. `title`, `slug`
+and `status` are columns, not body fields.
+
+Field types: `string · text · richtext · number · boolean · asset · reference · blocks ·
+array`.
+
+`GET /api/v1/schema` serves the registry so an editor can generate its own forms and
+block palette from it.
+
+## HTTP surfaces
+
+**Editor API** — `/api/v1`, tenant from the verified token.
+
+| Method | Route |
+| --- | --- |
+| `GET` | `/api/v1/schema` · `/api/v1/schema/{type}` |
+| `GET` `PUT` | `/api/v1/settings` · `/api/v1/settings/preview` |
+| `GET` | `/api/v1/documents?type=&status=&deleted=` · `/api/v1/documents/{id}` |
+| `GET` | `/api/v1/content/{type}/{slug}` |
+| `POST` `PUT` | `/api/v1/documents` · `/api/v1/documents/{id}` |
+| `POST` | `/api/v1/documents/{id}/publish` |
+| `DELETE` `POST` | `/api/v1/documents/{id}` · `/api/v1/documents/{id}/restore` |
+| `GET` | `/api/v1/documents/{id}/versions` |
+| `POST` | `/api/v1/documents/{id}/rollback/{version}` |
+| `POST` `GET` | `/api/v1/assets` · `GET /api/v1/assets/{id}` |
+| `GET` | `/api/v1/video/embed?id=` · `/api/v1/video/resolve?id=` |
+| `POST` | `/api/v1/preview-token` · `/api/v1/preview/envelope` |
+
+**Delivery API** — `/delivery/v1`, published content only, for your own server-side
+front-ends. The caller authenticates with `RESONANS_DELIVERY_TOKEN` and passes the tenant
+in `X-Scope-OrgID`, which is trusted *only* because the token matched. Never call this
+from a browser.
+
+| Method | Route |
+| --- | --- |
+| `GET` | `/delivery/v1/schema` |
+| `GET` | `/delivery/v1/{type}` · `/delivery/v1/{type}/{slug}` |
+| `GET` | `/delivery/v1/preview/{type}/{slug}` |
+
+**Unauthenticated** — `/healthz`, `/readyz`, and `/_assets/{key}` when Resonans serves
+asset bytes itself.
+
+## Deleting content
+
+`DELETE` moves a document to a bin: it disappears from every read path, and
+`?deleted=only` lists what is in there. `POST …/restore` brings it back.
+
+The slug is freed while a document sits in the bin, because a full unique index would let
+a deleted page hold its own address hostage forever. The cost is named: restoring into a
+slug someone has since taken fails with a conflict rather than silently renaming
+anything.
+
+## Asset storage
 
 | Backend | Selected by | Bytes served by | Survives a restart |
 | --- | --- | --- | --- |
-| `bunny` | `BUNNY_STORAGE_ENDPOINT` + `_ZONE` + `_KEY` (all three) | Bunny CDN pull-zone | yes |
-| `disk` | `RESONANS_STORAGE_DIR=/var/lib/resonans/assets` | Resonans, at `GET /_assets/<key>` | yes, with a volume |
+| `bunny` | `BUNNY_STORAGE_ENDPOINT` + `_ZONE` + `_KEY`, all three | Bunny CDN pull-zone | yes |
+| `disk` | `RESONANS_STORAGE_DIR` | Resonans, at `GET /_assets/<key>` | yes, with a volume |
 | `memory` | neither of the above | Resonans, at `GET /_assets/<key>` | **no** |
 
-`disk` is the self-host path: mount a volume, set one variable, and Resonans serves the
-bytes itself — no CDN account required. Bunny wins when both are configured, because a CDN
-in front of the origin is strictly better than an origin shipping image bytes.
+Bunny wins when both are configured: a CDN in front beats an origin shipping image bytes.
+`BUNNY_CDN_BASE` defaults to `PUBLIC_URL` + `/_assets`, so leave it empty unless you
+actually use Bunny.
 
-With `NODE_ENV=production` and neither configured the server **refuses to start**
-(`ErrNoStorage`). It used to log a warning and run on the in-memory backend, which produces
-a CMS that accepts an upload, shows it to the editor, and drops it at the next restart.
+Uploads are typed from their **content**, never from the filename or the client's
+`Content-Type`, against a short allowlist (PNG, JPEG, GIF, WebP, PDF, ZIP, MP3). No
+`text/*` type is accepted, because an SVG or HTML file carrying a script sniffs as
+`text/plain` and would then execute on the origin serving it. `/_assets` re-derives the
+type from the bytes with the same allowlist on the way out, so a file that reached the
+volume by some other route still cannot be served. The disk backend confines itself with
+`os.Root`, so the root is enforced by the kernel rather than by string checks.
 
-`BUNNY_CDN_BASE` defaults to `PUBLIC_URL` + `/_assets`. Leaving it unset is the right choice
-for `disk` and `memory`; set it to the pull-zone URL for `bunny`.
+Video is an optional plugin (`RESONANS_VIDEO_PROVIDER=vimeo`) resolving embeds and oEmbed
+metadata over public endpoints, with no token.
 
-The `/_assets` route re-derives each Content-Type from the stored **bytes**, using the same
-allowlist the upload used, and answers 404 for anything outside it — so a byte sequence that
-reached the volume by some route other than an upload still cannot be served. Content refererer et asset via id (`asset`-felt-type); delivery/editor bygger en
-**Bunny-CDN-URL** m/ transform-params (resize på edge). **Video** = tilvælgeligt plugin (`RESONANS_VIDEO_PROVIDER=vimeo`) — video-embed-blok →
-Vimeo player-URL + **oEmbed-metadata** (titel/thumbnail/varighed via public oEmbed, ingen
-token) til den video-tunge authoring-oplevelse (explainers). Follow-up: hotspot/crop→
-transform-mapping (kræver Bunny-Optimizer-param-verifikation), per-tenant Vimeo-token til
-private videoer (Etude-boundary), image-varianter-precompute.
+## Development
 
-## Deploy-kontrakt
+| Action | Command |
+| --- | --- |
+| Build | `go build ./...` |
+| Test | `go test -race ./...` |
+| Vet | `go vet ./...` |
+| Lint | `golangci-lint run` + `gosec ./...` |
+| Format | `gofumpt -w .` |
 
-Honoreres af scaffoldet — ændr ikke uden en samtidig `infra/compose`-ændring:
+`golangci-lint` does not include `gosec`, so running only the former is a green about a
+different set of tools than CI's.
 
-- `DATABASE_URL` (egen content-DB) · `PUBLIC_URL=https://cms.klanghaus.dk` · lyt på `:3000`
-- Asset storage must be chosen explicitly in production: either the three `BUNNY_STORAGE_*`
-  variables or `RESONANS_STORAGE_DIR` pointing at a mounted volume. A compose file that
-  passes `BUNNY_CDN_BASE: ${VAR:-}` through as an empty string is fine — an empty value now
-  follows `PUBLIC_URL` instead of the old hardcoded `http://localhost:3000/_assets`, which
-  every visitor would have resolved against their own machine.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Faser (roadmap)
+## Security
 
-Fase 0 multi-tenant foundation (**denne**) → Fase 1 schema-registry + authoring → **Fase 2
-read/delivery-API (Etude M5)** → Fase 3 media (billed-pipeline + Vimeo-plugin) → Fase 4
-editor-UI (grundtone) → Fase 5 workflow + preview → Fase 6 GROQ + SCORM.
+Please do not open a public issue for a vulnerability. [SECURITY.md](SECURITY.md) says how
+to report one.
 
-## Åbne punkter / follow-ups
+## License
 
-- Schema-registry + rig content-model (course/lesson-felter, blokke) — Fase 1.
-- `PostgresStore` RLS-integrations-tests (kræver kørende Postgres — som permissions'
-  `internal/assertions`-job).
-- PDP-gating (author/publish pr. tenant) via [permissions].
-- Redaktør-UI (Nuxt/Vue + grundtone-komponenter).
+[GNU AGPL-3.0](LICENSE).
+
+If you modify Resonans and offer it to users over a network, §13 says those users are
+entitled to your source. Set `RESONANS_SOURCE_URL` to your repository and `/healthz` will
+tell them where to find it — leaving it at the upstream default is only truthful if you
+changed nothing.
+
+KlangHaus holds the copyright to its own contributions. If the AGPL does not fit what you
+want to build, ask us.

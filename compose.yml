@@ -1,0 +1,104 @@
+# Resonans — self-hosted headless CMS. One file, four services, no accounts.
+#
+#   cp .env.example .env    # then fill in the three passwords/secrets it names
+#   docker compose up -d
+#
+# Editor at http://localhost:8080, content API at http://localhost:3000.
+#
+# What this stack does NOT do, on purpose: terminate TLS, and expose anything on
+# a public address. Put your own reverse proxy in front for that — Caddy, nginx,
+# Traefik, whatever you already run. A compose file that quietly published an
+# editor to the internet would be the wrong default for the only person who can
+# judge that: you.
+
+name: resonans
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: resonans
+      POSTGRES_USER: resonans_migrator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Read by deploy/initdb/10-app-role.sql to create the non-bypassing role
+      # the server connects as. See that file for why the two roles are split.
+      RESONANS_APP_PASSWORD: ${RESONANS_APP_PASSWORD:?set RESONANS_APP_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # initdb scripts run ONLY on an empty data directory. Changing this file
+      # after the first start has no effect — drop the volume or apply the SQL
+      # by hand.
+      - ./deploy/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resonans_migrator -d resonans"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot. In production Resonans does NOT migrate at boot, because the
+  # server connects as a role with no DDL privileges. This runs as the migrator.
+  migrate:
+    image: ghcr.io/klanghaus/resonans:${RESONANS_VERSION:-latest}
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://resonans_migrator:${POSTGRES_PASSWORD:?}@postgres:5432/resonans
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    image: ghcr.io/klanghaus/resonans:${RESONANS_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # The externally reachable base URL of the API. Asset URLs are built from
+      # it, so a wrong value here shows up as broken images rather than as an
+      # error anywhere.
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      DATABASE_URL: postgres://resonans_app:${RESONANS_APP_PASSWORD:?}@postgres:5432/resonans
+      # Asset bytes on a local volume. Without this (or a full BUNNY_STORAGE_*
+      # set) the server REFUSES to start in production, because the in-memory
+      # fallback loses every upload on restart.
+      RESONANS_STORAGE_DIR: /var/lib/resonans/assets
+      # Trusted server-to-server read surface. Required in production: unset, it
+      # would trust an unauthenticated tenant header.
+      RESONANS_DELIVERY_TOKEN: ${RESONANS_DELIVERY_TOKEN:?set RESONANS_DELIVERY_TOKEN in .env}
+      RESONANS_PREVIEW_SECRET: ${RESONANS_PREVIEW_SECRET:-}
+      # Editor login. Both must be set or the server refuses to start — see
+      # .env.example for what to point them at.
+      RESONANS_JWT_ISSUER: ${RESONANS_JWT_ISSUER:?set RESONANS_JWT_ISSUER in .env}
+      RESONANS_JWKS_URL: ${RESONANS_JWKS_URL:?set RESONANS_JWKS_URL in .env}
+      # AGPL-3.0 §13: if you modify Resonans and offer it over a network, point
+      # this at YOUR source so the offer on /healthz is true.
+      RESONANS_SOURCE_URL: ${RESONANS_SOURCE_URL:-}
+    volumes:
+      - assets_data:/var/lib/resonans/assets
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  studio:
+    image: ghcr.io/klanghaus/resonans-studio:${RESONANS_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      # Browser-side values: these must be reachable from the EDITOR's browser,
+      # not from inside this network. A service name like `api` works between
+      # containers and nowhere else.
+      NUXT_PUBLIC_API_BASE: ${PUBLIC_URL:-http://localhost:3000}
+      # Positive opt-in. Empty means no login at all, which is why compose
+      # requires it: a CMS whose editor opens for anyone is not a default we get
+      # to pick for you.
+      NUXT_PUBLIC_AUTH_BASE: ${RESONANS_AUTH_BASE:?set RESONANS_AUTH_BASE in .env}
+    ports:
+      - "${STUDIO_PORT:-8080}:3000"
+    depends_on:
+      api: { condition: service_started }
+
+volumes:
+  postgres_data:
+  assets_data:
