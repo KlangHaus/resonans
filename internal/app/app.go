@@ -102,6 +102,15 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("jwt verifier: %w", err)
 		}
 		logger.Info("jwt_verifier_active", "issuer", cfg.JWTIssuer)
+		// A waiver nobody can see is worse than no waiver: it looks like the
+		// default. Config refuses plain http for the trust anchor in production,
+		// so reaching this line means someone declared the opt-in on purpose —
+		// and the log has to say so every boot, naming the URL.
+		if cfg.IsProduction() && cfg.AllowInsecureJWKS {
+			logger.Warn("insecure_jwks_waived",
+				"jwksUrl", cfg.JWKSURL,
+				"why", "RESONANS_ALLOW_INSECURE_JWKS=1 — the signing keys are fetched without transport integrity, so anyone on the path can substitute them")
+		}
 	}
 
 	// --- Content store (Beslutning K — own content-DB, multi-tenant + RLS) ---

@@ -65,7 +65,7 @@ them with the reasoning. The ones that decide whether the server starts at all:
 | Variable | Required in production | What it does |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Postgres DSN. Unset in production the server exits: the in-memory store loses content *and* does not enforce tenant isolation. |
-| `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` | yes, both | Editor login. Either one missing and the server exits rather than exposing the editor API to an unauthenticated header. |
+| `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` | yes, both, and **https** | Editor login. Either one missing and the server exits rather than exposing the editor API to an unauthenticated header. In production both must be `https`, because the JWKS is the trust anchor — over plain http anyone on the path can substitute the signing keys. `RESONANS_ALLOW_INSECURE_JWKS=1` waives it deliberately, and every boot then logs the URL. |
 | `RESONANS_DELIVERY_TOKEN` | yes | Authenticates the trusted read surface. Unset, `/delivery` would trust a tenant header from anyone. |
 | `RESONANS_STORAGE_DIR` *or* all three `BUNNY_STORAGE_*` | yes, one of them | Where asset bytes live. Neither set, the server exits instead of accepting uploads it will drop on restart. |
 | `PUBLIC_URL` | recommended | The API's externally reachable base URL. Asset URLs are built from it, so a wrong value shows up as broken images, not as an error. |

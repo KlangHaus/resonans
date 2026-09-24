@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -225,5 +226,69 @@ func TestSourceOfferMustBeAnHTTPURL(t *testing.T) {
 		if cfg.SourceURL != good {
 			t.Fatalf("SourceURL = %q, want %q", cfg.SourceURL, good)
 		}
+	}
+}
+
+// The JWKS is the trust anchor for every editor request. Over plain http anyone
+// on the path can substitute the signing keys and mint tokens this server would
+// accept — an authentication bypass, not a hygiene warning. So production demands
+// https, and the waiver has to be declared rather than inferred.
+//
+// The development cases are the blast-radius measurement, not filler: staging
+// runs NODE_ENV=development with a named http accept, and this guard must leave
+// it alone.
+func TestProductionDemandsHTTPSForTheTrustAnchor(t *testing.T) {
+	const (
+		secureJWKS   = "https://auth.example.org/.well-known/jwks.json"
+		secureIssuer = "https://auth.example.org"
+		plainJWKS    = "http://auth.example.org/.well-known/jwks.json"
+		plainIssuer  = "http://auth.example.org"
+	)
+	cases := []struct {
+		name          string
+		nodeEnv       string
+		issuer, jwks  string
+		waive         string
+		wantErrSubstr string
+	}{
+		{"production with https is fine", "production", secureIssuer, secureJWKS, "", ""},
+		{"production with a plain-http JWKS is refused", "production", secureIssuer, plainJWKS, "", "RESONANS_JWKS_URL: must be https in production"},
+		{"production with a plain-http issuer is refused", "production", plainIssuer, secureJWKS, "", "RESONANS_JWT_ISSUER: must be https in production"},
+		// Staging. If this ever starts failing, the guard has reached past
+		// production and broken the named accept it was told not to touch.
+		{"development keeps its named http accept", "development", plainIssuer, plainJWKS, "", ""},
+		{"the waiver opens it, deliberately", "production", plainIssuer, plainJWKS, "1", ""},
+		// Only one positively declared value waives a security property.
+		{"true does not waive it", "production", secureIssuer, plainJWKS, "true", "must be https in production"},
+		{"yes does not waive it", "production", secureIssuer, plainJWKS, "yes", "must be https in production"},
+		{"empty does not waive it", "production", secureIssuer, plainJWKS, "", "must be https in production"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NODE_ENV", tc.nodeEnv)
+			t.Setenv("RESONANS_JWT_ISSUER", tc.issuer)
+			t.Setenv("RESONANS_JWKS_URL", tc.jwks)
+			t.Setenv("RESONANS_ALLOW_INSECURE_JWKS", tc.waive)
+			t.Setenv("RESONANS_DELIVERY_TOKEN", "t")
+			t.Setenv("RESONANS_STORAGE_DIR", "/tmp/resonans-assets")
+			t.Setenv("DATABASE_URL", "postgres://x@localhost:5432/x")
+
+			cfg, err := Load()
+			if tc.wantErrSubstr == "" {
+				if err != nil {
+					t.Fatalf("Load() = %v, want no error", err)
+				}
+				if cfg.JWKSURL != tc.jwks {
+					t.Fatalf("JWKSURL = %q, want %q", cfg.JWKSURL, tc.jwks)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Load() accepted %s with NODE_ENV=%s and waiver %q", tc.jwks, tc.nodeEnv, tc.waive)
+			}
+			if !strings.Contains(err.Error(), tc.wantErrSubstr) {
+				t.Fatalf("error = %v, want it to contain %q", err, tc.wantErrSubstr)
+			}
+		})
 	}
 }
