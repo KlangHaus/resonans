@@ -60,12 +60,21 @@ create role resonans_app with
   login password :'app_password'
   nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
 
-grant usage on schema public to resonans_app;
+-- Resonans keeps its tables in the `resonans_app` SCHEMA, not in `public`.
+-- Create it here so the grants below have something to attach to; the migrator's
+-- own `create schema if not exists` then finds it already present. Getting this
+-- wrong is not a subtle failure: granting on `public` produced an app role that
+-- could not read its own tables at all, and every request answered
+-- `permission denied for schema resonans_app`.
+create schema if not exists resonans_app authorization resonans_migrator;
+
+grant usage on schema resonans_app to resonans_app;
 
 -- No table exists yet, so grant on what the migrator WILL create. Default
 -- privileges attach to the GRANTING role, which is why this has to run as the
--- same role the migrations run as.
-alter default privileges in schema public
+-- same role the migrations run as — and they are per-SCHEMA, so the schema has
+-- to be named, not inherited.
+alter default privileges in schema resonans_app
   grant select, insert, update, delete on tables to resonans_app;
-alter default privileges in schema public
+alter default privileges in schema resonans_app
   grant usage, select on sequences to resonans_app;

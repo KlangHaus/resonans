@@ -80,8 +80,18 @@ have to hold, and each is checked in a different place:
    JWT it has verified against the issuer's JWKS. It is never read from a request body or
    header — those are attacker-controlled.
 2. **Postgres enforces it.** Every content table has `enable row level security` *and*
-   `force row level security`, with policies on a `app.tenant_id` GUC that the
-   application sets per transaction. `force` binds the table owner too.
+   `force row level security`, with policies on an `app.tenant_id` GUC that the
+   application sets per transaction. The policies read it as
+   `current_setting('app.tenant_id', false)` — not optional — so a query with the GUC
+   unset **raises an error** rather than returning an empty result. That is deliberate:
+   an empty result is a plausible answer a caller might act on, and an error is not.
+
+   Tables live in the `resonans_app` schema, not `public`. The role that connects needs
+   `usage` on that schema and default privileges granted *in* it; granting on `public`
+   instead produces a role that cannot read its own tables.
+
+   `force` binds the table owner too — but read [deploy/initdb/](deploy/initdb/) for what
+   that does and does not buy you, because a superuser owner bypasses RLS regardless.
 3. **Every tenant table actually carries the policy.** The first two hold once and stay
    true; this one is re-decided by every migration, and a migration that forgets is
    *invisible* to the role model — the role stays correct while the data reads across

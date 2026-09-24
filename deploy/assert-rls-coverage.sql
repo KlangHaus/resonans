@@ -21,21 +21,29 @@ declare
 begin
   -- The denominator first: a query that finds nothing because it is looking in
   -- the wrong place would otherwise read exactly like a pass.
+  -- Every non-system schema, deliberately. An earlier version hardcoded
+  -- `public`, and Resonans keeps its tables in `resonans_app` — so against a
+  -- real database it found nothing. Naming no schema is the version that cannot
+  -- be pointed at the wrong one.
   select count(*) into total
   from pg_class c
   join pg_attribute a on a.attrelid = c.oid
+  join pg_namespace n on n.oid = c.relnamespace
   where c.relkind = 'r' and a.attname = 'tenant_id' and not a.attisdropped
-    and c.relnamespace = 'public'::regnamespace;
+    and n.nspname not in ('pg_catalog', 'information_schema')
+    and n.nspname not like 'pg_toast%' and n.nspname not like 'pg_temp%';
 
   if total = 0 then
-    raise exception 'found no table with a tenant_id column at all — this assertion is looking at the wrong database or the wrong schema, which is not the same as passing';
+    raise exception 'found no table with a tenant_id column in any user schema — this assertion is looking at the wrong database, which is not the same as passing';
   end if;
 
-  select string_agg(c.relname, ', ' order by c.relname) into unguarded
+  select string_agg(n.nspname || '.' || c.relname, ', ' order by n.nspname, c.relname) into unguarded
   from pg_class c
   join pg_attribute a on a.attrelid = c.oid
+  join pg_namespace n on n.oid = c.relnamespace
   where c.relkind = 'r' and a.attname = 'tenant_id' and not a.attisdropped
-    and c.relnamespace = 'public'::regnamespace
+    and n.nspname not in ('pg_catalog', 'information_schema')
+    and n.nspname not like 'pg_toast%' and n.nspname not like 'pg_temp%'
     and not (c.relrowsecurity and c.relforcerowsecurity);
 
   if unguarded is not null then
