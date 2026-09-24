@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/KlangHaus/resonans/compare/v1.15.2...v1.16.0) (2026-09-24)
+
+
+### Features
+
+* **media:** an editor can delete an upload, and undo it ([#73](https://github.com/KlangHaus/resonans/issues/73)) ([63fd68f](https://github.com/KlangHaus/resonans/commit/63fd68f0ce5f92428d9f402323f017f9139e5f49))
+
 ## [1.15.2](https://github.com/KlangHaus/resonans/compare/v1.15.1...v1.15.2) (2026-09-24)
 
 
