@@ -70,9 +70,13 @@ behaviour is loud instead of invisible.
 
 ## Licensing of contributions
 
-Resonans is [AGPL-3.0](LICENSE). By opening a pull request you license your contribution
-under those terms. We do not ask for copyright assignment, so KlangHaus cannot relicense
-your code without asking you.
+Resonans is [AGPL-3.0](LICENSE), copyright KlangHaus (Asp Productions ApS, CVR 36708077).
+By opening a pull request you license your contribution under those same terms.
+
+**You keep the copyright in what you write.** We do not ask for assignment, which cuts both
+ways and we would rather say it plainly than have you find out later: KlangHaus can grant a
+different licence for the parts it wrote itself, and cannot do so for yours without asking
+you first.
 
 ## Code of conduct
 

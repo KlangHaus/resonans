@@ -191,14 +191,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 Please do not open a public issue for a vulnerability. [SECURITY.md](SECURITY.md) says how
 to report one.
 
-## License
+## Copyright and license
 
-[GNU AGPL-3.0](LICENSE).
+Copyright (C) 2026 **KlangHaus** (Asp Productions ApS, CVR 36708077, Denmark).
+Licensed under the [GNU AGPL-3.0](LICENSE) — see [NOTICE](NOTICE).
 
 If you modify Resonans and offer it to users over a network, §13 says those users are
 entitled to your source. Set `RESONANS_SOURCE_URL` to your repository and `/healthz` will
 tell them where to find it — leaving it at the upstream default is only truthful if you
 changed nothing.
 
-KlangHaus holds the copyright to its own contributions. If the AGPL does not fit what you
-want to build, ask us.
+KlangHaus holds the copyright to its own contributions, so we can grant a different licence
+for them. We cannot relicense someone else's contribution without asking them, because we
+do not take copyright assignment. If the AGPL does not fit what you want to build, ask us.
