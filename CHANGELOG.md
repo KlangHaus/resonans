@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/KlangHaus/resonans/compare/v1.14.1...v1.15.0) (2026-09-24)
+
+
+### Features
+
+* make Resonans publishable as open source under AGPL-3.0 ([#69](https://github.com/KlangHaus/resonans/issues/69)) ([a940ebd](https://github.com/KlangHaus/resonans/commit/a940ebd21352c3a23c0e3e1d78634af65665b9df))
+
 ## [1.14.1](https://github.com/KlangHaus/resonans/compare/v1.14.0...v1.14.1) (2026-09-24)
 
 
