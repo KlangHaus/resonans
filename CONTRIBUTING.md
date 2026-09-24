@@ -71,12 +71,26 @@ behaviour is loud instead of invisible.
 ## Licensing of contributions
 
 Resonans is [AGPL-3.0](LICENSE), copyright KlangHaus (Asp Productions ApS, CVR 36708077).
-By opening a pull request you license your contribution under those same terms.
+Everything published here is, and stays, AGPL-3.0 — that is not what the paragraph below is
+about.
 
-**You keep the copyright in what you write.** We do not ask for assignment, which cuts both
-ways and we would rather say it plainly than have you find out later: KlangHaus can grant a
-different licence for the parts it wrote itself, and cannot do so for yours without asking
-you first.
+**A contributor licence agreement will be required before we can merge code from outside
+the company, and it is not written yet.** It is being drafted with our legal counsel; until
+it exists we cannot accept an outside pull request, because merging one would leave the
+project's licensing unsettled in a way that is unpleasant to fix afterwards.
+
+We would rather tell you this before you spend an evening on a patch than after. So:
+
+- **Issues, bug reports and discussion need no agreement.** They are welcome now.
+- **A patch is welcome too, but expect it to wait** for the agreement rather than being
+  reviewed and merged straight away.
+- When the agreement lands, this section will say exactly what it asks for and what it does
+  not, in plain language and before you are asked to sign anything. If it turns out to ask
+  for more than you want to give, that is a fair reason not to contribute, and we would
+  rather you could tell.
+
+A CLA is a real cost to a project: plenty of capable people will not sign one, and we know
+that. It is being adopted deliberately, not as boilerplate.
 
 ## Code of conduct
 

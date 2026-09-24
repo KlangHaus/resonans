@@ -202,5 +202,7 @@ tell them where to find it — leaving it at the upstream default is only truthf
 changed nothing.
 
 KlangHaus holds the copyright to its own contributions, so we can grant a different licence
-for them. We cannot relicense someone else's contribution without asking them, because we
-do not take copyright assignment. If the AGPL does not fit what you want to build, ask us.
+for them. If the AGPL does not fit what you want to build, ask us.
+
+A contributor licence agreement is being prepared, and outside patches wait for it — see
+[CONTRIBUTING.md](CONTRIBUTING.md) before spending an evening on one.
