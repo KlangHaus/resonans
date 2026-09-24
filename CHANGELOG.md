@@ -1,3 +1,10 @@
+## [1.15.2](https://github.com/KlangHaus/resonans/compare/v1.15.1...v1.15.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deploy:** grant the app role in resonans_app, not public ([#72](https://github.com/KlangHaus/resonans/issues/72)) ([c445a83](https://github.com/KlangHaus/resonans/commit/c445a83d7441d7630463fec728fb5fd8b72c18fa)), closes [#69](https://github.com/KlangHaus/resonans/issues/69)
+
 ## [1.15.1](https://github.com/KlangHaus/resonans/compare/v1.15.0...v1.15.1) (2026-09-24)
 
 
