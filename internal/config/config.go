@@ -47,6 +47,13 @@ type Config struct {
 	// RESONANS_DEV_AUTH=1.
 	DevAuth bool
 
+	// AllowInsecureJWKS is the positive opt-in for fetching the JWKS over plain
+	// http in production. It exists because a self-hoster may legitimately reach
+	// their identity provider by service name on a private network — and it is an
+	// explicit variable rather than an inferred exception, because the thing being
+	// waived is the integrity of the TRUST ANCHOR. RESONANS_ALLOW_INSECURE_JWKS=1.
+	AllowInsecureJWKS bool
+
 	// PreviewSecret signs short-lived preview tokens (editor draft-preview). Empty
 	// disables the preview endpoints. In production it should be set (SOPS).
 	PreviewSecret string
@@ -142,7 +149,10 @@ func Load() (*Config, error) {
 		// only one positively declared value can open an auth gate.
 		DevAuth:       strings.TrimSpace(os.Getenv("RESONANS_DEV_AUTH")) == "1",
 		DeliveryToken: getenvOptional("RESONANS_DELIVERY_TOKEN"),
-		PreviewSecret: getenvOptional("RESONANS_PREVIEW_SECRET"),
+		// Exactly "1", like DevAuth: "true", "yes" and "" all stay closed, so only
+		// one positively declared value can waive a security property.
+		AllowInsecureJWKS: strings.TrimSpace(os.Getenv("RESONANS_ALLOW_INSECURE_JWKS")) == "1",
+		PreviewSecret:     getenvOptional("RESONANS_PREVIEW_SECRET"),
 
 		StorageEndpoint: getenvOptional("BUNNY_STORAGE_ENDPOINT"),
 		StorageZone:     getenvOptional("BUNNY_STORAGE_ZONE"),
@@ -180,6 +190,32 @@ func Load() (*Config, error) {
 	if cfg.JWKSURL != "" {
 		if _, err := url.ParseRequestURI(cfg.JWKSURL); err != nil {
 			return nil, fmt.Errorf("RESONANS_JWKS_URL: must be a valid URL: %w", err)
+		}
+	}
+
+	// The JWKS is the TRUST ANCHOR for every editor request. Fetched over plain
+	// http, anyone on the path can substitute the signing keys and mint tokens
+	// this server would accept — which is an authentication bypass, not a hygiene
+	// warning. The issuer is checked with it because a token is only as trustworthy
+	// as the pair.
+	//
+	// Production must therefore be https, or say out loud that it is not. Staging
+	// runs NODE_ENV=development and keeps its named http accept untouched; this
+	// only ever fires for production.
+	if cfg.IsProduction() && !cfg.AllowInsecureJWKS {
+		for _, f := range []struct{ name, raw string }{
+			{"RESONANS_JWKS_URL", cfg.JWKSURL},
+			{"RESONANS_JWT_ISSUER", cfg.JWTIssuer},
+		} {
+			if f.raw == "" {
+				continue
+			}
+			u, err := url.Parse(f.raw)
+			if err != nil || u.Scheme != "https" {
+				return nil, fmt.Errorf(
+					"%s: must be https in production, got %q — the JWKS is the trust anchor, so plain http lets anyone on the path substitute the signing keys. Set RESONANS_ALLOW_INSECURE_JWKS=1 to waive this deliberately",
+					f.name, f.raw)
+			}
 		}
 	}
 
