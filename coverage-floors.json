@@ -1,0 +1,61 @@
+{
+  "_why": [
+    "Per-package floors, not a total. Measured on main d2928b2 the total sat at 50.3% while",
+    "internal/content had fallen from 43.9% to 34.7% — nine points of regression that a",
+    "total-only gate reports as no change, because other packages grew at the same time.",
+    "An average is the wrong instrument for 'did anything get worse'.",
+    "",
+    "Each floor is the measured value rounded DOWN to a whole percent, so a refactor that",
+    "shifts one statement does not fail the build. The cost, stated rather than hidden: a",
+    "real regression smaller than the distance to the next whole percent passes. Raise a",
+    "floor when coverage improves; the ratchet only tightens if someone tightens it.",
+    "",
+    "Regenerate the numbers with: python3 scripts/coverage_gate.py --print-floors",
+    "Check the tree with:         python3 scripts/coverage_gate.py"
+  ],
+
+  "_zeros_are_decisions_not_gaps": {
+    "github.com/KlangHaus/resonans/internal/persistence": [
+      "0% here is misleading on purpose and must not be 'fixed' by deleting a build tag.",
+      "This package IS covered — by the integration cells in rls_integration_test.go, which",
+      "carry //go:build integration and need a real postgres. The `RLS assertions` check runs",
+      "them; `Lint + Test`, which this gate reads, does not. So the floor is 0 and the real",
+      "guard is elsewhere. Anyone raising this number by moving those tests out from behind",
+      "the tag would make `go test ./...` require a database."
+    ],
+    "github.com/KlangHaus/resonans/cmd/resonans": [
+      "Argument parsing and process exit. Reachable only by running the binary, which the",
+      "container HEALTHCHECK and the deploy do. UNMEASURED rather than covered: nothing here",
+      "asserts the subcommands dispatch correctly."
+    ],
+    "github.com/KlangHaus/resonans/internal/observability": [
+      "OTel wiring. Exercised in every test that boots the app, but it reports 0% because",
+      "the assertions are about the app, not about the exporters. UNMEASURED."
+    ],
+    "github.com/KlangHaus/resonans/migrations": [
+      "Embedded .sql plus embed.go. The SQL is measured by applying it against a real",
+      "postgres in the `RLS assertions` check, which is the only measurement that means",
+      "anything for a migration."
+    ]
+  },
+
+  "floors": {
+    "github.com/KlangHaus/resonans/cmd/resonans": 0,
+    "github.com/KlangHaus/resonans/internal/app": 2,
+    "github.com/KlangHaus/resonans/internal/auth": 68,
+    "github.com/KlangHaus/resonans/internal/backfill": 46,
+    "github.com/KlangHaus/resonans/internal/bridge": 100,
+    "github.com/KlangHaus/resonans/internal/config": 90,
+    "github.com/KlangHaus/resonans/internal/content": 34,
+    "github.com/KlangHaus/resonans/internal/delivery": 72,
+    "github.com/KlangHaus/resonans/internal/httpapi": 69,
+    "github.com/KlangHaus/resonans/internal/media": 48,
+    "github.com/KlangHaus/resonans/internal/observability": 0,
+    "github.com/KlangHaus/resonans/internal/persistence": 0,
+    "github.com/KlangHaus/resonans/internal/preview": 90,
+    "github.com/KlangHaus/resonans/internal/schema": 76,
+    "github.com/KlangHaus/resonans/internal/seed": 67,
+    "github.com/KlangHaus/resonans/internal/settings": 29,
+    "github.com/KlangHaus/resonans/migrations": 0
+  }
+}

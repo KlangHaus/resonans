@@ -85,7 +85,26 @@ klanghausPipeline(
         grep -qE "go${pinned}( |$)" <<<"$ver_out" || { echo "go is NOT ${pinned}"; exit 1; }
         go build ./...
         go vet ./...
-        go test -race ./...
+
+        # -cover on the run CI already pays for. Measured that -race does not
+        # change the percentages (identical for all 16 reporting packages), so the
+        # floors in coverage-floors.json describe THIS run and not a neighbouring
+        # one. `set -euo pipefail` at the top is what makes a failing go test red
+        # through the pipe — without it the pipeline reports tee's status.
+        go test -race -cover ./... 2>&1 | tee .ci-cover.log
+
+        command -v python3 >/dev/null 2>&1 || { echo "python3 missing on the agent; the coverage gate cannot run"; exit 20; }
+
+        # The gate's own cells first. A gate whose decision function is untested
+        # is a threshold nobody has seen refuse anything.
+        python3 scripts/coverage_gate.py --selftest
+
+        # Per-package floors, not a total: measured on d2928b2 the total sat at
+        # 50.3% while internal/content had fallen nine points, because other
+        # packages grew at the same time. An average cannot answer "did anything
+        # get worse". Exit codes: 3 a package with no floor, 4 a floor with no
+        # package, 5 a drop.
+        python3 scripts/coverage_gate.py --decide < .ci-cover.log
       ''',
     ],
 
