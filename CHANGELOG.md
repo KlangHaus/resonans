@@ -1,3 +1,10 @@
+## [1.18.2](https://github.com/KlangHaus/resonans/compare/v1.18.1...v1.18.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **persistence:** migrate without CREATE on the database when the schema exists ([#81](https://github.com/KlangHaus/resonans/issues/81)) ([2221e36](https://github.com/KlangHaus/resonans/commit/2221e3653c2dc2f8ce4cb84d4b14cfccac65c5c2))
+
 ## [1.18.1](https://github.com/KlangHaus/resonans/compare/v1.18.0...v1.18.1) (2026-09-28)
 
 
