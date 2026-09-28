@@ -1,3 +1,10 @@
+## [1.18.1](https://github.com/KlangHaus/resonans/compare/v1.18.0...v1.18.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **legal:** say who holds the copyright rather than who we want to ([#80](https://github.com/KlangHaus/resonans/issues/80)) ([64bfc78](https://github.com/KlangHaus/resonans/commit/64bfc7896c695b1d7522715b34ff037cd451f498)), closes [#77](https://github.com/KlangHaus/resonans/issues/77)
+
 # [1.18.0](https://github.com/KlangHaus/resonans/compare/v1.17.0...v1.18.0) (2026-09-24)
 
 
