@@ -1,3 +1,10 @@
+## [1.18.3](https://github.com/KlangHaus/resonans/compare/v1.18.2...v1.18.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deploy:** stop echoing the app password into the container log; add a copy-safe setup ([#82](https://github.com/KlangHaus/resonans/issues/82)) ([f84f67a](https://github.com/KlangHaus/resonans/commit/f84f67a26253e988769bd8cb4b9bbc63a0265f5f))
+
 ## [1.18.2](https://github.com/KlangHaus/resonans/compare/v1.18.1...v1.18.2) (2026-09-28)
 
 
