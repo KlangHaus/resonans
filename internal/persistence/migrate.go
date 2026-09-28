@@ -22,9 +22,41 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	return migrateFS(ctx, pool, migrations.FS)
 }
 
+// ensureSchema makes resonans_app exist without requiring CREATE on the
+// database when it already does.
+//
+// Measured (postgres:16, 2026-09-28): `create schema if not exists` checks
+// ACL_CREATE on the DATABASE *before* the existence check, so a least-privilege
+// migrator (NOSUPERUSER NOCREATEDB, on a database owned by someone else) is
+// refused with SQLSTATE 42501 even though the schema is already there and
+// nothing would be created. Three databases, same role shape, one run:
+// schema present + no database CREATE = denied; + grant create on database =
+// ok; migrator owns the database = ok. So the older comment claiming
+// "if not exists then finds it already present" was wrong, and every setup
+// guide that pre-creates the schema as the superuser and hands the migrator
+// only schema-level rights hit it. Looking first costs one cheap catalog
+// read and lets those setups work at all.
+func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		"select to_regnamespace('resonans_app') is not null").Scan(&exists); err != nil {
+		return fmt.Errorf("migrate: look up schema: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	if _, err := pool.Exec(ctx, "create schema resonans_app"); err != nil {
+		return fmt.Errorf("migrate: create schema resonans_app (absent, and this role "+
+			"may not create it — either create it as a superuser with "+
+			"`create schema resonans_app authorization <migrator>` or grant the "+
+			"migrator CREATE on the database): %w", err)
+	}
+	return nil
+}
+
 func migrateFS(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) ([]string, error) {
-	if _, err := pool.Exec(ctx, "create schema if not exists resonans_app"); err != nil {
-		return nil, fmt.Errorf("migrate: create schema: %w", err)
+	if err := ensureSchema(ctx, pool); err != nil {
+		return nil, err
 	}
 	if _, err := pool.Exec(ctx, `
 		create table if not exists resonans_app.schema_migrations (
