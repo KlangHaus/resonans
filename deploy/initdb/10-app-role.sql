@@ -61,11 +61,21 @@ create role resonans_app with
   nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
 
 -- Resonans keeps its tables in the `resonans_app` SCHEMA, not in `public`.
--- Create it here so the grants below have something to attach to; the migrator's
--- own `create schema if not exists` then finds it already present. Getting this
+-- Create it here so the grants below have something to attach to. Getting this
 -- wrong is not a subtle failure: granting on `public` produced an app role that
 -- could not read its own tables at all, and every request answered
 -- `permission denied for schema resonans_app`.
+--
+-- An earlier version of this comment said the migrator's own
+-- `create schema if not exists` would then "find it already present". Measured
+-- 2026-09-28 (postgres:16) and that is FALSE: postgres checks CREATE on the
+-- DATABASE before the existence check, so a migrator that does not own the
+-- database is refused with SQLSTATE 42501 even when the schema is already
+-- there. It never bit here only because POSTGRES_USER *is* the migrator and
+-- therefore owns POSTGRES_DB. `migrate` now looks the schema up first
+-- (internal/persistence/migrate.go, ensureSchema), so a least-privilege
+-- migrator on a database owned by someone else works too — which is the shape
+-- every hand-written setup guide produces.
 create schema if not exists resonans_app authorization resonans_migrator;
 
 grant usage on schema resonans_app to resonans_app;
