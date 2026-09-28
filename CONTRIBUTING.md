@@ -90,13 +90,14 @@ behaviour is loud instead of invisible.
 
 ## Licensing of contributions
 
-Resonans is [AGPL-3.0](LICENSE), copyright KlangHaus (Asp Productions ApS, CVR 36708077).
-Everything published here is, and stays, AGPL-3.0 — that is not what the paragraph below is
-about.
+Resonans is [AGPL-3.0](LICENSE); the copyright is held by the authors of the work, not by
+the company that publishes it — [NOTICE](NOTICE) explains why. Everything published here is,
+and stays, AGPL-3.0; that is not what the paragraph below is about.
 
 **A contributor licence agreement will be required before we can merge code from outside
 the company, and it is not written yet.** KlangHaus decided to adopt one on 2026-09-24 and
-it is being drafted with legal counsel, tracked as KH-1200. Until it exists we cannot accept
+it is being drafted, tracked as KH-1200. A lawyer has not yet reviewed it, and one should
+before it binds anyone — we would rather say that than imply a review that has not happened. Until it exists we cannot accept
 an outside pull request, because merging one would leave the project's licensing unsettled
 in a way that is unpleasant to fix afterwards.
 

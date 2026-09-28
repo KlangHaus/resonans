@@ -1,6 +1,6 @@
 Resonans — a self-hosted, multi-tenant headless CMS
 
-Copyright (C) 2026 KlangHaus (Asp Productions ApS, CVR 36708077, Denmark)
+Copyright (C) 2026 The Resonans Authors
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License as published by the Free
@@ -16,11 +16,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ---
 
-KlangHaus is the name the project is published under; Asp Productions ApS is the
-legal entity that holds the copyright and is the party able to enforce or waive
-it. Both are named on purpose: a notice carrying only a brand leaves it unclear
-who the rights holder actually is.
+Resonans is published by KlangHaus, the trading name of Asp Productions ApS
+(Danish CVR 36708077). The copyright is held by the authors of the work.
 
-Copyright in contributions from outside the company stays with their authors,
-licensed to everyone under the AGPL-3.0 like the rest of the work. See
-CONTRIBUTING.md.
+That wording is deliberate and it replaced a stronger claim that was measured
+untrue. An earlier version of this file said Asp Productions ApS held the
+copyright. Under Danish law an employer acquires copyright in software written by
+an EMPLOYEE (Ophavsretsloven § 59) — and nobody is employed by the company, so
+§ 59 transfers nothing and the rights sit with the individual authors. Measured by
+[jura], 2026-09-28.
+
+Consolidating those rights in Asp Productions ApS is intended and is a separate
+legal step that has not happened. Until it has, this file says who holds the
+copyright rather than who we would like to hold it, because a notice cannot be
+withdrawn from a fork.

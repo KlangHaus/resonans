@@ -231,8 +231,10 @@ to report one.
 
 ## Copyright and license
 
-Copyright (C) 2026 **KlangHaus** (Asp Productions ApS, CVR 36708077, Denmark).
-Licensed under the [GNU AGPL-3.0](LICENSE) — see [NOTICE](NOTICE).
+Copyright (C) 2026 The Resonans Authors. Published by **KlangHaus**, the trading name of
+Asp Productions ApS (CVR 36708077, Denmark). Licensed under the
+[GNU AGPL-3.0](LICENSE) — [NOTICE](NOTICE) says why the holder is the authors and not the
+company.
 
 If you modify Resonans and offer it to users over a network, §13 says those users are
 entitled to your source. Set `RESONANS_SOURCE_URL` to your repository and `/healthz` will
@@ -243,8 +245,9 @@ That field is **informative**: it is a string for a human to read, and tooling s
 fetch it automatically. A scanner that followed it would be making this instance issue
 requests to an address its operator chose.
 
-KlangHaus holds the copyright to its own contributions, so we can grant a different licence
-for them. If the AGPL does not fit what you want to build, ask us.
+If the AGPL does not fit what you want to build, ask us — but note that a different licence
+needs the agreement of everyone who holds copyright in the part you want, and that is the
+authors rather than the company. See [NOTICE](NOTICE).
 
 A contributor licence agreement is being prepared, and outside patches wait for it — see
 [CONTRIBUTING.md](CONTRIBUTING.md) before spending an evening on one.
