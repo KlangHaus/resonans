@@ -1,5 +1,15 @@
 -- Create the role the Resonans server connects as.
 --
+-- 🔴 DO NOT COPY STATEMENTS OUT OF THIS FILE. Use ../manual-setup.sql instead.
+-- Everything here is correct only because the postgres image executes it as
+-- POSTGRES_USER, and in compose.yml POSTGRES_USER *is* the migrator and owns
+-- POSTGRES_DB. Three statements below change meaning when a third role runs them,
+-- and this file has now misled a hand-written runbook TWICE in the same direction:
+-- first `alter default privileges` without `for role`, then `create schema if not
+-- exists` needing CREATE on the database. Both times because the reader was
+-- standing in a runbook, not in this file — which is why the cure is a
+-- copy-safe file rather than a third warning.
+--
 -- This runs once, on the database cluster's FIRST start, before any migration.
 -- The split is not ceremony. Resonans isolates tenants with Postgres row level
 -- security, and RLS is bypassed by any role that is SUPERUSER or has BYPASSRLS.
@@ -39,7 +49,22 @@
 -- `trust` rule accepts any password from any role. So this check hardens a
 -- failure that was already closed to network clients — it is about a legible
 -- error, not about a hole.
+-- 🔴 THE `\o` REDIRECT IS NOT COSMETIC. `set_config` RETURNS the value it sets,
+-- and psql prints returned rows — so without it this line wrote the app password
+-- in CLEARTEXT to stdout, which for this file means `docker logs` of the postgres
+-- container. Measured 2026-09-28 with a canary password: 1 occurrence at log line
+-- 42 of a 72-line log (positive control: the log did contain content). Anyone
+-- running `docker compose logs`, any log shipper collecting container stdout, and
+-- any log pasted into a support ticket had it.
+--
+-- The obvious-looking fix does NOT work: wrapping it in `do $$ begin perform
+-- set_config(...) end $$` breaks init outright, because psql does not interpolate
+-- `:'app_password'` inside a dollar-quoted body — the server receives a literal
+-- `:` and errors at character 62. Measured; it took the whole init down while the
+-- canary reported a clean zero, which is what a broken instrument looks like.
+\o /dev/null
 select set_config('resonans.app_password', :'app_password', false);
+\o
 do $guard$
 begin
   if coalesce(current_setting('resonans.app_password', true), '') = '' then

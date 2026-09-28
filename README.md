@@ -47,6 +47,32 @@ Editor at <http://localhost:8080>, content API at <http://localhost:3000>.
 your own reverse proxy in front for that. Publishing an editor to the internet is a
 decision only you can make, so it is not a default.
 
+### Onto a Postgres you already run
+
+If you are not using the bundled postgres, create the database and the two roles with
+[deploy/manual-setup.sql](deploy/manual-setup.sql) — not by copying statements out of
+[deploy/initdb/](deploy/initdb/).
+
+```bash
+RESONANS_MIGRATOR_PASSWORD=$(openssl rand -hex 24) \
+RESONANS_APP_PASSWORD=$(openssl rand -hex 24) \
+  psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f deploy/manual-setup.sql
+
+DATABASE_URL='postgres://resonans_migrator:...@HOST:5432/resonans' resonans migrate
+psql -v ON_ERROR_STOP=1 -U postgres -d resonans -f deploy/assert-rls-coverage.sql
+```
+
+Two files rather than one because they run in **different contexts**, and three statements
+change with the context. `deploy/initdb/` is executed by the postgres image as
+`POSTGRES_USER`, which in `compose.yml` *is* the migrator and therefore owns the database.
+A hand-run setup is a third role that owns nothing, and there the migrator needs to own the
+database (or `create schema` is refused with `42501` even when the schema exists),
+`alter default privileges` needs an explicit `for role`, and the change of database has to
+be a command instead of a comment. Each of those has a measurement written beside it in
+`manual-setup.sql`.
+
+Use **hex**, not base64: a `/` in a base64 password breaks DSN parsing in several clients.
+
 ### Without Docker
 
 ```bash

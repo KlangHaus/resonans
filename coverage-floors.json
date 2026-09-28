@@ -1,7 +1,7 @@
 {
   "_why": [
     "Per-package floors, not a total. Measured on main d2928b2 the total sat at 50.3% while",
-    "internal/content had fallen from 43.9% to 34.7% — nine points of regression that a",
+    "internal/content had fallen from 43.9% to 34.7% \u2014 nine points of regression that a",
     "total-only gate reports as no change, because other packages grew at the same time.",
     "An average is the wrong instrument for 'did anything get worse'.",
     "",
@@ -13,11 +13,10 @@
     "Regenerate the numbers with: python3 scripts/coverage_gate.py --print-floors",
     "Check the tree with:         python3 scripts/coverage_gate.py"
   ],
-
   "_zeros_are_decisions_not_gaps": {
     "github.com/KlangHaus/resonans/internal/persistence": [
       "0% here is misleading on purpose and must not be 'fixed' by deleting a build tag.",
-      "This package IS covered — by the integration cells in rls_integration_test.go, which",
+      "This package IS covered \u2014 by the integration cells in rls_integration_test.go, which",
       "carry //go:build integration and need a real postgres. The `RLS assertions` check runs",
       "them; `Lint + Test`, which this gate reads, does not. So the floor is 0 and the real",
       "guard is elsewhere. Anyone raising this number by moving those tests out from behind",
@@ -42,9 +41,16 @@
       "Embedded .sql plus embed.go. The SQL is measured by applying it against a real",
       "postgres in the `RLS assertions` check, which is the only measurement that means",
       "anything for a migration."
+    ],
+    "github.com/KlangHaus/resonans/internal/deploycheck": [
+      "Holds one file: the guard that keeps the shipped deploy SQL from echoing secrets.",
+      "It has tests and NO statements of its own \u2014 the same third output shape internal/apidocs",
+      "has, which this gate prints as `coverage: [no statements]`. A floor of 0 is correct and",
+      "means 'nothing to cover', not 'untested': the guard IS the test. What is genuinely",
+      "unmeasured here is the end-to-end canary against a real postgres, which is by hand until",
+      "CI has a database (KH-1220) \u2014 this package only reads the files."
     ]
   },
-
   "floors": {
     "github.com/KlangHaus/resonans/cmd/resonans": 0,
     "github.com/KlangHaus/resonans/internal/apidocs": 0,
@@ -63,6 +69,7 @@
     "github.com/KlangHaus/resonans/internal/schema": 76,
     "github.com/KlangHaus/resonans/internal/seed": 67,
     "github.com/KlangHaus/resonans/internal/settings": 29,
-    "github.com/KlangHaus/resonans/migrations": 0
+    "github.com/KlangHaus/resonans/migrations": 0,
+    "github.com/KlangHaus/resonans/internal/deploycheck": 0
   }
 }
