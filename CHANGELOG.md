@@ -1,3 +1,11 @@
+## [1.18.5](https://github.com/KlangHaus/resonans/compare/v1.18.4...v1.18.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **release:** drop the version-print step that broke the release chain on its first run ([#87](https://github.com/KlangHaus/resonans/issues/87)) ([151b35f](https://github.com/KlangHaus/resonans/commit/151b35ffb3589e1801b4a0ce1ecf3ce997622806)), closes [#84](https://github.com/KlangHaus/resonans/issues/84)
+* **release:** publish operator actions in the release notes, and guard that they stay there ([#84](https://github.com/KlangHaus/resonans/issues/84)) ([7af65b1](https://github.com/KlangHaus/resonans/commit/7af65b182c84529456d9b3c6b7959b65281930a2))
+
 ## [1.18.4](https://github.com/KlangHaus/resonans/compare/v1.18.3...v1.18.4) (2026-09-30)
 
 
