@@ -80,6 +80,27 @@ jobs:
           grep -qE '^Scanner: govulncheck@v1\.7\.0$' <<<"$ver_out" || { echo "govulncheck is NOT v1.7.0"; exit 1; }
           govulncheck ./...
 
+      # 🔴 THE RELEASE-NOTES GUARD ALSO RUNS HERE, AND NOT ONLY IN
+      # semantic-release.yml. There it protects a release; here it protects the
+      # CHANGE that would break one. Without this step the first proof that
+      # release.config.mjs even LOADS arrives on the release run — after merge —
+      # and a config that fails to load stops releases with no red check and no
+      # failed run, which is the silent class semantic-release.yml documents.
+      #
+      # HONEST LIMIT: this job produces `Lint + Test`, which is NOT on the
+      # required list (`jenkins/Lint + Test`, `Secret scan`, `commitlint` are).
+      # So this step goes RED and VISIBLE on a PR but does not block a merge.
+      # Making it required is a ruleset change and belongs to [infra].
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Release notes must carry operator actions
+        run: |
+          npm ci
+          node scripts/release_notes_guard.mjs
+
       - name: Test (race + coverage)
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
