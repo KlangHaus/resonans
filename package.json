@@ -9,6 +9,8 @@
   },
   "devDependencies": {
     "@commitlint/cli": "19.8.1",
-    "@commitlint/config-conventional": "19.1.0"
+    "@commitlint/config-conventional": "19.1.0",
+    "@semantic-release/release-notes-generator": "14.1.0",
+    "conventional-changelog-angular": "8.0.0"
   }
 }

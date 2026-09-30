@@ -139,6 +139,24 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: npm
+
+      # release.config.mjs imports conventional-changelog-angular, so the config
+      # cannot load from an empty node_modules. `npm ci` is the ONE mechanism that
+      # serves both the guard below and semantic-release itself — deliberately not
+      # a second `-p` list, because two ways to install the same package is how
+      # they drift apart.
+      - name: Install release tooling
+        run: npm ci
+
+      # 🔴 FAIL-CLOSED, AND BEFORE THE RELEASE ON PURPOSE.
+      # v1.18.3 published a fix for a password written in cleartext to the postgres
+      # container log, and the action an operator had to take was in the commit
+      # body — which the notes generator drops. Measured on the published
+      # artefacts: 0 occurrences on the release note, 0 in CHANGELOG.md, 1 in the
+      # git commit. Nothing went red, because nothing was looking. This step looks.
+      - name: Release notes must carry operator actions
+        run: node scripts/release_notes_guard.mjs
 
       - name: Run semantic-release
         # -p installerer plugin-pakkerne; uden -p ville de blot være CLI-args

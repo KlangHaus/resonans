@@ -5,6 +5,11 @@
 
 * **deploy:** stop echoing the app password into the container log; add a copy-safe setup ([#82](https://github.com/KlangHaus/resonans/issues/82)) ([f84f67a](https://github.com/KlangHaus/resonans/commit/f84f67a26253e988769bd8cb4b9bbc63a0265f5f))
 
+
+### ACTION REQUIRED
+
+* **deploy:** if you already run Resonans, recreate your postgres container — `docker compose down -v`, then start again with a NEW app password. Before this release `deploy/initdb/10-app-role.sql` wrote the app-role password in cleartext to that container's log. **Upgrading the image does not remove it; the log already has it.** Added by hand after publication: the instruction was in the commit body, which the notes generator drops — the gap this release's successor fixes.
+
 ## [1.18.2](https://github.com/KlangHaus/resonans/compare/v1.18.1...v1.18.2) (2026-09-28)
 
 
