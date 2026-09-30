@@ -154,21 +154,27 @@ jobs:
       - name: Install release tooling
         run: npm ci
 
-      # 🔴 NAME THE VERSION THE GUARD AND THE RELEASE EACH RESOLVE, IN THIS RUN.
-      # [sikkerhed] measured that `npm ci` was NOT one mechanism: the guard resolved
-      # the repo's pinned release-notes-generator and angular preset, while the
-      # release step ran `npx --yes -p semantic-release@24 …`, which builds its OWN
-      # prefix and resolves its own `^14`/`^8` at run time. So the guard asserted
-      # rendered text from one tree while the note was rendered by another — a green
-      # that LOOKED like it was about the release. semantic-release, changelog and
-      # git are exact devDependencies now and the `-p` flags are gone, so there is
-      # one tree. This step prints it rather than asserting it, because a guard that
-      # cannot name the version it measured cannot transfer its green.
-      - name: Which notes generator is actually loaded
-        run: |
-          node -p "'release-notes-generator = ' + require('@semantic-release/release-notes-generator/package.json').version"
-          node -p "'angular preset         = ' + require('conventional-changelog-angular/package.json').version"
-          node -p "'semantic-release       = ' + require('semantic-release/package.json').version"
+      # The step that used to print the resolved versions here is GONE, and this
+      # comment is its gravestone, because the way it failed is worth keeping.
+      #
+      # It ran `node -p "… require('<pkg>/package.json').version"` and threw
+      # ERR_PACKAGE_PATH_NOT_EXPORTED: these packages declare `exports` without
+      # './package.json', so a resolver cannot reach it. That failed the Release job
+      # before semantic-release ran, and `Build release images` was SKIPPED — so the
+      # change that added this step stopped releases on its very first run, and the
+      # only release it ever produced was none.
+      #
+      # 🔴 I had already hit that exact error while writing the guard, and fixed it
+      # THERE by reading node_modules directly. I left the same call standing in this
+      # file. It was reproducible locally the whole time — `node -p` throws on a
+      # laptop too — so this was NOT CI diverging from local. I did not run the line
+      # I wrote, because this step only executes on a push to main.
+      #
+      # No replacement: scripts/release_notes_guard.mjs below already prints all five
+      # resolved versions AND asserts each against its exact pin, so printing them
+      # separately was redundant from the start. The property [sikkerhed] asked for —
+      # that the guard can name the version it measured — is carried by the guard's
+      # own output, not by a step beside it.
 
       # 🔴 FAIL-CLOSED, AND BEFORE THE RELEASE ON PURPOSE.
       # v1.18.3 published a fix for a password written in cleartext to the postgres
