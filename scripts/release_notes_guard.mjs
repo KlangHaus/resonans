@@ -42,17 +42,39 @@ try {
   process.exit(2);
 }
 
+// Every package whose version can change what the release publishes. [sikkerhed]
+// measured that listing only the two rendering packages left the three release-tool
+// pins unguarded, so a drift on those was invisible: two names were the whole
+// denominator. Five now.
+const PINNED_PACKAGES = [
+  '@semantic-release/release-notes-generator',
+  'conventional-changelog-angular',
+  'semantic-release',
+  '@semantic-release/changelog',
+  '@semantic-release/git',
+];
+
 // 🔴 NAME THE TREE, AND ASSERT IT IS THE ONE THE RELEASE USES.
 // [sikkerhed] measured that this guard read the repo's pinned packages while the
 // release step ran `npx -p semantic-release@24 …`, which built its own prefix and
 // resolved its own ranges at run time. The guard's green looked like it covered the
-// release and did not. The workflow drops `-p` and pins all three exactly; this
-// block turns "same tree" from a claim into a measurement, so a reintroduced `-p`
-// or a drifted pin shows up here instead of on the release page.
+// release and did not. The workflow drops `-p` and pins all three exactly.
+//
+// 🔴 [sikkerhed] measured that an earlier version of this comment was HALF FALSE. It
+// claimed this block catches "a reintroduced `-p` or a drifted pin". The drift half
+// holds. The `-p` half did NOT: this block compares node_modules against
+// package.json, so a reintroduced `npx -p semantic-release@24 …` would leave it
+// reading the repo's tree, finding a match, and going GREEN — while the release ran
+// from npx's own prefix again. The CHOICE of tree lives in the workflow YAML, not in
+// node_modules, so no amount of version comparison can see it.
+//
+// Rather than narrow the sentence, the guard checks the workflow too, below. A
+// comment claiming a guard covers something it cannot is the exact defect this whole
+// change exists to remove.
 const pinned =
   JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')).devDependencies ?? {};
 const resolved = {};
-for (const name of ['@semantic-release/release-notes-generator', 'conventional-changelog-angular']) {
+for (const name of PINNED_PACKAGES) {
   // Read node_modules directly rather than through `require`: these packages
   // declare `exports` without './package.json', so a resolver cannot reach it. And
   // node_modules is the object this block is about — the tree the release will load
@@ -91,6 +113,57 @@ if (driftCount > 0) {
   );
   process.exit(1);
 }
+
+// The tree CHOICE, measured where it actually lives. `npx -p <pkg>` builds its own
+// prefix and resolves its own ranges at run time, so the release would render notes
+// with packages this guard never saw. Both directions are asserted: a pinned
+// invocation must be present, and no `-p` form may be.
+//
+// A text scan with comments stripped, not a YAML parse — stated as the limit rather
+// than left implied. It is enough because the only thing matched is the shape of one
+// command line, and adding a YAML parser to read one line would grow the very surface
+// this change pinned down.
+const WORKFLOW = path.resolve(process.cwd(), '.github', 'workflows', 'semantic-release.yml');
+let wfLines;
+try {
+  wfLines = fs
+    .readFileSync(WORKFLOW, 'utf8')
+    .split('\n')
+    .map((l) => l.replace(/#.*$/, '').trim())
+    .filter(Boolean);
+} catch (err) {
+  console.error(
+    `GUARD CANNOT MEASURE: cannot read ${WORKFLOW} — ${err.message}. This guard has to see ` +
+      'how the release invokes semantic-release; without it, it can only speak for the tree ' +
+      'it happens to read.',
+  );
+  process.exit(2);
+}
+
+const invocations = wfLines.filter((l) => l.includes('npx') && l.includes('semantic-release'));
+if (invocations.length === 0) {
+  console.error(
+    `GUARD CANNOT MEASURE: found no \`npx … semantic-release\` line in ${WORKFLOW}. Either the ` +
+      'release is invoked some other way now — in which case this check is looking at the wrong ' +
+      'thing — or the step is gone. Both are failures, not a pass.',
+  );
+  process.exit(2);
+}
+const withPrefix = invocations.filter((l) => /(^|\s)-p\s/.test(l));
+if (withPrefix.length > 0) {
+  console.error(
+    'FAIL  the release invokes semantic-release with `-p`, which builds a separate npx prefix ' +
+      'and resolves its own ranges at run time:\n' +
+      withPrefix.map((l) => `        ${l}`).join('\n') +
+      '\n\nThe notes this guard renders would then come from a different tree than the release ' +
+      'uses, so every assertion below would be about the wrong object. Use ' +
+      '`npx --no-install semantic-release` with the packages as exact devDependencies.',
+  );
+  process.exit(1);
+}
+console.log(
+  `  ok    the release resolves from node_modules (${invocations.length} npx invocation(s), none with -p)`,
+);
 
 const ctx = {
   cwd: process.cwd(),
@@ -169,5 +242,7 @@ if (failed > 0) {
 console.log(
   `\nall ${checks.length} assertions hold against release.config.mjs (${notes.length} bytes of notes), ` +
     `rendered by release-notes-generator ${resolved['@semantic-release/release-notes-generator']} ` +
-    `and angular preset ${resolved['conventional-changelog-angular']}`,
+    `and angular preset ${resolved['conventional-changelog-angular']}; ` +
+    `${PINNED_PACKAGES.length} packages checked against their exact pins, and the release ` +
+    'invocation carries no -p',
 );
