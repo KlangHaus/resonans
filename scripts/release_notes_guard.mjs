@@ -15,6 +15,7 @@
 // a failure — a guard that cannot see must not report a clean sweep).
 import { generateNotes } from '@semantic-release/release-notes-generator';
 import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const ACTION = 'ACTION REQUIRED';
@@ -39,6 +40,56 @@ try {
 } catch (err) {
   console.error(`GUARD CANNOT MEASURE: could not load ${cfgPath}: ${err.message}`);
   process.exit(2);
+}
+
+// 🔴 NAME THE TREE, AND ASSERT IT IS THE ONE THE RELEASE USES.
+// [sikkerhed] measured that this guard read the repo's pinned packages while the
+// release step ran `npx -p semantic-release@24 …`, which built its own prefix and
+// resolved its own ranges at run time. The guard's green looked like it covered the
+// release and did not. The workflow drops `-p` and pins all three exactly; this
+// block turns "same tree" from a claim into a measurement, so a reintroduced `-p`
+// or a drifted pin shows up here instead of on the release page.
+const pinned =
+  JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')).devDependencies ?? {};
+const resolved = {};
+for (const name of ['@semantic-release/release-notes-generator', 'conventional-changelog-angular']) {
+  // Read node_modules directly rather than through `require`: these packages
+  // declare `exports` without './package.json', so a resolver cannot reach it. And
+  // node_modules is the object this block is about — the tree the release will load
+  // from, not whatever a resolver would pick.
+  const file = path.resolve(process.cwd(), 'node_modules', name, 'package.json');
+  try {
+    resolved[name] = JSON.parse(fs.readFileSync(file, 'utf8')).version;
+  } catch (err) {
+    console.error(
+      `GUARD CANNOT MEASURE: cannot read ${file} — ${err.message}. Either \`npm ci\` did not ` +
+        'run, or this package is not installed in the repo tree, which is exactly the ' +
+        'condition that made this guard measure a different tree than the release.',
+    );
+    process.exit(2);
+  }
+}
+let driftCount = 0;
+for (const [name, version] of Object.entries(resolved)) {
+  const want = pinned[name];
+  if (!want) {
+    console.error(
+      `GUARD CANNOT MEASURE: ${name} resolves to ${version} but package.json pins nothing ` +
+        'for it, so this guard cannot say which tree it just measured.',
+    );
+    process.exit(2);
+  }
+  const ok = want === version;
+  if (!ok) driftCount++;
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name} resolved ${version}, pinned ${want}`);
+}
+if (driftCount > 0) {
+  console.error(
+    `\n${driftCount} package(s) resolve to something other than the exact pin. The notes this ` +
+      'guard renders come from a different tree than the release will, so a green here ' +
+      'would not transfer.',
+  );
+  process.exit(1);
 }
 
 const ctx = {
@@ -115,4 +166,8 @@ if (failed > 0) {
   console.error('\n--- generated notes ---\n' + notes);
   process.exit(1);
 }
-console.log(`\nall ${checks.length} assertions hold against release.config.mjs (${notes.length} bytes of notes)`);
+console.log(
+  `\nall ${checks.length} assertions hold against release.config.mjs (${notes.length} bytes of notes), ` +
+    `rendered by release-notes-generator ${resolved['@semantic-release/release-notes-generator']} ` +
+    `and angular preset ${resolved['conventional-changelog-angular']}`,
+);

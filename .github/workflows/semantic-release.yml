@@ -5,7 +5,12 @@ name: Semantic Release
 # Tag-pushet trigger repoets eksisterende release.yml → semver-tagget image.
 # Changesets-ækvivalenten for ikke-npm-services (auth/permissions/notifications/...).
 #
-# Krav pr. repo: en `.releaserc.json` i roden (distribueres sammen med denne fil).
+# Krav pr. repo: en semantic-release-konfiguration i roden. I DETTE repo er den
+# `release.config.mjs` og IKKE `.releaserc.json` — konfigurationen har brug for en
+# `writerOpts.transform`, som JSON ikke kan holde (se filens egen begrundelse).
+# Denne fil distribueres på tværs af flåden, så kravet formuleres som "en
+# konfiguration" frem for at navngive JSON-varianten: den tidligere ordlyd var
+# usand for præcis det repo den stod i.
 # Go-services har ingen package.json → tilføj en minimal én (se docs), ellers
 # fejler semantic-release med ENOPKG.
 #
@@ -149,6 +154,22 @@ jobs:
       - name: Install release tooling
         run: npm ci
 
+      # 🔴 NAME THE VERSION THE GUARD AND THE RELEASE EACH RESOLVE, IN THIS RUN.
+      # [sikkerhed] measured that `npm ci` was NOT one mechanism: the guard resolved
+      # the repo's pinned release-notes-generator and angular preset, while the
+      # release step ran `npx --yes -p semantic-release@24 …`, which builds its OWN
+      # prefix and resolves its own `^14`/`^8` at run time. So the guard asserted
+      # rendered text from one tree while the note was rendered by another — a green
+      # that LOOKED like it was about the release. semantic-release, changelog and
+      # git are exact devDependencies now and the `-p` flags are gone, so there is
+      # one tree. This step prints it rather than asserting it, because a guard that
+      # cannot name the version it measured cannot transfer its green.
+      - name: Which notes generator is actually loaded
+        run: |
+          node -p "'release-notes-generator = ' + require('@semantic-release/release-notes-generator/package.json').version"
+          node -p "'angular preset         = ' + require('conventional-changelog-angular/package.json').version"
+          node -p "'semantic-release       = ' + require('semantic-release/package.json').version"
+
       # 🔴 FAIL-CLOSED, AND BEFORE THE RELEASE ON PURPOSE.
       # v1.18.3 published a fix for a password written in cleartext to the postgres
       # container log, and the action an operator had to take was in the commit
@@ -159,14 +180,12 @@ jobs:
         run: node scripts/release_notes_guard.mjs
 
       - name: Run semantic-release
-        # -p installerer plugin-pakkerne; uden -p ville de blot være CLI-args
-        # (ikke installeret) → semantic-release fejler ved at loade changelog/git.
-        run: >
-          npx --yes
-          -p semantic-release@24
-          -p @semantic-release/changelog@6
-          -p @semantic-release/git@10
-          semantic-release
+        # No `-p`. The three packages are exact devDependencies, so `npm ci` above
+        # installed them and npx resolves them from node_modules — the SAME tree the
+        # guard read. With `-p` npx built a separate prefix and resolved its own
+        # ranges at run time, which is how the guard's green stopped being about the
+        # release it was supposed to cover.
+        run: npx --no-install semantic-release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
