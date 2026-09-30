@@ -73,6 +73,23 @@ behaviour is loud instead of invisible.
   decides the next version number.
 - **Explain the why in the body.** What changed is in the diff. Why it was wrong before is
   not, and that is the part a reader needs in a year.
+- 🔴 **If an operator has to DO something, put it in an `ACTION REQUIRED:` footer — not in
+  the body.** The release notes generator renders only the subject line, so a body is
+  dropped from the GitHub release and from `CHANGELOG.md`. Measured once the hard way:
+  v1.18.3 fixed a password written in cleartext to the postgres container log, the
+  instruction to recreate the container was in the body, and it reached **0** published
+  surfaces — the only one carrying it needed a clone and a `git log` of that commit.
+  Write it as a real footer, token then colon, or it is not a note and is still dropped:
+
+  ```
+  ACTION REQUIRED: recreate your postgres container with `docker compose down -v` and a
+  new password. Upgrading the image does not remove it; the log already has it.
+  ```
+
+  It publishes under its own `### ACTION REQUIRED` heading, separate from
+  `BREAKING CHANGES`, and `scripts/release_notes_guard.mjs` fails the release if that
+  stops working. State the wrong inference explicitly, as above — "new image, same
+  container, same log" is what a reader otherwise assumes.
 - One coherent change per PR. Larger is fine; unrelated is not.
 - Don't add lint suppressions to make CI pass. If a linter is wrong, say so in the PR and
   we will discuss it — a suppression that asserts "my validation is enough" is a claim

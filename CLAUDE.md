@@ -33,6 +33,10 @@ Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
 - **INGEN `Co-Authored-By` i commits** (org-konvention).
 - **Conventional commits + commitlint.** Issue-first (Beslutning M): PR-body
   `Closes #N`. Branch: `<type>/<issue#>-<slug>`.
+- 🔴 **Operator actions go in an `ACTION REQUIRED:` FOOTER, never in the body** — the
+  notes generator drops bodies, so a body reaches 0 published surfaces (measured on
+  v1.18.3). `scripts/release_notes_guard.mjs` fails the release if that breaks.
+  Details: CONTRIBUTING.md.
 - **Merge-gate:** grøn CI + [review]-verdict + Allan merger. **Aldrig
   `--no-verify` / `--admin`.** Sletter ALDRIG repos.
 
