@@ -33,8 +33,9 @@ func TestMigrateAsLeastPrivilegeMigrator(t *testing.T) {
 	admin := testPool(t) // t.Fatalf, not t.Skip, when the DSN is unwired
 	ctx := context.Background()
 
-	const role = "resonans_leastpriv_probe"
-	const db = "resonans_leastpriv_probe_db"
+	scope := testScope(t)
+	role := "resonans_lp_probe_" + scope
+	db := "resonans_lp_probe_db_" + scope
 	const pw = "probe-not-a-secret"
 
 	// A dropped role/database from an earlier aborted run must not make this
