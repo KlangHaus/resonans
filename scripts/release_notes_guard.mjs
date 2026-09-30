@@ -129,7 +129,13 @@ try {
   wfLines = fs
     .readFileSync(WORKFLOW, 'utf8')
     .split('\n')
-    .map((l) => l.replace(/#.*$/, '').trim())
+    // A YAML comment is `#` at line start or preceded by whitespace. The earlier
+    // form cut at ANY `#`, which could hide a match rather than only a comment —
+    // [sikkerhed] noted that is a different sentence than "comments are stripped".
+    // Still not a YAML parse; a `#` inside a quoted string preceded by a space is
+    // the residual, and it can only make this stricter by truncating a line early,
+    // never more permissive, because the allowlist below requires an exact form.
+    .map((l) => l.replace(/(^|\s)#.*$/, '').trim())
     .filter(Boolean);
 } catch (err) {
   console.error(
@@ -149,20 +155,50 @@ if (invocations.length === 0) {
   );
   process.exit(2);
 }
-const withPrefix = invocations.filter((l) => /(^|\s)-p\s/.test(l));
-if (withPrefix.length > 0) {
+// 🔴 AN ALLOWLIST, NOT A LIST OF FORBIDDEN SPELLINGS.
+//
+// The first version of this check rejected `/(^|\s)-p\s/`. [sikkerhed] measured that
+// it caught ONE spelling of at least four: `--package <spec>` is npx's long form for
+// `-p` with identical effect, and `--package=<spec>` and `-p=<spec>` also slipped,
+// because the pattern demanded a space on both sides. Counting the denominator from
+// `npx --help` rather than from memory turns up more than the four:
+//
+//   -p <spec>            -p=<spec>            --package <spec>
+//   --package=<spec>     npx <pkg>@<version>  (a specifier on the command name)
+//   -c / --call '<cmd>'  (an arbitrary embedded command)
+//
+// So enumerating the unsafe forms loses to the next one nobody thought of — the same
+// shape as a pattern covering `*.yml` but not `*.yaml`. A port opens only for a
+// positively declared safe value, so this asserts the invocation IS the pinned form
+// and rejects everything else, including spellings that do not exist yet.
+// Two conditions, because the property is "resolution comes from node_modules" and
+// NOT "the line is exactly this string". An exact-string allowlist rejected a
+// legitimate `--dry-run`, which is the self-camouflaging direction: a guard that
+// refuses what it should let in looks like work. So the accept set was run too, not
+// only the reject set.
+//
+//   ANCHOR  the line must START with the pinned form, so trailing flags are fine
+//   DENY    no option that selects a package or embeds another command, anywhere
+const SAFE_PREFIX = /^npx --no-install semantic-release(\s|$)/;
+const PACKAGE_SELECTING = /(^|\s)(-p|--package|-c|--call)([\s=])/;
+const unsafe = invocations
+  .map((l) => l.replace(/^run:\s*/, '').trim())
+  .filter((l) => !SAFE_PREFIX.test(l) || PACKAGE_SELECTING.test(l));
+if (unsafe.length > 0) {
   console.error(
-    'FAIL  the release invokes semantic-release with `-p`, which builds a separate npx prefix ' +
-      'and resolves its own ranges at run time:\n' +
-      withPrefix.map((l) => `        ${l}`).join('\n') +
-      '\n\nThe notes this guard renders would then come from a different tree than the release ' +
-      'uses, so every assertion below would be about the wrong object. Use ' +
-      '`npx --no-install semantic-release` with the packages as exact devDependencies.',
+    'FAIL  the release does not invoke semantic-release in the pinned form:\n' +
+      unsafe.map((l) => `        ${l}`).join('\n') +
+      '\n\nExpected exactly `npx --no-install semantic-release`. Any of `-p`, `-p=`, ' +
+      '`--package`, `--package=`, a version specifier on the command name, or `-c/--call` ' +
+      'makes npx build its own prefix and resolve its own ranges at run time — so the notes ' +
+      'this guard renders would come from a different tree than the release uses, and every ' +
+      'assertion below would be about the wrong object. Keep the packages as exact ' +
+      'devDependencies and let node_modules answer.',
   );
   process.exit(1);
 }
 console.log(
-  `  ok    the release resolves from node_modules (${invocations.length} npx invocation(s), none with -p)`,
+  `  ok    the release resolves from node_modules (${invocations.length} npx invocation(s), all in the pinned form)`,
 );
 
 const ctx = {
@@ -244,5 +280,5 @@ console.log(
     `rendered by release-notes-generator ${resolved['@semantic-release/release-notes-generator']} ` +
     `and angular preset ${resolved['conventional-changelog-angular']}; ` +
     `${PINNED_PACKAGES.length} packages checked against their exact pins, and the release ` +
-    'invocation carries no -p',
+    'invocation is the pinned form',
 );
