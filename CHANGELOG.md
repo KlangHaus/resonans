@@ -1,3 +1,10 @@
+## [1.18.4](https://github.com/KlangHaus/resonans/compare/v1.18.3...v1.18.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** bump the otel log family together, not sdk/log alone ([#85](https://github.com/KlangHaus/resonans/issues/85)) ([807d8f2](https://github.com/KlangHaus/resonans/commit/807d8f2ba5c3df08bf68e8d640d6d0ead8476862)), closes [#83](https://github.com/KlangHaus/resonans/issues/83)
+
 ## [1.18.3](https://github.com/KlangHaus/resonans/compare/v1.18.2...v1.18.3) (2026-09-28)
 
 
