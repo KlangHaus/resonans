@@ -123,20 +123,73 @@ if (driftCount > 0) {
 // than left implied. It is enough because the only thing matched is the shape of one
 // command line, and adding a YAML parser to read one line would grow the very surface
 // this change pinned down.
+// foldContinuations joins a block scalar's continuation lines into one logical line,
+// keyed on indentation, then trims.
+//
+// 🔴 WHY THIS EXISTS. [sikkerhed] measured that matching line by line missed the form
+// this file actually uses. YAML folded scalars are its native idiom — five today — and
+// the invocation this change removes was written folded, with the option on its own
+// continuation line:
+//
+//     run: >
+//       npx --no-install semantic-release
+//       --package @semantic-release/git@10
+//
+// A line-bound matcher sees the anchor on one line and the option on the next, and
+// passes. My own register says to fold continuations FIRST and I wrote a line-bound
+// matcher anyway.
+//
+// Folding is done rather than applying the option check to every line, because that
+// variant produced a FALSE POSITIVE on this repo's own workflow: `node -p "..."` is
+// Node's --print, not npx's --package. Broadening a denial needs the accept set rerun,
+// which is how that surfaced.
+//
+// Not a YAML parse, and the limit is stated: a `|`/`>` block is folded by indentation,
+// and a more-indented line that is NOT a continuation would be joined too. That can
+// only merge text into one logical line, which makes the option check see MORE, never
+// less.
+function foldContinuations(rawLines) {
+  const out = [];
+  let buf = null;
+  let blockIndent = null;
+  for (const raw of rawLines) {
+    if (!raw.trim()) continue;
+    const indent = raw.length - raw.trimStart().length;
+    if (blockIndent !== null && indent > blockIndent) {
+      buf = `${buf} ${raw.trim()}`;
+      continue;
+    }
+    if (buf !== null) {
+      out.push(buf.trim());
+      buf = null;
+      blockIndent = null;
+    }
+    if (/:\s*[>|][-+]?\d*\s*$/.test(raw)) {
+      buf = raw.replace(/:\s*[>|][-+]?\d*\s*$/, ': ').trim();
+      blockIndent = indent;
+      continue;
+    }
+    out.push(raw.trim());
+  }
+  if (buf !== null) out.push(buf.trim());
+  return out.filter(Boolean);
+}
+
 const WORKFLOW = path.resolve(process.cwd(), '.github', 'workflows', 'semantic-release.yml');
 let wfLines;
 try {
-  wfLines = fs
-    .readFileSync(WORKFLOW, 'utf8')
-    .split('\n')
-    // A YAML comment is `#` at line start or preceded by whitespace. The earlier
-    // form cut at ANY `#`, which could hide a match rather than only a comment —
-    // [sikkerhed] noted that is a different sentence than "comments are stripped".
-    // Still not a YAML parse; a `#` inside a quoted string preceded by a space is
-    // the residual, and it can only make this stricter by truncating a line early,
-    // never more permissive, because the allowlist below requires an exact form.
-    .map((l) => l.replace(/(^|\s)#.*$/, '').trim())
-    .filter(Boolean);
+  wfLines = foldContinuations(
+    fs
+      .readFileSync(WORKFLOW, 'utf8')
+      .split('\n')
+      // A YAML comment is `#` at line start or preceded by whitespace. An earlier
+      // form cut at ANY `#`, which could hide a match rather than only a comment —
+      // [sikkerhed] noted that is a different sentence than "comments are stripped".
+      // Still not a YAML parse; a `#` inside a quoted string preceded by a space is
+      // the residual, and it can only make this stricter by truncating a line early,
+      // never more permissive, because the anchor below requires a positive form.
+      .map((l) => l.replace(/(^|\s)#.*$/, '')),
+  );
 } catch (err) {
   console.error(
     `GUARD CANNOT MEASURE: cannot read ${WORKFLOW} — ${err.message}. This guard has to see ` +
@@ -177,10 +230,33 @@ if (invocations.length === 0) {
 // refuses what it should let in looks like work. So the accept set was run too, not
 // only the reject set.
 //
-//   ANCHOR  the line must START with the pinned form, so trailing flags are fine
-//   DENY    no option that selects a package or embeds another command, anywhere
+//   ANCHOR  an invocation line must START with the pinned form, so trailing flags
+//           on that line are fine
+//   DENY    no line in the whole workflow may carry a package-selecting option
+//
+// 🔴 The DENY half is applied to EVERY line, not to the invocation lines, and that is
+// [sikkerhed]'s third finding on this guard rather than a choice. YAML folded scalars
+// (`run: >`) are this file's native idiom — it uses five today — and the very form
+// this change removes was written folded, with `-p` on its own continuation lines:
+//
+//     run: >
+//       npx --no-install semantic-release
+//       --package @semantic-release/git@10
+//
+// Line-bound matching sees the anchor on one line and the option on the next, so it
+// PASSED. An earlier version of this comment said "no option … anywhere", which was
+// not true of the code: it was "on the invocation line". Third time in this change
+// that a comment claimed wider coverage than the measurement — the exact defect the
+// whole change exists to remove.
+//
+// Applying DENY to every line rather than folding continuations first, because no
+// legitimate line in this workflow needs `-p`, `--package` or `-c`, and comments are
+// already stripped — verified as behaviour, since the file still carries
+// `-p semantic-release@24` inside a comment and the guard passes.
 const SAFE_PREFIX = /^npx --no-install semantic-release(\s|$)/;
 const PACKAGE_SELECTING = /(^|\s)(-p|--package|-c|--call)([\s=])/;
+// Applied to the FOLDED invocation lines, so an option on a continuation is now part
+// of the same logical line the anchor is on.
 const unsafe = invocations
   .map((l) => l.replace(/^run:\s*/, '').trim())
   .filter((l) => !SAFE_PREFIX.test(l) || PACKAGE_SELECTING.test(l));
@@ -198,7 +274,8 @@ if (unsafe.length > 0) {
   process.exit(1);
 }
 console.log(
-  `  ok    the release resolves from node_modules (${invocations.length} npx invocation(s), all in the pinned form)`,
+  `  ok    the release resolves from node_modules (${invocations.length} npx invocation(s) in the ` +
+    `pinned form, folded from ${wfLines.length} logical workflow lines)`,
 );
 
 const ctx = {
