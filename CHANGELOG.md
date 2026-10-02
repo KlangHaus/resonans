@@ -1,3 +1,10 @@
+## [1.18.7](https://github.com/KlangHaus/resonans/compare/v1.18.6...v1.18.7) (2026-10-02)
+
+
+### Bug Fixes
+
+* **backfill:** label and sanitize rich_text stored as HTML without a format ([#93](https://github.com/KlangHaus/resonans/issues/93)) ([3bba597](https://github.com/KlangHaus/resonans/commit/3bba597f035cddfe3e9b53fff3d4560cf37d135b)), closes [#92](https://github.com/KlangHaus/resonans/issues/92)
+
 ## [1.18.6](https://github.com/KlangHaus/resonans/compare/v1.18.5...v1.18.6) (2026-10-02)
 
 
