@@ -118,7 +118,10 @@ func runSeed() int {
 	return 0
 }
 
-// runSanitizeBackfill cleans stored rich text. Dry-run unless --apply.
+// runSanitizeBackfill cleans stored rich text, and labels rich_text that the
+// interim editor stored as HTML without a format so it gets sanitized at all.
+// Rows it cannot classify are reported, never guessed at. Dry-run unless
+// --apply.
 func runSanitizeBackfill(args []string) int {
 	apply := false
 	for _, a := range args {

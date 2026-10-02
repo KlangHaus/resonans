@@ -47,8 +47,14 @@ type Store interface {
 	Update(ctx context.Context, table string, row Row, body json.RawMessage) error
 }
 
-// Report counts per table. Every scanned row lands in exactly one of
+// Report counts per table.
+//
+// BUCKETS, which sum to Scanned: every scanned row lands in exactly one of
 // Unchanged, Changed, SkippedConcurrent, UnknownType or Invalid.
+//
+// OVERLAYS, which do not: Blanked and Labeled are subsets of Changed, and
+// Ambiguous crosses buckets -- an ambiguous row is left byte-identical, so it
+// is counted Unchanged AND Ambiguous. Do not add an overlay to the sum.
 type Report struct {
 	Table     string
 	Scanned   int
@@ -58,8 +64,16 @@ type Report struct {
 	// Run the backfill again to clean the row's new body.
 	SkippedConcurrent int
 	Blanked           int // of Changed: rows with a non-string in HTML position set to ""
-	UnknownType       int // doc-type no longer in the registry: left untouched
-	Invalid           int // body is not a JSON object: left untouched
+	// Labeled (of Changed): rows carrying rich_text that the interim editor
+	// wrote as HTML without a format. They are labeled AND sanitized.
+	Labeled int
+	// Ambiguous: rows holding a rich_text block this pass refused to label --
+	// translations part HTML and part plain, or a value the parser could not
+	// read. NOT written, and counted separately so a clean run cannot hide
+	// them: a row can be Unchanged and still be Ambiguous.
+	Ambiguous   int
+	UnknownType int // doc-type no longer in the registry: left untouched
+	Invalid     int // body is not a JSON object: left untouched
 	// Findings are "<row id> <path> (<json type>)" for blanked values, and
 	// "<row id> unknown type <t>" / "<row id> invalid body": ids and paths only,
 	// never content.
@@ -86,6 +100,16 @@ func Run(ctx context.Context, st Store, reg *schema.Registry, apply bool) ([]Rep
 			case err != nil:
 				return fmt.Errorf("backfill: %s %s: %w", table, row.ID, err)
 			}
+			// 🔴 BEFORE the unchanged return, because an ambiguous row is
+			// byte-identical by design: it is left alone. Counted after the
+			// early return it would be reported as a clean row, and the rows
+			// that need a person are exactly the ones that look clean.
+			if len(res.Ambiguous) > 0 {
+				rep.Ambiguous++
+				for _, p := range res.Ambiguous {
+					rep.Findings = append(rep.Findings, fmt.Sprintf("%s %s", row.ID, p))
+				}
+			}
 			if !res.Changed {
 				rep.Unchanged++
 				return nil
@@ -102,6 +126,12 @@ func Run(ctx context.Context, st Store, reg *schema.Registry, apply bool) ([]Rep
 				}
 			}
 			rep.Changed++
+			if len(res.Labeled) > 0 {
+				rep.Labeled++
+				for _, p := range res.Labeled {
+					rep.Findings = append(rep.Findings, fmt.Sprintf("%s %s labeled html", row.ID, p))
+				}
+			}
 			if len(res.Blanked) > 0 {
 				rep.Blanked++
 				for _, p := range res.Blanked {
