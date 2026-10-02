@@ -36,8 +36,34 @@ function commit(next: Block[]) {
   emit('update:modelValue', next)
 }
 
+// 🔴 A NEW rich_text BLOCK DECLARES THAT IT HOLDS HTML, because the editor this
+// Studio ships produces HTML.
+//
+// Measured 2026-10-01: `format` defaults to "portable_text"
+// (internal/schema/schemas/blocks.yaml), and the server sanitizes HTML only where
+// the block SAYS it is HTML — outside that position it runs stripUnsafeHrefs and
+// leaves the string alone, which internal/schema/sanitize_test.go asserts on
+// purpose ("the portable_text <img> stays TEXT, not markup"). That is the contract,
+// not a hole. But the Studio was writing HTML and labelling it as text, so two
+// things followed: a consumer honouring the contract renders the markup as visible
+// characters, and the server-side HTML sanitizer never ran on Studio-authored
+// content at all. The Studio sanitizes on emit, but a client-side sanitizer is not
+// a boundary.
+//
+// This is also the first step of the GTRichText swap: without the label, documents
+// written by the interim editor carry HTML in a field the contract calls text, and
+// nothing afterwards could tell them apart from real portable text in order to
+// migrate them.
+//
+// When <GTRichText> replaces RichTextField and the Studio stores structured
+// content, this line goes away with it — a block that genuinely holds portable
+// text must NOT claim to hold HTML.
+const htmlAuthoringBlocks = new Set(['rich_text'])
+
 function addBlock(type: string) {
-  commit([...blocks.value, { _type: type }])
+  const block: Block = { _type: type }
+  if (htmlAuthoringBlocks.has(type)) block.format = 'html'
+  commit([...blocks.value, block])
   showPalette.value = false
 }
 function removeAt(i: number) {
