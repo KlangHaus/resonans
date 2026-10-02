@@ -142,6 +142,26 @@ func validateBlocks(r *Registry, f Field, v any, path string) error {
 		if !ok {
 			return fmt.Errorf("%w: %s[%d] unknown block %q", ErrInvalid, path, i, bt)
 		}
+		// rich_text.format decides which sanitizer runs, so an unrecognized
+		// value is rejected here rather than silently routed. This gate is
+		// effective because both write paths validate BEFORE they sanitize
+		// (measured: internal/httpapi/httpapi.go:705 and :741).
+		//
+		// What this gate adds over the field typing that already ran: measured
+		// by disarming it, 5 of 7 bad values got through — the unknown strings
+		// ("HTML", "Html", "html ", "prosemirror") and explicit null. 42 and {}
+		// were still rejected by the string field type, so this gate is not
+		// what keeps those out. Null matters because the sanitizer's type
+		// assertion reads it as absent and picks the structured path.
+		if bt == "rich_text" {
+			if raw, present := blk["format"]; present {
+				format, isString := raw.(string)
+				if !isString || !richTextFormats[format] {
+					return fmt.Errorf("%w: %s[%d]:%s format %v unknown (want %q or %q)",
+						ErrInvalid, path, i, bt, raw, formatPortableText, formatHTML)
+				}
+			}
+		}
 		if err := validateFields(r, def.Fields, blk, fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
 			return err
 		}

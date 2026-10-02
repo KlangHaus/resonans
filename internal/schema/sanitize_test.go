@@ -189,3 +189,56 @@ func TestHTMLPositionRejectsNonStrings(t *testing.T) {
 		}
 	}
 }
+
+// The format discriminator must fail CLOSED: only a positively recognized
+// structured format takes the non-HTML path. Verified by mutation: rolling
+// routesToHTML back to `format == formatHTML` fails this test on all 6
+// values of the reject set. Before this, `format == "html"`
+// was the whole test, so "HTML", "Html" and "html " stored `onerror=` intact.
+//
+// Both halves run: the REJECT set (values that must now be sanitized) and the
+// ACCEPT set (the two recognized formats, whose behavior must not change).
+func TestRichTextFormatRoutingFailsClosed(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const payload = `<img src=x onerror=alert(1)><p>ok</p>`
+	sanitizedValue := func(t *testing.T, blk map[string]any) string {
+		t.Helper()
+		blk["_type"] = "rich_text"
+		blk["value"] = map[string]any{"da": payload}
+		raw, _ := json.Marshal(map[string]any{"body": []any{blk}})
+		out, err := SanitizeDocument(r, "page", raw)
+		if err != nil {
+			t.Fatalf("sanitize: %v", err)
+		}
+		var got struct {
+			Body []map[string]any `json:"body"`
+		}
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatal(err)
+		}
+		return got.Body[0]["value"].(map[string]any)["da"].(string)
+	}
+
+	// Positive control: the one value that was already routed correctly.
+	if v := sanitizedValue(t, map[string]any{"format": formatHTML}); v != "<p>ok</p>" {
+		t.Fatalf("positive control: declared html not sanitized: %q", v)
+	}
+
+	// Reject set: a typo must NOT buy the weaker path.
+	for _, format := range []string{"HTML", "Html", "html ", " html", "prosemirror", "rich-text"} {
+		if v := sanitizedValue(t, map[string]any{"format": format}); strings.Contains(v, "onerror") {
+			t.Errorf("format %q took the non-HTML path: %q", format, v)
+		}
+	}
+
+	// Accept set: the recognized structured forms keep their value as TEXT,
+	// which is the contract TestSanitizeDocumentOnlyDeclaredHTML pins.
+	for _, blk := range []map[string]any{{"format": formatPortableText}, {"format": ""}, {}} {
+		if v := sanitizedValue(t, blk); v != payload {
+			t.Errorf("structured format %v altered its value: %q", blk["format"], v)
+		}
+	}
+}
