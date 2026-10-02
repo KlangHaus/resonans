@@ -103,3 +103,34 @@ func TestValidatePageMarketingBlocks(t *testing.T) {
 		t.Fatalf("valid page rejected: %v", err)
 	}
 }
+
+// An unrecognized rich_text.format is rejected at the door, so it can never
+// reach storage and be routed by a later reader. The denominator is asserted:
+// if someone adds a format value, this test goes red until it is listed here.
+func TestValidateRichTextFormatAllowList(t *testing.T) {
+	accepted := []string{"", formatPortableText, formatHTML}
+	if len(accepted) != len(richTextFormats) {
+		t.Fatalf("denominator: %d values declared in richTextFormats, %d covered here",
+			len(richTextFormats), len(accepted))
+	}
+	for _, format := range accepted {
+		if !richTextFormats[format] {
+			t.Fatalf("denominator: %q covered here but not declared", format)
+		}
+		body := `{"body": [{"_type": "rich_text", "format": "` + format + `", "value": {"da": "Hej"}}]}`
+		if err := validate(t, "page", body); err != nil {
+			t.Errorf("format %q rejected: %v", format, err)
+		}
+	}
+	for _, format := range []string{`"HTML"`, `"Html"`, `"html "`, `"prosemirror"`, `42`, `null`, `{}`} {
+		body := `{"body": [{"_type": "rich_text", "format": ` + format + `, "value": {"da": "Hej"}}]}`
+		err := validate(t, "page", body)
+		if err == nil {
+			t.Errorf("format %s accepted", format)
+			continue
+		}
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("format %s: want ErrInvalid, got %v", format, err)
+		}
+	}
+}

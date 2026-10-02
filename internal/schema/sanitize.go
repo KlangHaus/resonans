@@ -30,6 +30,45 @@ var richTextPolicy = func() *bluemonday.Policy {
 
 var safeHref = regexp.MustCompile(`(?i)^(?:https?:|mailto:)`)
 
+// rich_text.format selects WHICH SANITIZER RUNS, so it is a security
+// discriminator and not a presentation hint.
+const (
+	formatHTML         = "html"
+	formatPortableText = "portable_text"
+)
+
+// richTextFormats is the allow-list ValidateDocument enforces at the door.
+// "" means the field is absent, which blocks.yaml defines as portable_text.
+var richTextFormats = map[string]bool{
+	"":                 true,
+	formatPortableText: true,
+	formatHTML:         true,
+}
+
+// routesToHTML reports whether a format value takes the HTML sanitizing path.
+//
+// 🔴 FAILS CLOSED, and the test is deliberately NOT `format == "html"`: it is
+// "anything that is not a recognized structured format". Measured 2026-10-02
+// against the old equality test, payload `<img src=x onerror=alert(1)>`, with
+// format="html" as the positive control (sanitized to `<p>ok</p>`):
+//
+//	format="html"          onerror kept = false   <- positive control
+//	format="HTML"          onerror kept = TRUE
+//	format="Html"          onerror kept = TRUE
+//	format="html "         onerror kept = TRUE
+//
+// This side compared exactly while a consumer plausibly compares with
+// toLowerCase(), so the two disagreed about what counts as HTML — and the
+// WEAKER path was the default. Now an unrecognized value gets the strict
+// treatment, and a structured value in that position is rejected (400) by
+// sanitizeRich rather than stored unexamined.
+//
+// Unrecognized values reach here only on paths that skip ValidateDocument;
+// today that is RepairDocument, via internal/backfill.
+func routesToHTML(format string) bool {
+	return format != "" && format != formatPortableText
+}
+
 // SanitizeRichText returns html reduced to the allowed formatting markup.
 func SanitizeRichText(html string) string { return richTextPolicy.Sanitize(html) }
 
@@ -132,7 +171,7 @@ func sanitizeValue(w *walk, r *Registry, f Field, v any, inBlock, htmlFormat boo
 					continue
 				}
 				format, _ := blk["format"].(string)
-				if err := sanitizeFields(w, r, def.Fields, blk, true, bt == "rich_text" && format == "html", fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
+				if err := sanitizeFields(w, r, def.Fields, blk, true, bt == "rich_text" && routesToHTML(format), fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
 					return nil, err
 				}
 			}
