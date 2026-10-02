@@ -1,3 +1,10 @@
+## [1.18.6](https://github.com/KlangHaus/resonans/compare/v1.18.5...v1.18.6) (2026-10-02)
+
+
+### Bug Fixes
+
+* **schema:** fail closed on an unrecognized rich_text format, and reject it at the door ([#92](https://github.com/KlangHaus/resonans/issues/92)) ([b95556f](https://github.com/KlangHaus/resonans/commit/b95556f40306e97249fd1d1d96cf261045a01150))
+
 ## [1.18.5](https://github.com/KlangHaus/resonans/compare/v1.18.4...v1.18.5) (2026-09-30)
 
 
