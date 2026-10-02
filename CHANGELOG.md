@@ -1,3 +1,10 @@
+## [1.18.9](https://github.com/KlangHaus/resonans/compare/v1.18.8...v1.18.9) (2026-10-02)
+
+
+### Bug Fixes
+
+* **api:** declare the path parameters the spec templated but never defined ([#89](https://github.com/KlangHaus/resonans/issues/89)) ([e8b1e74](https://github.com/KlangHaus/resonans/commit/e8b1e7423edc0334a000e7771c2f991cebbeee9b))
+
 ## [1.18.8](https://github.com/KlangHaus/resonans/compare/v1.18.7...v1.18.8) (2026-10-02)
 
 
