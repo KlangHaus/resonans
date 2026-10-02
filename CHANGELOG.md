@@ -1,3 +1,10 @@
+## [1.18.8](https://github.com/KlangHaus/resonans/compare/v1.18.7...v1.18.8) (2026-10-02)
+
+
+### Bug Fixes
+
+* **studio:** label a new rich_text block as HTML, because that is what it holds ([#91](https://github.com/KlangHaus/resonans/issues/91)) ([c16256f](https://github.com/KlangHaus/resonans/commit/c16256f0b3ff3373252824a2ee7366dd012de941))
+
 ## [1.18.7](https://github.com/KlangHaus/resonans/compare/v1.18.6...v1.18.7) (2026-10-02)
 
 
