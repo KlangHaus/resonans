@@ -49,6 +49,15 @@
       "means 'nothing to cover', not 'untested': the guard IS the test. What is genuinely",
       "unmeasured here is the end-to-end canary against a real postgres, which is by hand until",
       "CI has a database (KH-1220) \u2014 this package only reads the files."
+    ],
+    "github.com/KlangHaus/resonans/docs/api": [
+      "Holds one file: an embed directive and a var, and ZERO functions \u2014 so this is a",
+      "fourth output shape again, `[no test files]`, and there is nothing a test could",
+      "call. A floor of 0 means 'nothing to cover', not 'untested'.",
+      "The DOCUMENT it embeds is measured, in two places: the drift cell in",
+      "internal/apidocs compares it to the registered routes, and a cell in",
+      "internal/apiref asserts the bytes served over /docs/v1/openapi.yaml are the same",
+      "bytes as the file on disk \u2014 so an embed replaced by a stale copy fails there."
     ]
   },
   "floors": {
@@ -70,6 +79,8 @@
     "github.com/KlangHaus/resonans/internal/seed": 67,
     "github.com/KlangHaus/resonans/internal/settings": 29,
     "github.com/KlangHaus/resonans/migrations": 0,
-    "github.com/KlangHaus/resonans/internal/deploycheck": 0
+    "github.com/KlangHaus/resonans/internal/deploycheck": 0,
+    "github.com/KlangHaus/resonans/docs/api": 0,
+    "github.com/KlangHaus/resonans/internal/apiref": 91
   }
 }
