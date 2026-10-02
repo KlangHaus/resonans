@@ -358,7 +358,7 @@ paths:
     get:
       summary: The content-type registry
       description: The editor generates its forms and block palette from this. Types are declared in YAML
-        and v ersioned in git, so this changes with a deploy rather than at runtime.
+        and versioned in git, so this changes with a deploy rather than at runtime.
       security:
       - editorJWT: []
       responses:
@@ -542,3 +542,49 @@ paths:
       responses:
         '200':
           description: OK
+  /docs/v1/:
+    get:
+      summary: API reference, rendered for a browser
+      description: >-
+        HTML that renders this document. PUBLIC: an API description that needs a
+        JWT is not one anyone outside can read, so it is mounted on the outer
+        mux rather than under /api/, which has no auth exemptions. The renderer
+        itself is fetched when the container image is built, so outside the
+        image the page says so and links the document instead of rendering
+        blank.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            text/html: {}
+  /docs/v1/openapi.yaml:
+    get:
+      summary: This document
+      description: >-
+        The OpenAPI document itself, embedded in the binary. It is the same
+        bytes the drift cell in internal/apidocs compares against the
+        registered routes, so what is served here cannot go stale separately
+        from what is tested.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/yaml: {}
+  /docs/v1/renderer.js:
+    get:
+      summary: The renderer bundle
+      description: >-
+        The pinned API-reference bundle, served pre-gzipped from disk. 503 when
+        it is not installed, naming the path -- not 404, which would send a
+        reader looking for a typo in their URL instead of at an uninstalled
+        asset.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            text/javascript: {}
+        '503':
+          description: The renderer is not installed on this instance

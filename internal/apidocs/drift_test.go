@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/KlangHaus/resonans/internal/apiref"
 	"github.com/KlangHaus/resonans/internal/bridge"
 	"github.com/KlangHaus/resonans/internal/media"
 )
@@ -47,14 +48,24 @@ var sourceDirs = []string{
 
 // mountPrefixes are the two ServeMux entries that mount a sub-router rather than
 // answering a request. They are not endpoints and are not documented.
-var mountPrefixes = map[string]bool{"/api/": true, "/delivery/": true}
+// mountPrefixes is this cell's DENOMINATOR, and it is the thing to update
+// when a new surface is mounted -- not something to work around. Measured
+// 2026-10-02: /healthz, /readyz and /bridge/v1/resonans-bridge.js are
+// registered and fall outside it, so this cell's green says "every route
+// under these prefixes", not "every route". /docs/ was added when the API
+// reference was mounted, because the alternative was a public surface living
+// in this cell's blind spot.
+var mountPrefixes = map[string]bool{"/api/": true, "/delivery/": true, "/docs/": true}
 
 // resolvable maps the identifiers a route pattern may be built from to their
 // values. Taken from the real constants, so renaming or re-pointing one moves
 // this cell with it instead of leaving it asserting a stale literal.
 var resolvable = map[string]string{
-	"media.AssetPath": media.AssetPath,
-	"bridge.Path":     bridge.Path,
+	"media.AssetPath":     media.AssetPath,
+	"bridge.Path":         bridge.Path,
+	"apiref.PagePath":     apiref.PagePath,
+	"apiref.SpecPath":     apiref.SpecPath,
+	"apiref.RendererPath": apiref.RendererPath,
 }
 
 type route struct {
@@ -153,6 +164,13 @@ func routesFromSource(t *testing.T) []route {
 				}
 				// `{key...}` and `{key}` are the same endpoint to a reader.
 				path = strings.ReplaceAll(path, "...}", "}")
+				// `{$}` is net/http's end-of-path ANCHOR, not part of the URL: it
+				// says "this exact path and no subtree". An OpenAPI path cannot
+				// contain it, so leaving it in would force the specification to
+				// carry a Go implementation detail -- or, worse, would push whoever
+				// hit it into dropping the anchor and silently widening the route to
+				// a subtree. Measured 2026-10-02: one registration uses it.
+				path = strings.TrimSuffix(path, "{$}")
 				out = append(out, route{method: method, path: path, where: fmt.Sprintf("%s:%d", pos.Filename, pos.Line)})
 				return true
 			})
