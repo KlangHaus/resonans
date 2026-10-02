@@ -189,3 +189,80 @@ func TestAuditSlugsCountsInvalidOnly(t *testing.T) {
 		t.Errorf("findings = %v", rep.Findings)
 	}
 }
+
+// The rows this backfill was added for, and the overlay property that makes
+// them visible: an unlabeled-HTML row is Changed AND Labeled, while a mixed
+// row is left byte-identical -- so it is Unchanged AND Ambiguous at once. If
+// Ambiguous were counted after the unchanged return, the rows that need a
+// person would be the ones reported as clean.
+func TestRunLabelsUnlabeledHTMLAndReportsTheRefusals(t *testing.T) {
+	reg, err := schema.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := uuid.New()
+	unlabeled := uuid.New()
+	mixed := uuid.New()
+	plain := uuid.New()
+	st := &memStore{rows: map[string][]Row{
+		TableDocuments: {
+			{ID: unlabeled, TenantID: tenant, Type: "page", Body: body(t, map[string]any{"body": []any{
+				map[string]any{"_type": "rich_text", "value": map[string]any{"da": `<p>ok</p><img src=x onerror=alert(1)>`}},
+			}})},
+			{ID: mixed, TenantID: tenant, Type: "page", Body: body(t, map[string]any{"body": []any{
+				map[string]any{"_type": "rich_text", "value": map[string]any{"da": `<p>dansk</p>`, "en": `plain & 2 < 3`}},
+			}})},
+			{ID: plain, TenantID: tenant, Type: "page", Body: body(t, map[string]any{"body": []any{
+				map[string]any{"_type": "rich_text", "value": map[string]any{"da": `Husk: 'organisk' & 2 < 3`}},
+			}})},
+		},
+		TableVersions: {},
+	}}
+
+	reps, err := Run(context.Background(), st, reg, true)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	docs := reps[0]
+	if docs.Scanned != 3 {
+		t.Fatalf("Scanned = %d, want 3", docs.Scanned)
+	}
+	if docs.Changed != 1 || docs.Labeled != 1 {
+		t.Errorf("Changed=%d Labeled=%d, want 1/1", docs.Changed, docs.Labeled)
+	}
+	// The overlay: the mixed row and the plain row are both Unchanged, and
+	// exactly one of them is also Ambiguous.
+	if docs.Unchanged != 2 || docs.Ambiguous != 1 {
+		t.Errorf("Unchanged=%d Ambiguous=%d, want 2/1", docs.Unchanged, docs.Ambiguous)
+	}
+	// Buckets still sum to Scanned; overlays are not part of the sum.
+	if docs.Unchanged+docs.Changed+docs.SkippedConcurrent+docs.UnknownType+docs.Invalid != docs.Scanned {
+		t.Errorf("buckets do not sum to Scanned: %+v", docs)
+	}
+
+	// The written row is labeled AND sanitized, and findings name ids and
+	// paths without carrying content.
+	var stored map[string]any
+	for _, r := range st.rows[TableDocuments] {
+		if r.ID == unlabeled {
+			if err := json.Unmarshal(r.Body, &stored); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	blk := stored["body"].([]any)[0].(map[string]any)
+	if blk["format"] != "html" {
+		t.Errorf("stored format = %v, want html", blk["format"])
+	}
+	if v := blk["value"].(map[string]any)["da"].(string); strings.Contains(v, "onerror") {
+		t.Errorf("stored value not sanitized: %q", v)
+	}
+	for _, f := range docs.Findings {
+		if strings.Contains(f, "onerror") || strings.Contains(f, "organisk") {
+			t.Errorf("finding carries content: %q", f)
+		}
+	}
+	if len(docs.Findings) != 2 {
+		t.Errorf("Findings = %v, want one labeled + one refused", docs.Findings)
+	}
+}

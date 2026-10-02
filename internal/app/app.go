@@ -384,8 +384,12 @@ func SanitizeBackfill(ctx context.Context, apply bool) error {
 	}
 	reports, err := backfill.Run(ctx, backfill.PostgresStore{Pool: pool}, registry, apply)
 	for _, r := range reports {
+		// labeled and ambiguous are printed because a count nobody prints is a
+		// count nobody reads: an ambiguous row is left byte-identical, so
+		// without its own number it is indistinguishable from a clean row.
 		logger.Info("sanitize_backfill", "mode", mode, "table", r.Table, "scanned", r.Scanned,
 			"unchanged", r.Unchanged, "changed", r.Changed, "blanked", r.Blanked,
+			"labeled", r.Labeled, "ambiguous", r.Ambiguous,
 			"skipped_concurrent", r.SkippedConcurrent,
 			"unknown_type", r.UnknownType, "invalid", r.Invalid, "findings", r.Findings)
 	}

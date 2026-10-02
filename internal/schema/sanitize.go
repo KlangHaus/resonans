@@ -112,6 +112,12 @@ func SanitizeDocument(r *Registry, docType string, body json.RawMessage) (json.R
 type walk struct {
 	blank   bool
 	blanked []string
+	// label: relabel unlabeled rich_text that measures as HTML (relabel.go).
+	// Set by RepairDocument only -- a live save must never have its format
+	// rewritten under it, because the writer declared one or chose not to.
+	label     bool
+	labeled   []string
+	ambiguous []string
 }
 
 // inBlock: the fields belong to a block (or something nested in one).
@@ -171,7 +177,16 @@ func sanitizeValue(w *walk, r *Registry, f Field, v any, inBlock, htmlFormat boo
 					continue
 				}
 				format, _ := blk["format"].(string)
-				if err := sanitizeFields(w, r, def.Fields, blk, true, bt == "rich_text" && routesToHTML(format), fmt.Sprintf("%s[%d]:%s", path, i, bt)); err != nil {
+				blockPath := fmt.Sprintf("%s[%d]:%s", path, i, bt)
+				// Relabel BEFORE routing, so a row the interim editor wrote as
+				// HTML without a format is sanitized in the same pass that
+				// labels it. Labeling alone would leave the stored value
+				// unsanitized while claiming it is HTML.
+				if w.label && bt == "rich_text" && format == "" {
+					w.relabel(def.Fields, blk, blockPath)
+					format, _ = blk["format"].(string)
+				}
+				if err := sanitizeFields(w, r, def.Fields, blk, true, bt == "rich_text" && routesToHTML(format), blockPath); err != nil {
 					return nil, err
 				}
 			}
@@ -248,6 +263,14 @@ type RepairResult struct {
 	// in HTML position that were replaced by "" — the named handling for data
 	// the API now rejects on save. Never the values themselves.
 	Blanked []string
+	// Labeled lists the paths of rich_text blocks that had no format and whose
+	// value measured as HTML: they were labeled formatHTML and sanitized in
+	// the same pass (relabel.go).
+	Labeled []string
+	// Ambiguous lists the paths this pass REFUSED to label, with the reason --
+	// a block whose translations are part HTML and part plain, or a value the
+	// HTML parser could not read. Left byte-identical, for a person to decide.
+	Ambiguous []string
 }
 
 // RepairDocument is SanitizeDocument for a body that is ALREADY stored: instead
@@ -265,7 +288,7 @@ func RepairDocument(r *Registry, docType string, body json.RawMessage) (RepairRe
 		return RepairResult{}, fmt.Errorf("%w: body is not a JSON object: %w", ErrInvalid, err)
 	}
 	_ = json.Unmarshal(body, &orig)
-	w := &walk{blank: true}
+	w := &walk{blank: true, label: true}
 	if err := sanitizeFields(w, r, dt.Fields, obj, false, false, docType); err != nil {
 		return RepairResult{}, err
 	}
@@ -274,5 +297,11 @@ func RepairDocument(r *Registry, docType string, body json.RawMessage) (RepairRe
 		return RepairResult{}, fmt.Errorf("schema: marshal repaired body: %w", err)
 	}
 	before, _ := json.Marshal(orig)
-	return RepairResult{Body: out, Changed: string(before) != string(out), Blanked: w.blanked}, nil
+	return RepairResult{
+		Body:      out,
+		Changed:   string(before) != string(out),
+		Blanked:   w.blanked,
+		Labeled:   w.labeled,
+		Ambiguous: w.ambiguous,
+	}, nil
 }
