@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/KlangHaus/resonans/compare/v1.18.9...v1.19.0) (2026-10-02)
+
+
+### Features
+
+* **api:** serve the OpenAPI document and a page that renders it ([#97](https://github.com/KlangHaus/resonans/issues/97)) ([328463c](https://github.com/KlangHaus/resonans/commit/328463ca0437b61bb101be15dd0da46c8e16d473)), closes [resonans#93](https://github.com/resonans/issues/93)
+
 ## [1.18.9](https://github.com/KlangHaus/resonans/compare/v1.18.8...v1.18.9) (2026-10-02)
 
 
