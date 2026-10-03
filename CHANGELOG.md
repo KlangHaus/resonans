@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/KlangHaus/resonans/compare/v1.19.0...v1.20.0) (2026-10-03)
+
+
+### Features
+
+* **build:** fetch the pinned api-reference renderer into the image ([#98](https://github.com/KlangHaus/resonans/issues/98)) ([f813475](https://github.com/KlangHaus/resonans/commit/f8134754a4c119091f7beba1b995b5595dce9fce)), closes [resonans#97](https://github.com/resonans/issues/97) [#97](https://github.com/KlangHaus/resonans/issues/97)
+
 # [1.19.0](https://github.com/KlangHaus/resonans/compare/v1.18.9...v1.19.0) (2026-10-02)
 
 
