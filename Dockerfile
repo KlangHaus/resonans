@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
 
 # ─── API-reference renderer ──────────────────────────────────────────────────
 # Fetched HERE rather than vendored into git. Measured 2026-10-02: the bundle is
-# 4 381 105 bytes raw and 1 263 396 gzipped, against a .git of 4.2 MB whose
+# 4 381 105 bytes raw, and over 1.2 MB gzipped, against a .git of 4.2 MB whose
 # largest tracked file is 244 KB — so vendoring would be a 29 % permanent
 # increase in a history that is about to become public. Fetching at IMAGE build
 # time keeps `go build` offline and reproducible (the binary does not need the
@@ -37,6 +37,17 @@ RUN CGO_ENABLED=0 go build -trimpath \
 #
 # scripts/apidocs_pin_guard.py reads these two ARGs as the single source of
 # truth and compares SCALAR_VERSION against the registry's dist-tags.latest.
+#
+# 🔴 DO NOT COMPARE COMPRESSED BYTE COUNTS. The gzipped size depends on which
+# gzip ran, and an earlier version of this comment recorded one machine's
+# figure, which sent a reader chasing a 1 375-byte "drift" that was not one.
+# Measured 2026-10-03 on byte-identical input: python zlib -9 gives 1 263 386,
+# macOS gzip -9 gives 1 263 396, busybox gzip -9 in this stage gives
+# 1 264 771, python level 6 gives 1 266 487 — a 3 101-byte spread.
+#
+# The reproducible invariants are the RAW sha256 pinned below and the
+# decompressed size (4 381 105). Both are verified in the build: the digest by
+# sha256sum, which logs `/tmp/renderer.js: OK`, and the archive by `gzip -t`.
 FROM golang:1.25.13-alpine AS apidocs
 ARG SCALAR_VERSION=1.72.4
 ARG SCALAR_SHA256=f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
