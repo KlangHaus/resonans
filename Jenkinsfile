@@ -162,7 +162,26 @@ klanghausPipeline(
         export GOTOOLCHAIN=go1.25.13
         ver_out="$(go version)"
         echo "$ver_out"
-        grep -qE 'go1\.25\.13( |$)' <<<"$ver_out" || { echo "go is NOT 1.25.13"; exit 1; }
+        # 🔴 EXACT FIELD EQUALITY, NOT A REGEX, AND THAT IS THE FIX FOR A
+        # COMPILE ERROR -- not a style preference. This line read
+        # `grep -qE 'go1\\.25\\.13( |$)'`, and inside a Groovy
+        # triple-quoted string a lone backslash is not a valid escape: the
+        # Jenkinsfile did not COMPILE. Six builds failed in 0 seconds with an
+        # empty output surface, and no jenkins/* check was ever planned,
+        # because nothing ran.
+        #
+        # This file already held two correct examples of the same construct
+        # (lines ~200 and ~323 double the backslashes) and one that avoids the
+        # metacharacter entirely (~85). I wrote the only one that breaks. So
+        # the cure here removes the metacharacter rather than remembering to
+        # double it: `go version` prints the version as its THIRD field, so
+        # comparing that field exactly is stronger than the regex was -- there
+        # is no boundary question at all, where a loose `grep -F 'go1.25.13'`
+        # measurably accepts go1.25.130 -- and it reports what it found
+        # instead of only that it was wrong.
+        ver_got="$(awk '{print $3}' <<<"$ver_out")"
+        [ "$ver_got" = "go1.25.13" ] || {
+          echo "go is $ver_got, expected exactly go1.25.13"; exit 1; }
 
         # The contract for this facility, stated in infra's jenkins.yaml: the role is
         # the cluster owner and may CREATE DATABASE, and each build must make its own
