@@ -26,7 +26,14 @@ an EMPLOYEE (Ophavsretsloven § 59) — and nobody is employed by the company, s
 § 59 transfers nothing and the rights sit with the individual authors. Measured by
 [jura], 2026-09-28.
 
-Consolidating those rights in Asp Productions ApS is intended and is a separate
-legal step that has not happened. Until it has, this file says who holds the
-copyright rather than who we would like to hold it, because a notice cannot be
-withdrawn from a fork.
+The rights have not been consolidated in a single holder. Until they are, this file
+says who holds the copyright rather than who we would like to hold it, because a
+notice cannot be withdrawn from a fork.
+
+That sentence used to name an intended holder. [jura] read this file and removed the
+forward-looking half, because the sentence was doing the very thing the
+one beside it warns against: an intention cannot be checked, it goes stale by
+itself, and it cannot be withdrawn from a fork either. What replaced it is a fact,
+and a fact does not break when a company changes. The day the transfer is signed,
+the FIRST paragraph changes instead — "the authors of the work" becomes whoever
+holds it then — which is a factual update made at the moment it becomes true.
