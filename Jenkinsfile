@@ -99,6 +99,16 @@ klanghausPipeline(
         # is a threshold nobody has seen refuse anything.
         python3 scripts/coverage_gate.py --selftest
 
+        # Same shape, different filter: `go test -run <pattern>` prints
+        # `ok ... [no tests to run]` and exits 0 when the pattern matches
+        # nothing, so a renamed test turns a targeted verification into a green
+        # that measured nothing. This selftest provokes both halves (3 accept +
+        # 3 reject) against the fixture module under scripts/testdata/, and
+        # asserts each case's MESSAGE as well as its exit code: two of the
+        # guard's layers are subsumed for the exit code, and only the message
+        # tells them apart.
+        python3 scripts/gotest_run_guard.py --selftest
+
         # Per-package floors, not a total: measured on d2928b2 the total sat at
         # 50.3% while internal/content had fallen nine points, because other
         # packages grew at the same time. An average cannot answer "did anything
