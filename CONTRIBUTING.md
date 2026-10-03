@@ -119,11 +119,22 @@ an outside pull request, because merging one would leave the project's licensing
 in a way that is unpleasant to fix afterwards.
 
 **What it will and will not change.** Everything published here stays AGPL-3.0. What the
-agreement covers is whether KlangHaus may additionally grant your contribution under other
-terms. Today we cannot: we hold the copyright only to what we wrote ourselves, and we
-cannot relicense someone else's contribution without asking them. The agreement is how that
-changes, and it is the whole reason it exists — we would rather you knew that now than read
-it in the small print later.
+agreement covers is two things, and the second one is easy to leave out: whether KlangHaus
+may additionally grant your contribution under other terms, **and whether those rights may
+be transferred onward to another legal entity** — a group company, or a company in the same
+ownership — without asking you again.
+
+Today we can do neither: we hold the copyright only to what we wrote ourselves, and we
+cannot relicense or hand on someone else's contribution without asking them. The agreement
+is how that changes, and it is the whole reason it exists — we would rather you knew that
+now than read it in the small print later.
+
+The transfer half is named here because [jura] corrected their own requirement list for
+exactly that omission: Ophavsretsloven § 56(2) gives no right to pass a licence onward
+unless it is customary or clearly presupposed, so a grant that lists relicensing and stops
+there ends at one company. Without the clause, every contributor would have to be asked
+again the day the rights move. A sentence that covers what the writer happened to be
+thinking of is the failure mode here, on both sides of the agreement.
 
 We would rather tell you this before you spend an evening on a patch than after. So:
 

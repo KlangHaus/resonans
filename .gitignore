@@ -17,3 +17,5 @@ coverage.out
 # Tools the Jenkins checks install into the workspace.
 .ci-tools/
 .ci-rls.log
+__pycache__/
+.apidocs/
