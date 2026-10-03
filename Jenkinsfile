@@ -120,6 +120,85 @@ klanghausPipeline(
 
     // ─── gitleaks.yml · Secret scan ─────────────────────────────────────
     [
+      // 🔴 NOT ON THE REQUIRED LIST, AND THAT IS THE POINT FOR NOW.
+      // A required name that is never produced hangs a PR forever, and this check
+      // has never run anywhere — the facility it needs (infra#395, merged
+      // 2026-09-30T12:58Z) landed today. So it goes red and VISIBLE without
+      // blocking, until it has produced a run on a real head. Flipping it to
+      // required is a ruleset change and belongs to [infra] afterwards (KH-1220).
+      //
+      // WHY IT EXISTS: internal/persistence carries two cells behind
+      // //go:build integration that need a real postgres — tenant isolation, and
+      // migrate under a least-privilege role. Until today nothing could run them, so
+      // two guards existed, passed by hand, and fired at nobody. That is the weakest
+      // guard state there is: the capability exists, the cell exists, and no schedule
+      // touches it.
+      //
+      // THIN ON PURPOSE, because this file must not grow: the per-build database is
+      // created and dropped by the Go code (testPoolDSN), not here. The agents
+      // deliberately have no docker ([sikkerhed]'s veto) and psql is not something
+      // this repo may assume is on the image, so doing it in Go also means the same
+      // code path runs on a laptop and the contract is measurable there.
+      context: 'Tenant isolation',
+      selfInstalls: ['go': '1.25.13'],
+      cmd: '''
+        set -euo pipefail
+
+        # Fail closed and NAME the gap. An unset DSN here means the facility was
+        # renamed or removed, and a check that quietly passes on no database is the
+        # exact silence these cells were written to end.
+        test -n "${KH_TEST_PG_DSN:-}" || {
+          echo "KH_TEST_PG_DSN is unset — this check needs the CI postgres from"
+          echo "infra compose/prod/ci (ci-postgres, agent env via jenkins.yaml)."
+          echo "Refusing to pass: no database is a wiring error, not a green."
+          exit 1
+        }
+
+        # Same toolchain as `Lint + Test` so a disagreement between the two is a
+        # disagreement about postgres and not about a stdlib. The full checksum
+        # assertion is NOT repeated here on purpose: it runs on this same commit in
+        # `Lint + Test`, so a weakened GOSUMDB would already be red there, and
+        # duplicating twelve lines is how two copies drift apart.
+        export GOTOOLCHAIN=go1.25.13
+        ver_out="$(go version)"
+        echo "$ver_out"
+        # 🔴 EXACT FIELD EQUALITY, NOT A REGEX, AND THAT IS THE FIX FOR A
+        # COMPILE ERROR -- not a style preference. This line read
+        # `grep -qE 'go1\\.25\\.13( |$)'`, and inside a Groovy
+        # triple-quoted string a lone backslash is not a valid escape: the
+        # Jenkinsfile did not COMPILE. Six builds failed in 0 seconds with an
+        # empty output surface, and no jenkins/* check was ever planned,
+        # because nothing ran.
+        #
+        # This file already held two correct examples of the same construct
+        # (lines ~200 and ~323 double the backslashes) and one that avoids the
+        # metacharacter entirely (~85). I wrote the only one that breaks. So
+        # the cure here removes the metacharacter rather than remembering to
+        # double it: `go version` prints the version as its THIRD field, so
+        # comparing that field exactly is stronger than the regex was -- there
+        # is no boundary question at all, where a loose `grep -F 'go1.25.13'`
+        # measurably accepts go1.25.130 -- and it reports what it found
+        # instead of only that it was wrong.
+        ver_got="$(awk '{print $3}' <<<"$ver_out")"
+        [ "$ver_got" = "go1.25.13" ] || {
+          echo "go is $ver_got, expected exactly go1.25.13"; exit 1; }
+
+        # The contract for this facility, stated in infra's jenkins.yaml: the role is
+        # the cluster owner and may CREATE DATABASE, and each build must make its own
+        # and drop it — two concurrent builds of this repo would otherwise share a
+        # schema. BUILD_TAG is what makes the names unique, and deterministically so:
+        # a retry reclaims its own leftovers instead of orphaning a new set.
+        export RESONANS_TEST_DB_URL="$KH_TEST_PG_DSN"
+        export RESONANS_TEST_SCOPE="$BUILD_TAG"
+
+        # -count=1 so a cached result can never stand in for a run against the
+        # database. Verbose, because the cells state what they measured — how many
+        # tenant tables were checked, and 1 of 2 rows seen — and a bare "ok" would
+        # throw away the denominator.
+        go test -tags=integration -count=1 -v ./internal/persistence/
+      ''',
+    ],
+    [
       // 🔴 DEPENDS ON FULL HISTORY. A shallow clone does not make gitleaks
       //    FAIL — it makes it find fewer secrets and report green. The library
       //    measures the clone (`git rev-parse --is-shallow-repository`).
