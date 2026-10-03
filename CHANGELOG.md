@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/KlangHaus/resonans/compare/v1.20.0...v1.21.0) (2026-10-03)
+
+
+### Features
+
+* **ci:** arm the two integration cells, and fix the Jenkinsfile that did not compile ([#88](https://github.com/KlangHaus/resonans/issues/88)) ([3405768](https://github.com/KlangHaus/resonans/commit/3405768a2a529b800f59f88f328e2c2a0232b4a6))
+
 # [1.20.0](https://github.com/KlangHaus/resonans/compare/v1.19.0...v1.20.0) (2026-10-03)
 
 
