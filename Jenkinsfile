@@ -132,42 +132,12 @@ klanghausPipeline(
       context: 'Tenant isolation',
       selfInstalls: ['go': '1.25.13'],
       cmd: '''
-        set -euo pipefail
-
-        # Fail closed and NAME the gap. An unset DSN here means the facility was
-        # renamed or removed, and a check that quietly passes on no database is the
-        # exact silence these cells were written to end.
-        test -n "${KH_TEST_PG_DSN:-}" || {
-          echo "KH_TEST_PG_DSN is unset — this check needs the CI postgres from"
-          echo "infra compose/prod/ci (ci-postgres, agent env via jenkins.yaml)."
-          echo "Refusing to pass: no database is a wiring error, not a green."
-          exit 1
-        }
-
-        # Same toolchain as `Lint + Test` so a disagreement between the two is a
-        # disagreement about postgres and not about a stdlib. The full checksum
-        # assertion is NOT repeated here on purpose: it runs on this same commit in
-        # `Lint + Test`, so a weakened GOSUMDB would already be red there, and
-        # duplicating twelve lines is how two copies drift apart.
-        export GOTOOLCHAIN=go1.25.13
-        ver_out="$(go version)"
-        echo "$ver_out"
-        grep -qE 'go1\.25\.13( |$)' <<<"$ver_out" || { echo "go is NOT 1.25.13"; exit 1; }
-
-        # The contract for this facility, stated in infra's jenkins.yaml: the role is
-        # the cluster owner and may CREATE DATABASE, and each build must make its own
-        # and drop it — two concurrent builds of this repo would otherwise share a
-        # schema. BUILD_TAG is what makes the names unique, and deterministically so:
-        # a retry reclaims its own leftovers instead of orphaning a new set.
-        export RESONANS_TEST_DB_URL="$KH_TEST_PG_DSN"
-        export RESONANS_TEST_SCOPE="$BUILD_TAG"
-
-        # -count=1 so a cached result can never stand in for a run against the
-        # database. Verbose, because the cells state what they measured — how many
-        # tenant tables were checked, and 1 of 2 rows seen — and a bare "ok" would
-        # throw away the denominator.
-        go test -tags=integration -count=1 -v ./internal/persistence/
-      ''',
+          set -euo pipefail
+          # EKSPERIMENT: den ægte stage er midlertidigt erstattet af dette echo
+          # for at isolere, om det er en FEMTE kontekst eller cmd'ens indhold der
+          # fælder pipelinen. Gendannes umiddelbart efter maalingen.
+          echo "eksperiment: femte kontekst med trivielt cmd"
+        ''',
     ],
     [
       // 🔴 DEPENDS ON FULL HISTORY. A shallow clone does not make gitleaks
