@@ -1,337 +1,590 @@
 openapi: 3.1.0
 info:
   title: Resonans
-  version: "1"
+  version: '1'
   summary: A self-hosted, multi-tenant headless CMS
-  description: >-
-    Two surfaces. /api/v1 is the editor API: the tenant comes from the verified
-    `org` claim of a JWT, never from a body or a header. /delivery/v1 is a trusted
-    server-to-server read surface for your own front-ends: the caller authenticates
-    with a service token and passes the tenant in X-Scope-OrgID, which is trusted
-    ONLY because the token matched. Never call /delivery from a browser.
+  description: 'Two surfaces. /api/v1 is the editor API: the tenant comes from the verified `org` claim
+    of a JWT, never from a body or a header. /delivery/v1 is a trusted server-to-server read surface for
+    your own front-ends: the caller authenticates with a service token and passes the tenant in X-Scope-OrgID,
+    which is trusted ONLY because the token matched. Never call /delivery from a browser.
 
-    A deleted document or asset answers 409, not 404. "In the bin" and "never
-    existed" are different answers, and an editor who gets a 404 goes looking for
-    something one click from returning. Across tenants it IS 404, because a 409
-    would confirm that the id exists.
-  license: { name: AGPL-3.0-or-later, identifier: AGPL-3.0-or-later }
+    A deleted document or asset answers 409, not 404. "In the bin" and "never existed" are different answers,
+    and an editor who gets a 404 goes looking for something one click from returning. Across tenants it
+    IS 404, because a 409 would confirm that the id exists.'
+  license:
+    name: AGPL-3.0-or-later
+    identifier: AGPL-3.0-or-later
 servers:
-  - url: https://cms.example.org
-    description: your own deployment
+- url: https://cms.example.org
+  description: your own deployment
 components:
   securitySchemes:
-    editorJWT: { type: http, scheme: bearer, bearerFormat: JWT,
-      description: "A JWT from your identity provider, verified against its JWKS. The tenant is the `org` claim." }
-    deliveryToken: { type: http, scheme: bearer,
-      description: "RESONANS_DELIVERY_TOKEN. Server-to-server only." }
+    editorJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A JWT from your identity provider, verified against its JWKS. The tenant is the `org`
+        claim.
+    deliveryToken:
+      type: http
+      scheme: bearer
+      description: RESONANS_DELIVERY_TOKEN. Server-to-server only.
   parameters:
-    ScopeOrgID:
-      name: X-Scope-OrgID
-      in: header
+    AssetID:
+      name: id
+      in: path
       required: true
-      schema: { type: string, format: uuid }
-      description: "The tenant. Trusted only because the service token matched."
+      description: Asset identifier. Parsed with uuid.Parse, so anything that is not a UUID is a 400 before
+        the store is touched.
+      schema:
+        type: string
+        format: uuid
+    AssetKey:
+      name: key
+      in: path
+      required: true
+      description: Storage key of the asset. Registered as a wildcard segment, so it MAY contain '/' —
+        which OpenAPI's simple style does not model. A generated client must pass it unescaped, and the
+        server rejects any key that path.Clean would rewrite.
+      schema:
+        type: string
     Deleted:
       name: deleted
       in: query
       required: false
-      schema: { type: string, enum: [only, include] }
-      description: "Omit for live only. An unknown value also means live only."
+      schema:
+        type: string
+        enum:
+        - only
+        - include
+      description: Omit for live only. An unknown value also means live only.
+    DocType:
+      name: type
+      in: path
+      required: true
+      description: Content type name, looked up in the schema registry. An unknown type is a 404, not
+        a 400.
+      schema:
+        type: string
+    DocumentID:
+      name: id
+      in: path
+      required: true
+      description: Document identifier. Parsed with uuid.Parse, so anything that is not a UUID is a 400
+        before the store is touched.
+      schema:
+        type: string
+        format: uuid
+    ScopeOrgID:
+      name: X-Scope-OrgID
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: The tenant. Trusted only because the service token matched.
+    Slug:
+      name: slug
+      in: path
+      required: true
+      description: Document slug, unique per tenant and type.
+      schema:
+        type: string
+    Version:
+      name: version
+      in: path
+      required: true
+      description: Document version number. Parsed with strconv.Atoi.
+      schema:
+        type: integer
 paths:
-  "/_assets/{key}":
+  /_assets/{key}:
     get:
-      summary: "Asset bytes"
-      description: >-
-        Only mounted when Resonans serves the bytes itself. The Content-Type is re-derived from the 
-        bytes with the same allowlist the upload used, so a file that reached the volume by another 
-        route still cannot be served.
+      summary: Asset bytes
+      description: Only mounted when Resonans serves the bytes itself. The Content-Type is re-derived
+        from the  bytes with the same allowlist the upload used, so a file that reached the volume by
+        another  route still cannot be served.
       security: []
       responses:
-        "200": { description: OK }
-  "/api/v1/assets":
+        '200':
+          description: OK
+    parameters:
+    - $ref: '#/components/parameters/AssetKey'
+  /api/v1/assets:
     get:
-      summary: "List assets"
-      description: >-
-        Live only unless `deleted` says otherwise.
-      security: [{ editorJWT: [] }]
-      parameters: [{ $ref: "#/components/parameters/Deleted" }]
+      summary: List assets
+      description: Live only unless `deleted` says otherwise.
+      security:
+      - editorJWT: []
+      parameters:
+      - $ref: '#/components/parameters/Deleted'
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
     post:
-      summary: "Upload a file"
-      description: >-
-        Multipart, field `file`. The stored type and the object key extension come from the CONTENT,
-         never from the filename or the client Content-Type: a PNG-looking name on an HTML file cann
-        ot make a CDN serve markup. No `text/*` type is accepted, because script-carrying markup sni
-        ffs as text/plain.
-      security: [{ editorJWT: [] }]
+      summary: Upload a file
+      description: "Multipart, field `file`. The stored type and the object key extension come from the\
+        \ CONTENT,\n never from the filename or the client Content-Type: a PNG-looking name on an HTML\
+        \ file cann\not make a CDN serve markup. No `text/*` type is accepted, because script-carrying\
+        \ markup sni ffs as text/plain."
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/assets/{id}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/assets/{id}:
     delete:
-      summary: "Move an asset to the bin"
-      description: >-
-        The stored BYTES are not deleted. That is what makes the undo real; nothing is retracted fro
-        m a CDN and there is no hard delete for an erasure request.
-      security: [{ editorJWT: [] }]
+      summary: Move an asset to the bin
+      description: The stored BYTES are not deleted. That is what makes the undo real; nothing is retracted
+        fro m a CDN and there is no hard delete for an erasure request.
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-        "409": { description: "Already in the bin, or already live" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+        '409':
+          description: Already in the bin, or already live
     get:
-      summary: "One asset"
-      security: [{ editorJWT: [] }]
+      summary: One asset
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/assets/{id}/restore":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/AssetID'
+  /api/v1/assets/{id}/restore:
     post:
-      summary: "Bring an asset back out of the bin"
-      security: [{ editorJWT: [] }]
+      summary: Bring an asset back out of the bin
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-        "409": { description: "Already in the bin, or already live" }
-  "/api/v1/content/{type}/{slug}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+        '409':
+          description: Already in the bin, or already live
+    parameters:
+    - $ref: '#/components/parameters/AssetID'
+  /api/v1/content/{type}/{slug}:
     get:
-      summary: "One published document by type and slug"
-      security: [{ editorJWT: [] }]
+      summary: One published document by type and slug
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/documents":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocType'
+    - $ref: '#/components/parameters/Slug'
+  /api/v1/documents:
     get:
-      summary: "List documents"
-      description: >-
-        Live only unless `deleted` says otherwise. An unknown value falls back to live only: the fai
-        lure direction that matters is never showing deleted content by accident.
-      security: [{ editorJWT: [] }]
-      parameters: [{ $ref: "#/components/parameters/Deleted" }]
+      summary: List documents
+      description: 'Live only unless `deleted` says otherwise. An unknown value falls back to live only:
+        the fai lure direction that matters is never showing deleted content by accident.'
+      security:
+      - editorJWT: []
+      parameters:
+      - $ref: '#/components/parameters/Deleted'
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
     post:
-      summary: "Create a draft"
-      description: >-
-        The body is validated against its type: required fields, unknown fields, the block allowlist
-        , nested blocks and arrays. `title`, `slug` and `status` are columns, not body fields.
-      security: [{ editorJWT: [] }]
+      summary: Create a draft
+      description: 'The body is validated against its type: required fields, unknown fields, the block
+        allowlist , nested blocks and arrays. `title`, `slug` and `status` are columns, not body fields.'
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/documents/{id}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/documents/{id}:
     delete:
-      summary: "Move a document to the bin"
-      description: >-
-        The slug is freed while it sits there, because a full unique index would let a deleted page 
-        hold its own address hostage forever. Restoring into a slug someone has since taken fails wi
-        th a conflict rather than renaming anything.
-      security: [{ editorJWT: [] }]
+      summary: Move a document to the bin
+      description: The slug is freed while it sits there, because a full unique index would let a deleted
+        page  hold its own address hostage forever. Restoring into a slug someone has since taken fails
+        wi th a conflict rather than renaming anything.
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-        "409": { description: "Already in the bin, or already live" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+        '409':
+          description: Already in the bin, or already live
     get:
-      summary: "One document, any status"
-      security: [{ editorJWT: [] }]
+      summary: One document, any status
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
     put:
-      summary: "Replace a document"
-      description: >-
-        Same validation as create.
-      security: [{ editorJWT: [] }]
+      summary: Replace a document
+      description: Same validation as create.
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/documents/{id}/publish":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocumentID'
+  /api/v1/documents/{id}/publish:
     post:
-      summary: "Publish a draft"
-      security: [{ editorJWT: [] }]
+      summary: Publish a draft
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/documents/{id}/restore":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocumentID'
+  /api/v1/documents/{id}/restore:
     post:
-      summary: "Bring a document back out of the bin"
-      security: [{ editorJWT: [] }]
+      summary: Bring a document back out of the bin
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-        "409": { description: "Already in the bin, or already live" }
-  "/api/v1/documents/{id}/rollback/{version}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+        '409':
+          description: Already in the bin, or already live
+    parameters:
+    - $ref: '#/components/parameters/DocumentID'
+  /api/v1/documents/{id}/rollback/{version}:
     post:
-      summary: "Roll back to an earlier version"
-      security: [{ editorJWT: [] }]
+      summary: Roll back to an earlier version
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/documents/{id}/versions":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocumentID'
+    - $ref: '#/components/parameters/Version'
+  /api/v1/documents/{id}/versions:
     get:
-      summary: "Version history"
-      security: [{ editorJWT: [] }]
+      summary: Version history
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/preview-token":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocumentID'
+  /api/v1/preview-token:
     post:
-      summary: "Mint a short-lived draft-preview token"
-      security: [{ editorJWT: [] }]
+      summary: Mint a short-lived draft-preview token
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/preview/envelope":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/preview/envelope:
     post:
-      summary: "Render a draft envelope for preview"
-      security: [{ editorJWT: [] }]
+      summary: Render a draft envelope for preview
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/schema":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/schema:
     get:
-      summary: "The content-type registry"
-      description: >-
-        The editor generates its forms and block palette from this. Types are declared in YAML and v
-        ersioned in git, so this changes with a deploy rather than at runtime.
-      security: [{ editorJWT: [] }]
+      summary: The content-type registry
+      description: The editor generates its forms and block palette from this. Types are declared in YAML
+        and versioned in git, so this changes with a deploy rather than at runtime.
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/schema/{type}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/schema/{type}:
     get:
-      summary: "One document type"
-      security: [{ editorJWT: [] }]
+      summary: One document type
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/settings":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocType'
+  /api/v1/settings:
     get:
-      summary: "Per-tenant content settings"
-      security: [{ editorJWT: [] }]
+      summary: Per-tenant content settings
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
     put:
-      summary: "Replace per-tenant content settings"
-      security: [{ editorJWT: [] }]
+      summary: Replace per-tenant content settings
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/settings/preview":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/settings/preview:
     get:
-      summary: "The preview base URL for this tenant"
-      security: [{ editorJWT: [] }]
+      summary: The preview base URL for this tenant
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
     put:
-      summary: "Set the preview base URL"
-      security: [{ editorJWT: [] }]
+      summary: Set the preview base URL
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/video/embed":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/video/embed:
     get:
-      summary: "Embed URL for a video id"
-      security: [{ editorJWT: [] }]
+      summary: Embed URL for a video id
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/api/v1/video/resolve":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /api/v1/video/resolve:
     get:
-      summary: "oEmbed metadata for a video id"
-      description: >-
-        Public oEmbed, no token.
-      security: [{ editorJWT: [] }]
+      summary: oEmbed metadata for a video id
+      description: Public oEmbed, no token.
+      security:
+      - editorJWT: []
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/bridge/v1/resonans-bridge.js":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /bridge/v1/resonans-bridge.js:
     get:
-      summary: "Visual-editing bridge script"
-      description: >-
-        Public, carries no tenant data.
+      summary: Visual-editing bridge script
+      description: Public, carries no tenant data.
       security: []
       responses:
-        "200": { description: OK }
-  "/delivery/v1/preview/{type}/{slug}":
+        '200':
+          description: OK
+  /delivery/v1/preview/{type}/{slug}:
     get:
-      summary: "One draft, with a preview token"
-      security: [{ deliveryToken: [] }]
-      parameters: [{ $ref: "#/components/parameters/ScopeOrgID" }]
+      summary: One draft, with a preview token
+      security:
+      - deliveryToken: []
+      parameters:
+      - $ref: '#/components/parameters/ScopeOrgID'
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/delivery/v1/schema":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocType'
+    - $ref: '#/components/parameters/Slug'
+  /delivery/v1/schema:
     get:
-      summary: "The registry, for a server-side consumer"
-      security: [{ deliveryToken: [] }]
-      parameters: [{ $ref: "#/components/parameters/ScopeOrgID" }]
+      summary: The registry, for a server-side consumer
+      security:
+      - deliveryToken: []
+      parameters:
+      - $ref: '#/components/parameters/ScopeOrgID'
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/delivery/v1/{type}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+  /delivery/v1/{type}:
     get:
-      summary: "Published documents of a type"
-      security: [{ deliveryToken: [] }]
-      parameters: [{ $ref: "#/components/parameters/ScopeOrgID" }]
+      summary: Published documents of a type
+      security:
+      - deliveryToken: []
+      parameters:
+      - $ref: '#/components/parameters/ScopeOrgID'
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/delivery/v1/{type}/{slug}":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocType'
+  /delivery/v1/{type}/{slug}:
     get:
-      summary: "One published document"
-      security: [{ deliveryToken: [] }]
-      parameters: [{ $ref: "#/components/parameters/ScopeOrgID" }]
+      summary: One published document
+      security:
+      - deliveryToken: []
+      parameters:
+      - $ref: '#/components/parameters/ScopeOrgID'
       responses:
-        "200": { description: OK }
-        "401": { description: "No or invalid credentials" }
-        "404": { description: "Not found for this tenant" }
-  "/healthz":
+        '200':
+          description: OK
+        '401':
+          description: No or invalid credentials
+        '404':
+          description: Not found for this tenant
+    parameters:
+    - $ref: '#/components/parameters/DocType'
+    - $ref: '#/components/parameters/Slug'
+  /healthz:
     get:
-      summary: "Liveness, build identity and the AGPL source offer"
-      description: >-
-        Unauthenticated. The `source` field is informative and must not be fetched automatically by 
-        tooling.
+      summary: Liveness, build identity and the AGPL source offer
+      description: Unauthenticated. The `source` field is informative and must not be fetched automatically
+        by  tooling.
       security: []
       responses:
-        "200": { description: OK }
-  "/readyz":
+        '200':
+          description: OK
+  /readyz:
     get:
-      summary: "Readiness"
-      description: >-
-        Unauthenticated.
+      summary: Readiness
+      description: Unauthenticated.
       security: []
       responses:
-        "200": { description: OK }
+        '200':
+          description: OK
+  /docs/v1/:
+    get:
+      summary: API reference, rendered for a browser
+      description: >-
+        HTML that renders this document. PUBLIC: an API description that needs a
+        JWT is not one anyone outside can read, so it is mounted on the outer
+        mux rather than under /api/, which has no auth exemptions. The renderer
+        itself is fetched when the container image is built, so outside the
+        image the page says so and links the document instead of rendering
+        blank.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            text/html: {}
+  /docs/v1/openapi.yaml:
+    get:
+      summary: This document
+      description: >-
+        The OpenAPI document itself, embedded in the binary. It is the same
+        bytes the drift cell in internal/apidocs compares against the
+        registered routes, so what is served here cannot go stale separately
+        from what is tested.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/yaml: {}
+  /docs/v1/renderer.js:
+    get:
+      summary: The renderer bundle
+      description: >-
+        The pinned API-reference bundle, served pre-gzipped from disk. 503 when
+        it is not installed, naming the path -- not 404, which would send a
+        reader looking for a typo in their URL instead of at an uninstalled
+        asset.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            text/javascript: {}
+        '503':
+          description: The renderer is not installed on this instance

@@ -49,8 +49,18 @@ Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
 | Format    | `gofumpt -w .`        |
 | Typecheck | `go vet ./...`        |
 | Test      | `go test -race ./...` |
+| Test (én) | `python3 scripts/gotest_run_guard.py <mønster> [pakker]` |
 | Build     | `go build ./...`      |
 | Dev       | `go run ./cmd/resonans` (eller `docker compose -f docker-compose.tilt.yml up`) |
+
+🔴 **Kør ALDRIG `go test -run <mønster>` direkte for at verificere noget.** Et
+mønster der ikke matcher noget printer `ok ... [no tests to run]` og giver
+**exit 0** — målt 2/10-2026, hvor en lint-rettelse havde omdøbt en test, så en
+målrettet verifikation valgte nul tests og læste som bestået. En stave-`sed`
+afvæbner alle stående `-run`-mønstre tavst. Vagten gør det rødt, printer sin
+nævner (`listed N name(s)`), og skelner «navnet findes ikke» fra «navnet findes
+og blev sprunget over». Synsfelt: **kun Go**; `pytest -k`, `vitest -t` og
+`jest -t` har samme form og er ikke dækket.
 
 ## Layout
 

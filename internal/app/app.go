@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/KlangHaus/resonans/internal/apiref"
 	"github.com/KlangHaus/resonans/internal/auth"
 	"github.com/KlangHaus/resonans/internal/backfill"
 	"github.com/KlangHaus/resonans/internal/bridge"
@@ -249,6 +250,25 @@ func Run(ctx context.Context) error {
 	}
 	// Visual-editing bridge script (public, no tenant data).
 	mux.Handle(bridge.Path, bridge.Handler())
+
+	// API reference: the OpenAPI document and a page that renders it. Public
+	// and no tenant data, like the bridge above -- an API description that
+	// needs a JWT is not one anyone outside can read, and /api/ has no auth
+	// exemptions (measured). Mounted on the OUTER mux for that reason.
+	mux.HandleFunc("GET "+apiref.PagePath+"{$}", apiref.Page)
+	mux.HandleFunc("GET "+apiref.SpecPath, apiref.Spec)
+	// The renderer bundle is read ONCE here rather than per request, so
+	// whether it is installed is answered in this log line instead of by the
+	// first reader who loads the page. An absent renderer is not fatal: the
+	// specification is served either way, and the page says what is missing.
+	apiAsset := apiref.Load()
+	mux.HandleFunc("GET "+apiref.RendererPath, apiAsset.Renderer)
+	if ok, detail := apiAsset.Describe(); ok {
+		logger.Info("api_reference_renderer", "state", "present", "detail", detail)
+	} else {
+		logger.Warn("api_reference_renderer", "state", "absent", "detail", detail,
+			"effect", "the page links the specification instead of rendering it")
+	}
 
 	// HTTP probes used by the Docker HEALTHCHECK + Caddy (unauthenticated).
 	// Build identity is marshaled once at boot: it never changes, and a probe

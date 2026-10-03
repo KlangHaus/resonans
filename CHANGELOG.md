@@ -1,3 +1,31 @@
+# [1.19.0](https://github.com/KlangHaus/resonans/compare/v1.18.9...v1.19.0) (2026-10-02)
+
+
+### Features
+
+* **api:** serve the OpenAPI document and a page that renders it ([#97](https://github.com/KlangHaus/resonans/issues/97)) ([328463c](https://github.com/KlangHaus/resonans/commit/328463ca0437b61bb101be15dd0da46c8e16d473)), closes [resonans#93](https://github.com/resonans/issues/93)
+
+## [1.18.9](https://github.com/KlangHaus/resonans/compare/v1.18.8...v1.18.9) (2026-10-02)
+
+
+### Bug Fixes
+
+* **api:** declare the path parameters the spec templated but never defined ([#89](https://github.com/KlangHaus/resonans/issues/89)) ([e8b1e74](https://github.com/KlangHaus/resonans/commit/e8b1e7423edc0334a000e7771c2f991cebbeee9b))
+
+## [1.18.8](https://github.com/KlangHaus/resonans/compare/v1.18.7...v1.18.8) (2026-10-02)
+
+
+### Bug Fixes
+
+* **studio:** label a new rich_text block as HTML, because that is what it holds ([#91](https://github.com/KlangHaus/resonans/issues/91)) ([c16256f](https://github.com/KlangHaus/resonans/commit/c16256f0b3ff3373252824a2ee7366dd012de941))
+
+## [1.18.7](https://github.com/KlangHaus/resonans/compare/v1.18.6...v1.18.7) (2026-10-02)
+
+
+### Bug Fixes
+
+* **backfill:** label and sanitize rich_text stored as HTML without a format ([#93](https://github.com/KlangHaus/resonans/issues/93)) ([3bba597](https://github.com/KlangHaus/resonans/commit/3bba597f035cddfe3e9b53fff3d4560cf37d135b)), closes [#92](https://github.com/KlangHaus/resonans/issues/92)
+
 ## [1.18.6](https://github.com/KlangHaus/resonans/compare/v1.18.5...v1.18.6) (2026-10-02)
 
 
