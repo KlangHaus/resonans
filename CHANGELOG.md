@@ -1,3 +1,10 @@
+## [1.21.2](https://github.com/KlangHaus/resonans/compare/v1.21.1...v1.21.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* **app:** log the NODE_ENV source in every entry point, not just the server ([#103](https://github.com/KlangHaus/resonans/issues/103)) ([33bee53](https://github.com/KlangHaus/resonans/commit/33bee535ddfee4ddb0793a9621b502138d4abb1c))
+
 ## [1.21.1](https://github.com/KlangHaus/resonans/compare/v1.21.0...v1.21.1) (2026-10-07)
 
 
