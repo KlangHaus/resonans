@@ -1,3 +1,10 @@
+## [1.21.1](https://github.com/KlangHaus/resonans/compare/v1.21.0...v1.21.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **config:** say whether NODE_ENV was declared or defaulted at boot ([#102](https://github.com/KlangHaus/resonans/issues/102)) ([b654f2e](https://github.com/KlangHaus/resonans/commit/b654f2e5663232a8ce0969af9bfa33d2c8b9d4c3))
+
 # [1.21.0](https://github.com/KlangHaus/resonans/compare/v1.20.0...v1.21.0) (2026-10-03)
 
 
