@@ -63,7 +63,7 @@
   "floors": {
     "github.com/KlangHaus/resonans/cmd/resonans": 0,
     "github.com/KlangHaus/resonans/internal/apidocs": 0,
-    "github.com/KlangHaus/resonans/internal/app": 2,
+    "github.com/KlangHaus/resonans/internal/app": 6,
     "github.com/KlangHaus/resonans/internal/auth": 68,
     "github.com/KlangHaus/resonans/internal/backfill": 46,
     "github.com/KlangHaus/resonans/internal/bridge": 100,

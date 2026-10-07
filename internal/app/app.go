@@ -55,18 +55,7 @@ func Run(ctx context.Context) error {
 
 	stdout := newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv)
 
-	// Say whether NODE_ENV was DECLARED or DEFAULTED. Every other line carries
-	// the value in its "env" field, which cannot distinguish the two — and the
-	// fallback ("development") is also what staging declares on purpose, so a
-	// deploy that forgot the variable reads as a deliberate choice. Warn rather
-	// than Info on the defaulted path: locally it is correct and costs one line
-	// per boot, while on a deployed box it is the only thing that says so.
-	if cfg.NodeEnvDefaulted {
-		stdout.Warn("node_env", "value", cfg.NodeEnv, "source", "defaulted",
-			"effect", "NODE_ENV was not set, so this process is NOT production: IsProduction() is false and every check behind it takes the non-production branch")
-	} else {
-		stdout.Info("node_env", "value", cfg.NodeEnv, "source", "declared")
-	}
+	logNodeEnv(stdout, cfg.NodeEnv, cfg.NodeEnvDefaulted)
 
 	providers, err := observability.Setup(ctx, observability.Options{
 		ServiceName:      cfg.OTelServiceName,
@@ -339,6 +328,9 @@ func Seed(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	// Before the DSN check on purpose: a one-shot that dies on a missing
+	// DATABASE_URL should still have said which environment it thought it was in.
+	logNodeEnv(newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv), cfg.NodeEnv, cfg.NodeEnvDefaulted)
 	if cfg.DatabaseURL == "" {
 		return errors.New("DATABASE_URL is required for seed")
 	}
@@ -371,6 +363,9 @@ func Migrate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	// Before the DSN check on purpose: a one-shot that dies on a missing
+	// DATABASE_URL should still have said which environment it thought it was in.
+	logNodeEnv(newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv), cfg.NodeEnv, cfg.NodeEnvDefaulted)
 	if cfg.DatabaseURL == "" {
 		return errors.New("DATABASE_URL is required for migrate")
 	}
@@ -397,6 +392,9 @@ func SanitizeBackfill(ctx context.Context, apply bool) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	// Before the DSN check on purpose: a one-shot that dies on a missing
+	// DATABASE_URL should still have said which environment it thought it was in.
+	logNodeEnv(newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv), cfg.NodeEnv, cfg.NodeEnvDefaulted)
 	if cfg.DatabaseURL == "" {
 		return errors.New("DATABASE_URL is required for sanitize-backfill")
 	}
@@ -436,6 +434,9 @@ func SlugAudit(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	// Before the DSN check on purpose: a one-shot that dies on a missing
+	// DATABASE_URL should still have said which environment it thought it was in.
+	logNodeEnv(newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv), cfg.NodeEnv, cfg.NodeEnvDefaulted)
 	if cfg.DatabaseURL == "" {
 		return errors.New("DATABASE_URL is required for slug-audit")
 	}
