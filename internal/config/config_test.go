@@ -292,3 +292,45 @@ func TestProductionDemandsHTTPSForTheTrustAnchor(t *testing.T) {
 		})
 	}
 }
+
+// TestNodeEnvDefaultedDistinguishesSourceFromValue pins the one thing the value
+// alone cannot say.
+//
+// 🔴 The discriminating pair is "declared development" vs "defaulted
+// development": identical NodeEnv, opposite NodeEnvDefaulted. Without that pair
+// this test would pass against a field hard-wired to `NodeEnv != "production"`,
+// which is a different claim and a wrong one — staging declares development on
+// purpose. Measured on platform 2026-10-06: a migrate container logged
+// "env":"development" on a production box, and nothing in the config or the log
+// could tell a forgotten variable from a deliberate one.
+func TestNodeEnvDefaultedDistinguishesSourceFromValue(t *testing.T) {
+	cases := []struct {
+		name, raw     string
+		wantEnv       string
+		wantDefaulted bool
+	}{
+		{name: "unset falls back and says so", raw: "", wantEnv: "development", wantDefaulted: true},
+		{name: "declared development is NOT defaulted", raw: "development", wantEnv: "development", wantDefaulted: false},
+		{name: "declared production", raw: "production", wantEnv: "production", wantDefaulted: false},
+		{name: "declared test", raw: "test", wantEnv: "test", wantDefaulted: false},
+		// getenv trims before it decides, so whitespace is absence for the value;
+		// the source has to agree, or the two fields would describe different envs.
+		{name: "whitespace only is absence, like getenv treats it", raw: "   ", wantEnv: "development", wantDefaulted: true},
+		{name: "declared with padding is still declared", raw: "  production  ", wantEnv: "production", wantDefaulted: false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("NODE_ENV", c.raw)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.NodeEnv != c.wantEnv {
+				t.Errorf("NodeEnv = %q, want %q", cfg.NodeEnv, c.wantEnv)
+			}
+			if cfg.NodeEnvDefaulted != c.wantDefaulted {
+				t.Errorf("NodeEnvDefaulted = %v, want %v (NODE_ENV=%q)", cfg.NodeEnvDefaulted, c.wantDefaulted, c.raw)
+			}
+		})
+	}
+}

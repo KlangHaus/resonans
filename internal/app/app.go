@@ -55,6 +55,19 @@ func Run(ctx context.Context) error {
 
 	stdout := newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv)
 
+	// Say whether NODE_ENV was DECLARED or DEFAULTED. Every other line carries
+	// the value in its "env" field, which cannot distinguish the two — and the
+	// fallback ("development") is also what staging declares on purpose, so a
+	// deploy that forgot the variable reads as a deliberate choice. Warn rather
+	// than Info on the defaulted path: locally it is correct and costs one line
+	// per boot, while on a deployed box it is the only thing that says so.
+	if cfg.NodeEnvDefaulted {
+		stdout.Warn("node_env", "value", cfg.NodeEnv, "source", "defaulted",
+			"effect", "NODE_ENV was not set, so this process is NOT production: IsProduction() is false and every check behind it takes the non-production branch")
+	} else {
+		stdout.Info("node_env", "value", cfg.NodeEnv, "source", "declared")
+	}
+
 	providers, err := observability.Setup(ctx, observability.Options{
 		ServiceName:      cfg.OTelServiceName,
 		ServiceNamespace: cfg.OTelServiceNamespace,

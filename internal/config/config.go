@@ -19,10 +19,27 @@ import (
 
 // Config holds all runtime configuration.
 type Config struct {
-	NodeEnv  string // development | test | production
-	Host     string
-	Port     int
-	LogLevel string
+	NodeEnv string // development | test | production
+
+	// NodeEnvDefaulted reports that NODE_ENV was not set, so NodeEnv above is
+	// the fallback rather than a declaration.
+	//
+	// 🔴 This field exists because the fallback is ALSO a legitimate value:
+	// staging deliberately runs NODE_ENV=development. So a deploy that forgets
+	// the variable is indistinguishable, in the config and in every log line,
+	// from one that chose it on purpose — measured on platform 2026-10-06,
+	// where the migrate container logged "env":"development" on a production
+	// box because compose declares NODE_ENV on the api service alone and each
+	// service's environment list is its own. A value that is wrong but
+	// plausible does not announce itself; an empty string would have.
+	//
+	// This is observability, not a guard: nothing branches on it, because a
+	// defaulted NODE_ENV is correct for local development and the code cannot
+	// tell which machine it is on. IsProduction stays the only gate.
+	NodeEnvDefaulted bool
+	Host             string
+	Port             int
+	LogLevel         string
 
 	// PublicURL is the canonical externally-reachable base URL of this CMS
 	// (https://cms.klanghaus.dk in prod). Deploy contract: PUBLIC_URL.
@@ -135,10 +152,13 @@ func getbool(key string, def bool) bool {
 // Load reads and validates configuration from the environment.
 func Load() (*Config, error) {
 	cfg := &Config{
-		NodeEnv:  getenv("NODE_ENV", "development"),
-		Host:     getenv("HOST", "0.0.0.0"),
-		Port:     getint("PORT", 3000),
-		LogLevel: getenv("LOG_LEVEL", "info"),
+		NodeEnv: getenv("NODE_ENV", "development"),
+		// Measured against the same helper the value came from, so a whitespace-only
+		// NODE_ENV counts as absent here exactly as getenv treats it as absent above.
+		NodeEnvDefaulted: getenvOptional("NODE_ENV") == "",
+		Host:             getenv("HOST", "0.0.0.0"),
+		Port:             getint("PORT", 3000),
+		LogLevel:         getenv("LOG_LEVEL", "info"),
 
 		PublicURL:   getenv("PUBLIC_URL", "http://localhost:3000"),
 		DatabaseURL: getenvOptional("DATABASE_URL"),
