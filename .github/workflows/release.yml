@@ -239,7 +239,7 @@ jobs:
       # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
       # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
       # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
-      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      - uses: anchore/sbom-action@0123456789abcdef0123456789abcdef01234567 # v0.24.3
         with:
           image: ${{ steps.ref.outputs.image }}
           format: spdx-json
@@ -452,7 +452,7 @@ jobs:
       # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
       # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
       # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
-      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      - uses: anchore/sbom-action@0123456789abcdef0123456789abcdef01234567 # v0.24.3
         with:
           image: ${{ steps.ref.outputs.image }}
           format: spdx-json
