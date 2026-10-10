@@ -6,10 +6,7 @@
 # against ([permissions]-fund 2026-08-14). Held at 1.25 because the
 # golangci-lint v2.5.0 pin in ci-go.yml is built with go1.25 and refuses a
 # 1.26 directive (målt på denne PR: exit code 3). Bump both together.
-# CANARY — an invented but WELL-FORMED base digest, to prove `Image builds`
-# can go RED on a base that cannot be pulled. Reverted in the next commit.
-# If you are reading this on main, the revert was lost.
-FROM golang@sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef AS build
+FROM golang:1.26.9-alpine AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
