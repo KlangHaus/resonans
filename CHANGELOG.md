@@ -1,3 +1,17 @@
+## [1.21.6](https://github.com/KlangHaus/resonans/compare/v1.21.5...v1.21.6) (2026-10-10)
+
+
+### Bug Fixes
+
+* **studio:** drop the simple-git override that broke the image build on main ([#112](https://github.com/KlangHaus/resonans/issues/112)) ([f26be31](https://github.com/KlangHaus/resonans/commit/f26be318a69389ac9c5b92a82a460cac4449215d))
+
+## [1.21.5](https://github.com/KlangHaus/resonans/compare/v1.21.4...v1.21.5) (2026-10-10)
+
+
+### Bug Fixes
+
+* **studio:** bump serialize-javascript to 7.1.2, the last reachable advisory ([#109](https://github.com/KlangHaus/resonans/issues/109)) ([8c8f852](https://github.com/KlangHaus/resonans/commit/8c8f852b936e72deb924f3c860bc40109532fc71))
+
 ## [1.21.4](https://github.com/KlangHaus/resonans/compare/v1.21.3...v1.21.4) (2026-10-10)
 
 
