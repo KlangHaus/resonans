@@ -1,0 +1,72 @@
+# The Syft version that anchore/sbom-action bundles must not move silently.
+#
+# resonans#115 bumped the action 0.24.0 -> 0.24.3 and moved the SBOM generator
+# from Syft v1.42.3 to v1.54.0 - twelve minor versions of the tool that produces
+# the document we attest. The diff showed a commit SHA and a version comment.
+# The review-time rule that should have caught it fails open and silently, so
+# this check makes the move fail a pull request instead.
+#
+# It is a tripwire, not a pin: the action stays the single source of truth, and
+# the recorded value in .github/sbom-generator-expected.txt is only ever compared
+# against. A mismatch is not fixed by quietly moving the value - the message says
+# to verify the new generator first and name both numbers in the review.
+#
+# It runs BEFORE merge on purpose. An assertion inside release.yml would fire
+# after the images are pushed and signed, turning a tooling bump into a release
+# outage found at the worst possible moment.
+name: CI (SBOM pin)
+
+# No `paths:` filter, deliberately. If this check is ever made required, a
+# path-filtered workflow is never produced on unrelated pull requests and hangs
+# them forever - a required name that never arrives. The job decides for itself
+# whether it applies, and says so with a green.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sbom-pin:
+    name: SBOM generator pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: report toolchain
+        run: python3 --version
+
+      # The positive control needs the base revision's pin AND its recorded
+      # value, so that a broken extractor cannot pass as a clean result, and so
+      # an inconsistency that already exists on the base is not reported as this
+      # pull request's doing.
+      - name: extract the base revision for the positive control
+        id: base
+        # The base branch name reaches the shell through env, never interpolated
+        # into the script. A branch name is attacker-controlled text on a fork
+        # PR, and `${{ }}` substitution happens before the shell sees the line,
+        # so metacharacters in it would run as code.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          BASE="origin/${BASE_REF}"
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          mkdir -p "${RUNNER_TEMP}/base"
+          for f in .github/workflows/release.yml .github/sbom-generator-expected.txt; do
+            out="${RUNNER_TEMP}/base/$(basename "$f")"
+            if git show "${BASE}:${f}" > "$out" 2>/dev/null; then
+              echo "base $f -> $(wc -c < "$out") bytes"
+            else
+              echo "base $f is absent on ${BASE} - the control will say so"
+              rm -f "$out"
+            fi
+          done
+
+      - name: the bundled Syft version must match the recorded one
+        run: |
+          python3 .github/scripts/check_sbom_generator_pin.py \
+            --release-yml .github/workflows/release.yml \
+            --expected-file .github/sbom-generator-expected.txt \
+            --base-release-yml "${RUNNER_TEMP}/base/release.yml" \
+            --base-expected-file "${RUNNER_TEMP}/base/sbom-generator-expected.txt"
