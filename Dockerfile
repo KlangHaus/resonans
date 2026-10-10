@@ -6,7 +6,7 @@
 # against ([permissions]-fund 2026-08-14). Held at 1.25 because the
 # golangci-lint v2.5.0 pin in ci-go.yml is built with go1.25 and refuses a
 # 1.26 directive (målt på denne PR: exit code 3). Bump both together.
-FROM golang@sha256:deadbeef00000000deadbeef00000000deadbeef00000000deadbeef00000000 AS build
+FROM golang:1.26.9-alpine AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
