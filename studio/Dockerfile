@@ -2,7 +2,7 @@
 # The node-server (not a static file host) matters: it injects NUXT_PUBLIC_*
 # runtime config (apiBase, authBase) into the served app at RUNTIME, so one
 # image works across environments.
-FROM node:22-slim AS build
+FROM node@sha256:deadbeef00000000deadbeef00000000deadbeef00000000deadbeef00000000 AS build
 WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
