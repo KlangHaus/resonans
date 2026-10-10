@@ -1,0 +1,94 @@
+# Studio had NO pre-merge gate. Measured 2026-10-08: `Jenkinsfile` mentions
+# `studio`/`pnpm` zero times, `ci-go.yml` covers Go only, and of the five
+# workflows the only one that builds studio is `release.yml` — which triggers on
+# `push` to main and on tags, NOT on `pull_request`. So the first thing that
+# compiled a studio change was the release, after the merge: a broken .vue file,
+# a type error or a lockfile that disagrees with package.json landed on main and
+# failed while publishing the image.
+name: CI (Studio)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 🔴 NO `paths:` FILTER, ON PURPOSE. A path filter would skip this job on a
+# Go-only PR — and a REQUIRED check that is never produced leaves the pull
+# request blocked forever, waiting for a run that cannot happen. The job is
+# cheap enough to pay for on every PR rather than build a gate that can hang
+# the queue the day someone adds it to the ruleset.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  studio:
+    name: Studio typecheck + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: studio
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # 22 to match studio/Dockerfile's `FROM node:22-slim`. A gate that
+          # builds on a different major than the image does not answer the
+          # question the image asks.
+          node-version: '22'
+
+      # corepack, not a pinned pnpm version here: it reads
+      # `packageManager: pnpm@10.0.0` from studio/package.json, which is the
+      # same mechanism studio/Dockerfile uses (`RUN corepack enable`). Writing a
+      # version into this file would create a second place to bump, and the two
+      # would drift silently — the gate would then pass on a pnpm nobody ships.
+      - name: Enable corepack (pnpm pinned by packageManager)
+        run: corepack enable
+
+      - name: Report the resolved toolchain
+        run: |
+          node --version
+          pnpm --version
+
+      # --frozen-lockfile, never a bare `pnpm install`. studio/Dockerfile
+      # documents why at length: a `|| pnpm install` fallback used to turn a
+      # lockfile that disagrees with package.json into a GREEN build on versions
+      # nobody reviewed, and it only ever ran when something was already wrong.
+      # So this step is also the lockfile-agreement check.
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # typecheck BEFORE build: it names the file and line, where a failing
+      # build often reports a bundler error several steps downstream of the
+      # actual mistake. Both run, so a build-only failure is still caught.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      # The build is only believed if it produced something. `nuxt build` exiting
+      # 0 without an .output directory would be a green run that shipped nothing
+      # — the same shape as the 200-with-the-wrong-body that the /docs route
+      # taught us. studio/Dockerfile copies exactly this path into the image.
+      - name: Assert the build produced an artefact
+        run: |
+          set -euo pipefail
+          test -d .output/server || { echo ".output/server missing — the build reported success without producing the artefact the image copies"; exit 1; }
+          test -f .output/server/index.mjs || { echo ".output/server/index.mjs missing — the Dockerfile's CMD would not start"; exit 1; }
+          echo ".output/server/index.mjs present: $(wc -c < .output/server/index.mjs) bytes"
+
+# HONEST LIMIT, in the same form ci-go.yml states it: this job produces the
+# check `Studio typecheck + build`, which is NOT on the required list
+# (`jenkins/Lint + Test`, `Secret scan`, `commitlint`). It therefore goes RED and
+# VISIBLE on a pull request but does NOT block a merge. Making it required is a
+# change to ruleset `force-push-guard` (id 20711390) and needs the context name
+# spelled exactly as this job publishes it — which is why that step waits until
+# the job has produced at least one run to read the name from, rather than being
+# guessed in the same change.
