@@ -39,9 +39,14 @@ updates:
       prefix: chore(deps)
     open-pull-requests-limit: 3
 
-  # Actions pinned by commit in .github/workflows/, including
-  # securego/gosec@deb54465 (v2.29.0). Dependabot rewrites a pinned SHA and
-  # updates the trailing version comment, so the pin stays readable.
+  # Actions in .github/workflows/. 🔴 They are NOT pinned by commit yet: the
+  # gosec pin was split out of this change after sikkerhed REJECTED it — the
+  # pinned container ships go1.26.5 while go.mod requires >= 1.26.9, and under
+  # GOTOOLCHAIN=local gosec then loaded zero packages and still printed
+  # "Issues : 0". This entry is added now anyway, so that when actions are
+  # pinned by commit the lifting mechanism already exists rather than being
+  # remembered afterwards; Dependabot rewrites a pinned SHA and its trailing
+  # version comment, so a pin stays readable.
   - package-ecosystem: github-actions
     directory: /
     schedule:
