@@ -1,3 +1,10 @@
+## [1.21.7](https://github.com/KlangHaus/resonans/compare/v1.21.6...v1.21.7) (2026-10-10)
+
+
+### Bug Fixes
+
+* **ci:** pin base images as tag@digest so Dependabot lifts the right variant ([#116](https://github.com/KlangHaus/resonans/issues/116)) ([1c7b176](https://github.com/KlangHaus/resonans/commit/1c7b1768cd7680cc20b34b64f2b5e520bb05ca60))
+
 ## [1.21.6](https://github.com/KlangHaus/resonans/compare/v1.21.5...v1.21.6) (2026-10-10)
 
 
