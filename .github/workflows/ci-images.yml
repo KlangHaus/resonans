@@ -1,0 +1,76 @@
+# 🔴 NOTHING BUILT EITHER IMAGE BEFORE MERGE.
+#
+# Measured 2026-10-10: `release.yml` has two build jobs (`build-push` on context
+# `.` and `build-push-studio` on context `studio`), so both images ARE built —
+# but it triggers on `push` to main and on tags, NOT on `pull_request`, and both
+# jobs run with `push: true`. So the first thing that built a Dockerfile change
+# was the release, after the merge, while publishing to the registry.
+#
+# 🔴 AND THE STUDIO GATE DOES NOT CLOSE THIS. `ci-studio.yml` runs
+# `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm build` and an
+# artefact assert: it verifies studio's CODE AND DEPENDENCIES, NOT ITS IMAGE.
+# A broken `studio/Dockerfile` — a base that cannot be pulled, a COPY of a path
+# the build no longer produces — passes that gate untouched.
+name: CI (Images)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 🔴 NO `paths:` FILTER, ON PURPOSE — the same reason as in ci-studio.yml. A
+# required check that is never produced leaves the pull request blocked forever,
+# waiting for a run that cannot happen. Pay for the job on every PR rather than
+# build a gate that can hang the queue the day it is added to the ruleset.
+
+# No registry login, no secrets, nothing pushed: this job proves the Dockerfiles
+# BUILD. Publishing stays in release.yml, where the credentials live.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  images:
+    # This name is the check's context, for whoever makes it required later:
+    # read it from a produced run, never guess it. `jenkins/Lint + Test` and
+    # `Lint + Test` are two different names, and a guessed one hangs a PR.
+    name: Image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Both ARG sets have defaults (VERSION, REVISION, SCALAR_VERSION,
+      # SCALAR_SHA256), so a bare build is a faithful build: no value is
+      # supplied here that the release would supply differently in a way this
+      # job could hide. The stamped VERSION/REVISION differ, and nothing in
+      # either Dockerfile branches on them.
+      - name: Build the API image (golang build + apidocs stages, distroless runtime)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+
+      - name: Build the studio image (node build + runtime stages)
+        uses: docker/build-push-action@v7
+        with:
+          context: studio
+          push: false
+
+# HONEST LIMITS, in the form ci-go.yml and ci-studio.yml state theirs:
+#
+# 1. This job produces the check `Image builds`, which is NOT on the required
+#    list (`jenkins/Lint + Test`, `Secret scan`, `commitlint`,
+#    `Studio typecheck + build`). It goes RED and VISIBLE on a pull request but
+#    does not block a merge. Making it required is a ruleset change.
+# 2. It proves the images BUILD. It does not run them: no container is started,
+#    no HEALTHCHECK is exercised, nothing is served. An image that builds and
+#    exits immediately would pass here.
+# 3. No build cache. A cache would make this faster and is a reasonable later
+#    change, but it was left out of the first version so that the first green is
+#    about the Dockerfiles and not about a cache that happened to hold a layer.
