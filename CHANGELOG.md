@@ -1,3 +1,10 @@
+## [1.21.5](https://github.com/KlangHaus/resonans/compare/v1.21.4...v1.21.5) (2026-10-10)
+
+
+### Bug Fixes
+
+* **studio:** bump serialize-javascript to 7.1.2, the last reachable advisory ([#109](https://github.com/KlangHaus/resonans/issues/109)) ([8c8f852](https://github.com/KlangHaus/resonans/commit/8c8f852b936e72deb924f3c860bc40109532fc71))
+
 ## [1.21.4](https://github.com/KlangHaus/resonans/compare/v1.21.3...v1.21.4) (2026-10-10)
 
 
