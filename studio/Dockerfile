@@ -2,9 +2,11 @@
 # The node-server (not a static file host) matters: it injects NUXT_PUBLIC_*
 # runtime config (apiBase, authBase) into the served app at RUNTIME, so one
 # image works across environments.
-# 🔴 PINNED BY DIGEST. `node@sha256:c3de60bf…` IS `node:22-slim`, resolved
-# 2026-10-10 by this repository's own registry request, with an invented tag
-# returning 404 and no digest as the control.
+# 🔴 PINNED AS `tag@digest`. The digest fixes the bytes; the TAG is what
+# Dependabot tracks, and without it a lift proposes `latest` — for this repo a
+# different Node major (measured: `node:latest` is sha256:32fa97f3…, not our
+# 22-slim). See the Dockerfile at the repository root for the full reasoning
+# and the #114 measurement that produced it.
 #
 # This one was found by enumerating EVERY image reference in the repo rather
 # than the two the task named: `:22-slim` floats across 22.x patches, and this
@@ -15,7 +17,7 @@
 # 🔴 BOTH stages carry the same digest on purpose: a build stage on one Node and
 # a runtime stage on another is a difference that would not show up in any test
 # here, because the gate builds and typechecks but runs nothing at runtime.
-FROM node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
 WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
@@ -33,7 +35,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
 WORKDIR /app
 # Build identity, surfaced at /healthz. Kept as ENV (not runtimeConfig) so the
 # value is readable at request time — runtimeConfig would bake it at build time.

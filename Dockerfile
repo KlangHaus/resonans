@@ -6,25 +6,33 @@
 # against ([permissions]-fund 2026-08-14). Held at 1.25 because the
 # golangci-lint v2.5.0 pin in ci-go.yml is built with go1.25 and refuses a
 # 1.26 directive (målt på denne PR: exit code 3). Bump both together.
-# 🔴 BASE IMAGE PINNED BY DIGEST, with the tag in the comment because a digest
-# cannot be read. `golang@sha256:cdfd4fe2…` IS `golang:1.26.9-alpine`, resolved
-# 2026-10-10 from registry-1.docker.io against this repository's own pull, with
-# an invented tag returning 404 and no digest as the control.
+# 🔴 PINNED AS `tag@digest`, AND THE TAG IS LOAD-BEARING — not decoration.
 #
-# A tag is a promise about an object; only the digest IS the object. The Scalar
-# renderer below has been SHA-pinned since it was added, so this file was doing
-# it right in one place and wrong in another.
+# A tag is a promise about an object; only the digest IS the object. So the
+# digest is what pins the bytes. But the TAG is what Dependabot tracks, and
+# #110 shipped these as digest ONLY. Measured consequence, within minutes:
+# Dependabot opened #114 proposing distroless `afa5c872…` -> `d75cdd72…`, and
+# one layer below the platform manifest both have the SAME 12 layers with an
+# identical layer signature — only the config differed, `User` 65532 -> 0 and
+# `WorkingDir` /home/nonroot -> /. Zero new content: it was a silent switch
+# from the `:nonroot` variant to the `:latest` one, because a digest with no
+# tag leaves `latest` as the only thing to track.
 #
-# 🔴 WHO LIFTS IT: `.github/dependabot.yml` (added in the same change) watches
-# the `docker` ecosystem and opens a PR when the tag moves. Measured before
-# adding it: NO dependabot config existed, so version updates were off for every
-# ecosystem — a digest would have been a tag that stopped floating AND stopped
-# receiving security fixes, which is worse in a different direction.
+# 🔴 So a lifting mechanism is not enough; it has to lift toward the RIGHT
+# object. With the tag present, Dependabot lifts WITHIN `1.26.9-alpine` and the
+# digest still fixes the bytes. #114 was closed rather than merged.
+#
+# Digests resolved 2026-10-10 by this repository's own registry requests, each
+# with an invented tag returning 404 and no digest as the control. The Scalar
+# renderer below has been SHA-pinned since it was added.
+#
+# 🔴 AND A MANIFEST DIGEST IS NOT CONTENT. It changes with the config too. When
+# a lift arrives, compare LAYERS — not the manifest digest, and not the diff.
 #
 # 🔴 REVISIT when the go directive leaves 1.26: the digest, the tag in this
 # comment and go.mod must move together, and the pinned gosec in ci-go.yml must
 # still be able to read what the new toolchain emits.
-FROM golang@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS build
+FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
@@ -66,7 +74,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
 # The reproducible invariants are the RAW sha256 pinned below and the
 # decompressed size (4 381 105). Both are verified in the build: the digest by
 # sha256sum, which logs `/tmp/renderer.js: OK`, and the archive by `gzip -t`.
-FROM golang@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS apidocs
+FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS apidocs
 ARG SCALAR_VERSION=1.72.4
 ARG SCALAR_SHA256=f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
 # 🔴 THE PIN'S FORMAT IS ASSERTED BEFORE IT IS USED, and that is not belt and
@@ -97,7 +105,7 @@ RUN wget -q -O /tmp/renderer.js \
 #
 # Watched by the `docker` ecosystem in .github/dependabot.yml together with the
 # golang stages above; the same REVISIT note applies.
-FROM gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 WORKDIR /app
 COPY --from=build /out/resonans /app/resonans
 # The renderer, pre-gzipped. internal/apiref serves it with Content-Encoding:
