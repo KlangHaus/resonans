@@ -6,7 +6,7 @@
 # against ([permissions]-fund 2026-08-14). Held at 1.25 because the
 # golangci-lint v2.5.0 pin in ci-go.yml is built with go1.25 and refuses a
 # 1.26 directive (målt på denne PR: exit code 3). Bump both together.
-FROM golang:1.25.13-alpine AS build
+FROM golang:1.26.9-alpine AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
@@ -48,7 +48,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
 # The reproducible invariants are the RAW sha256 pinned below and the
 # decompressed size (4 381 105). Both are verified in the build: the digest by
 # sha256sum, which logs `/tmp/renderer.js: OK`, and the archive by `gzip -t`.
-FROM golang:1.25.13-alpine AS apidocs
+FROM golang:1.26.9-alpine AS apidocs
 ARG SCALAR_VERSION=1.72.4
 ARG SCALAR_SHA256=f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
 # 🔴 THE PIN'S FORMAT IS ASSERTED BEFORE IT IS USED, and that is not belt and
