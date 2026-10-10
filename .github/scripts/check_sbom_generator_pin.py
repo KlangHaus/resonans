@@ -197,13 +197,27 @@ def main() -> int:
                     "POSITIVE CONTROL COULD NOT BE READ on the base revision",
                     "The extractor itself is suspect, so this run cannot certify the pin.",
                 )
-            if base_expected and base_version != base_expected:
+            if not base_expected:
+                # Say what was NOT measured. Printing "they agree" here would be
+                # a sentence about a comparison that never happened - the first
+                # canary run caught exactly that, on the run that introduces the
+                # file, when the base does not carry it yet.
+                print(
+                    "positive control LIMITED: the base revision carries no recorded value, so"
+                    f" nothing was compared. All this establishes is that the extractor read"
+                    f" {base_version} from the base pin."
+                )
+            elif base_version != base_expected:
                 return fail(
                     EXIT_CONTROL,
                     f"POSITIVE CONTROL FAILED: base pin yields {base_version}, base record says {base_expected}",
                     "The base revision is already inconsistent, so a mismatch here is not this PR's doing.",
                 )
-            print("positive control: base pin and base record agree")
+            else:
+                print(
+                    f"positive control: base pin yields {base_version} and the base record says"
+                    f" {base_expected} - they agree"
+                )
     else:
         print("positive control: no base revision supplied - skipped, stated explicitly")
 
