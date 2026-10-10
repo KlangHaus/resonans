@@ -51,8 +51,28 @@ jobs:
         with:
           version: v2.14.0
 
+      # 🔴 PINNED TO A COMMIT, not `@master`. `@master` is a moving target: the
+      # run pulled a digest, but WHICH digest was decided by whatever master said
+      # that morning — the same floating-input class that turned `Lint + Test`
+      # red with zero commits (GO-2026-6617) and that gofumpt@latest caused in #44.
+      #
+      # deb54465… IS v2.29.0 (newest release, 2026-08-26), tag resolved through
+      # its tag object to the commit.
+      #
+      # 🔴 MEASURED ON THIS TREE, not borrowed from another repo: three readings
+      # agree on all four numbers — `@master`'s digest sha256:a6cd2f30… on
+      # bc95bd4 in CI, gosec v2.28.0 locally, and v2.29.0 locally, each giving
+      # Files 43 · Lines 7256 · Nosec 1 · Issues 0 and exit 0 on go1.26.9. So the
+      # pin is not a behaviour change. The binary self-reports "Version: dev"
+      # because `go install` does not stamp it, so the version was read from the
+      # binary's module metadata (`go version -m`) instead of trusting -version.
+      #
+      # 🔴 REVISIT when the go directive leaves 1.26. A pinned scanner that
+      # cannot read the new toolchain's export data blocks the move: gosec 2.28.0
+      # was measured rc 1 on go1.27.2 ("export data version 5"). Bump this pin in
+      # the SAME change as the go directive.
       - name: gosec
-        uses: securego/gosec@master
+        uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
         with:
           args: ./...
 
