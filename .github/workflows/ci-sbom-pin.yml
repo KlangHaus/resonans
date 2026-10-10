@@ -42,10 +42,16 @@ jobs:
       # pull request's doing.
       - name: extract the base revision for the positive control
         id: base
+        # The base branch name reaches the shell through env, never interpolated
+        # into the script. A branch name is attacker-controlled text on a fork
+        # PR, and `${{ }}` substitution happens before the shell sees the line,
+        # so metacharacters in it would run as code.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          BASE="origin/${{ github.event.pull_request.base.ref }}"
-          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.ref }}"
+          BASE="origin/${BASE_REF}"
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
           mkdir -p "${RUNNER_TEMP}/base"
           for f in .github/workflows/release.yml .github/sbom-generator-expected.txt; do
             out="${RUNNER_TEMP}/base/$(basename "$f")"
