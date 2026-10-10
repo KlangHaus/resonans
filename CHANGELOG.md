@@ -1,3 +1,10 @@
+## [1.21.3](https://github.com/KlangHaus/resonans/compare/v1.21.2...v1.21.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **studio:** force source-map-js to 1.2.2, closing a HIGH runtime event-loop DoS ([#107](https://github.com/KlangHaus/resonans/issues/107)) ([d2d21a9](https://github.com/KlangHaus/resonans/commit/d2d21a9493f68b0fdf8ff8647d00d182e3298755))
+
 ## [1.21.2](https://github.com/KlangHaus/resonans/compare/v1.21.1...v1.21.2) (2026-10-07)
 
 
