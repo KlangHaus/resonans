@@ -26,7 +26,6 @@
     "overrides": {
       "source-map-js": "^1.2.2",
       "shell-quote": "^1.11.0",
-      "simple-git": "^4.0.2",
       "serialize-javascript": "^7.1.2"
     }
   }
