@@ -36,17 +36,20 @@ jobs:
 
       - name: Verify formatting (gofumpt)
         run: |
-          # PINNED, not @latest: v0.12.0 (2026-09-07) requires go >= 1.26 while
-          # go.mod is held at 1.25.13 by the golangci-lint v2.5.0 pin, so the
-          # floating tag broke CI without a commit. v0.11.0 is the version
-          # @latest resolved to on the last green run. Bump both tools together.
-          go install mvdan.cc/gofumpt@v0.11.0
+          # STILL PINNED, and still not @latest: the reason a floating tag broke
+          # CI without a commit has not changed, only this instance of it. The
+          # hold at v0.11.0 was go >= 1.26 (gofumpt v0.12.0, 2026-09-07) against
+          # a go directive kept at 1.25.13 by the golangci-lint v2.5.0 pin; the
+          # go directive now reads 1.26.9, so v0.12.0 installs. Bump the go
+          # directive, golangci-lint, gofumpt and govulncheck TOGETHER — each of
+          # the four refused a version the others' floor forbade.
+          go install mvdan.cc/gofumpt@v0.12.0
           test -z "$(gofumpt -l .)" || (echo "Run gofumpt -w ." && gofumpt -l . && exit 1)
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.5.0
+          version: v2.14.0
 
       - name: gosec
         uses: securego/gosec@master
@@ -72,12 +75,17 @@ jobs:
           v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
           test -n "$v" || { echo "could not parse the go directive from go.mod"; exit 1; }
           test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
-          # PINNED. v1.7.0 is the newest release that builds on go 1.25.
+          # PINNED. v1.7.0 was the newest that built on go 1.25; v1.8.0 is the
+          # newest MODULE version of golang.org/x/vuln and builds on go 1.26.9.
+          # 🔴 Read the MODULE version, not the GitHub release tag: the repo's
+          # latest release tag is v1.1.4 while the module is at v1.8.0, so the
+          # two numbers run in opposite directions and the tag would date this
+          # pin backwards. Measured with `go list -m -versions golang.org/x/vuln`.
           # Bump together with the go directive and golangci-lint.
-          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           ver_out="$(govulncheck -version)"
           echo "$ver_out"
-          grep -qE '^Scanner: govulncheck@v1\.7\.0$' <<<"$ver_out" || { echo "govulncheck is NOT v1.7.0"; exit 1; }
+          grep -qE '^Scanner: govulncheck@v1\.8\.0$' <<<"$ver_out" || { echo "govulncheck is NOT v1.8.0"; exit 1; }
           govulncheck ./...
 
       # 🔴 THE RELEASE-NOTES GUARD ALSO RUNS HERE, AND NOT ONLY IN
