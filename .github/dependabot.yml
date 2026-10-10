@@ -1,0 +1,56 @@
+# 🔴 THIS FILE IS THE LIFTING MECHANISM FOR THE PINS, and it did not exist.
+#
+# Measured 2026-10-10: `.github/` contained only `workflows`, so Dependabot
+# VERSION updates were off for every ecosystem. SECURITY updates still arrived
+# (they need no config — #105 bumping handlebars was one), which made the gap
+# easy to miss: alerts were landing, so Dependabot looked configured.
+#
+# That gap is what makes a digest dangerous. Pinning `golang:1.26.9-alpine` to
+# sha256:cdfd4fe2… without this file would have frozen the base image: a tag
+# that stopped floating AND stopped receiving security fixes. A pin nobody lifts
+# is worse than a tag, in a different direction.
+#
+# Only the two ecosystems this change pins are watched. `gomod` and `npm` are
+# left out ON PURPOSE, not forgotten: Go dependencies are already covered by
+# `govulncheck` in CI (which gates on REACHABILITY rather than on a version
+# number), and the npm trees are release tooling plus studio's build chain,
+# where a version-update flood would bury the security updates that already
+# work. Add them deliberately, with someone to read the PRs, or not at all.
+version: 2
+updates:
+  # The base image pinned by digest in Dockerfile, both stages.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    open-pull-requests-limit: 3
+
+  # studio/Dockerfile's node base, pinned by digest. A SEPARATE entry because
+  # `directory: /` does not reach a Dockerfile in a subdirectory — a single
+  # root entry would have left studio's base frozen with nothing to lift it,
+  # which is the exact failure this file exists to prevent.
+  - package-ecosystem: docker
+    directory: /studio
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    open-pull-requests-limit: 3
+
+  # Actions in .github/workflows/. 🔴 They are NOT pinned by commit yet: the
+  # gosec pin was split out of this change after sikkerhed REJECTED it — the
+  # pinned container ships go1.26.5 while go.mod requires >= 1.26.9, and under
+  # GOTOOLCHAIN=local gosec then loaded zero packages and still printed
+  # "Issues : 0". This entry is added now anyway, so that when actions are
+  # pinned by commit the lifting mechanism already exists rather than being
+  # remembered afterwards; Dependabot rewrites a pinned SHA and its trailing
+  # version comment, so a pin stays readable.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(ci)
+    open-pull-requests-limit: 3
