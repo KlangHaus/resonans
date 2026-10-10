@@ -236,14 +236,41 @@ jobs:
       - name: cosign sign
         run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
-      # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
-      # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
-      # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
+      # J4 - Syft SBOM of EXACTLY the built digest (local file; cosign attest
+      # carries the guarantee -> NO actions:write). The action is pinned to an
+      # immutable commit SHA (v0.24.3) - a mutable major tag could change
+      # behaviour without review.
+      #
+      # syft-version is set explicitly, and NOT because the generator would
+      # otherwise float. anchore/sbom-action bundles its Syft version as a
+      # compile-time constant: src/SyftVersion.ts -> VERSION7 = "v1.54.0",
+      # measured in dist/index.cjs at 66cbf4bc, and getSyftVersion() returns
+      # getInput("syft-version") || VERSION7. Pinning the action therefore
+      # already pins the generator. Setting the input buys two things the SHA
+      # pin alone does not:
+      #   1. the generator is readable from THIS tree and appears in a diff,
+      #      instead of living inside a 3.4 MB vendored bundle;
+      #   2. a Dependabot bump of the action can no longer move the SBOM
+      #      generator silently - the input wins, so moving it has to be a
+      #      deliberate line change here.
+      # The leading v is required: the action gates the value on
+      # isReleaseTag = /^v\d+\.\d+\.\d+([-+][\w.+-]+)?$/.
+      #
+      # LIFTER - Dependabot tracks the action but NOT this input, so the two can
+      # drift apart and a stale value here would force an old Syft under a new
+      # action. Whoever reviews the next anchore/sbom-action bump must read the
+      # new bundle's VERSION7 and move this value with it, or record why it
+      # stays. REVISIT by 2027-01-10 if no bump has arrived by then.
+      #
+      # v1.54.0 is the version Release run 38056321967 (2026-10-10 13:36 UTC)
+      # actually ran. Nothing here is claimed about the SBOM document's own
+      # contents - that is unmeasured; it needs cosign download attestation.
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ steps.ref.outputs.image }}
           format: spdx-json
           output-file: sbom.spdx.json
+          syft-version: v1.54.0
           upload-artifact: false
           upload-release-assets: false
 
@@ -449,14 +476,41 @@ jobs:
       - name: cosign sign
         run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
-      # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
-      # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
-      # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
+      # J4 - Syft SBOM of EXACTLY the built digest (local file; cosign attest
+      # carries the guarantee -> NO actions:write). The action is pinned to an
+      # immutable commit SHA (v0.24.3) - a mutable major tag could change
+      # behaviour without review.
+      #
+      # syft-version is set explicitly, and NOT because the generator would
+      # otherwise float. anchore/sbom-action bundles its Syft version as a
+      # compile-time constant: src/SyftVersion.ts -> VERSION7 = "v1.54.0",
+      # measured in dist/index.cjs at 66cbf4bc, and getSyftVersion() returns
+      # getInput("syft-version") || VERSION7. Pinning the action therefore
+      # already pins the generator. Setting the input buys two things the SHA
+      # pin alone does not:
+      #   1. the generator is readable from THIS tree and appears in a diff,
+      #      instead of living inside a 3.4 MB vendored bundle;
+      #   2. a Dependabot bump of the action can no longer move the SBOM
+      #      generator silently - the input wins, so moving it has to be a
+      #      deliberate line change here.
+      # The leading v is required: the action gates the value on
+      # isReleaseTag = /^v\d+\.\d+\.\d+([-+][\w.+-]+)?$/.
+      #
+      # LIFTER - Dependabot tracks the action but NOT this input, so the two can
+      # drift apart and a stale value here would force an old Syft under a new
+      # action. Whoever reviews the next anchore/sbom-action bump must read the
+      # new bundle's VERSION7 and move this value with it, or record why it
+      # stays. REVISIT by 2027-01-10 if no bump has arrived by then.
+      #
+      # v1.54.0 is the version Release run 38056321967 (2026-10-10 13:36 UTC)
+      # actually ran. Nothing here is claimed about the SBOM document's own
+      # contents - that is unmeasured; it needs cosign download attestation.
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ steps.ref.outputs.image }}
           format: spdx-json
           output-file: sbom.spdx.json
+          syft-version: v1.54.0
           upload-artifact: false
           upload-release-assets: false
 
