@@ -60,21 +60,33 @@ jobs:
       #   deb54465 (the v2.29.0 TAG)    -> ghcr.io/securego/gosec@sha256:4342ad11…  # 2.28.0
       # The v2.29.0 tag was cut before the image bump landed on master, so pinning
       # the TAG delivered the 2.28.0 image. That image ships go1.26.5 while go.mod
-      # requires >= 1.26.9, and with GOTOOLCHAIN=local it may not fetch a newer
-      # one — so gosec loaded ZERO of 19 packages and still printed `Issues : 0`.
+      # requires >= 1.26.9, so gosec loaded ZERO of 19 packages and still printed
+      # `Issues : 0`.
       #
       # a6cd2f30… is the digest that was measured scanning this tree (Files 43,
       # Lines 7256 on bc95bd4), so this pin freezes a KNOWN-GOOD scanner rather
       # than a known version number.
       #
-      # 🔴 GOTOOLCHAIN=local STAYS. Removing it would let the container fetch a
-      # newer toolchain and go green — trading the guarantee that the scanner
-      # reads what we ship for a tick.
+      # 🔴 THIS STEP IS NOT GOVERNED BY OUR GOTOOLCHAIN. Measured: `GOTOOLCHAIN`
+      # is set exactly once in this file (l.110, in the govulncheck step's env),
+      # and gosec is a CONTAINER action — nothing we set here reaches it. Its
+      # hermeticity comes from the image: [sikkerhed] measured `GOTOOLCHAIN=local`
+      # in the Env of both digests. That is THEIR measurement, not mine — ghcr's
+      # anonymous token flow would not yield a readable manifest from this
+      # machine, so I could not confirm it myself and am not claiming to.
       #
-      # 🔴 REVISIT when the go directive moves: a pinned scanner whose container
-      # cannot read the new toolchain's export data blocks the move. Bump this
-      # pin in the SAME change, and check the IMAGE digest in action.yml rather
-      # than the tag.
+      # 🔴 CEILING: go 1.27.0. The pinned image's config reports
+      # GOLANG_VERSION 1.27.0 (the rejected one: 1.26.5), so this pin covers a go
+      # directive up to 1.27.0 and no further. REVISIT when the directive moves:
+      # bump this pin in the SAME change, and read the IMAGE digest in
+      # action.yml — never the tag, which is what went wrong the first time.
+      #
+      # 🔴 EXPECTATION, NOT A MEASUREMENT: once actions are pinned by commit,
+      # Dependabot's github-actions ecosystem moves a SHA pin to the latest
+      # RELEASE — which for this action is v2.29.0 = deb54465 = the 2.28.0 image
+      # with go1.26.5. So its first PR here will most likely propose exactly the
+      # regression just removed. The assertion below is what catches it. Read
+      # such a PR by the image digest in action.yml, never by the version tag.
       - name: gosec
         uses: securego/gosec@7b1b5cebe007d62fb58eacb90fc571112939ec30 # master 2026-10-09 -> image sha256:a6cd2f30
         with:
@@ -85,9 +97,16 @@ jobs:
       # only fields that separate them are Files and Lines — so they are asserted
       # here, and a scan that parsed nothing fails instead of passing quietly.
       #
-      # This is the structural cure: it holds no matter which pin is in place,
-      # and it would have caught the broken pin on its own, with nobody reading a
-      # log. A guard that only reports the numerator cannot see an empty scan.
+      # 🔴 WHAT THIS DOES AND DOES NOT CLAIM. On the rejected pin the gosec STEP
+      # itself was FAILURE, so that break was loud at step level — the assertion
+      # would not have been what caught it, and an earlier version of this
+      # comment said it would. What was actually missing: the check is not
+      # required, and `Issues : 0` reads as a clean result.
+      #
+      # The assertion's real contribution is therefore two things: an
+      # unambiguous message instead of a reader having to notice 19 load errors
+      # above a zero, and coverage of the case where gosec exits 0 having parsed
+      # nothing — which no step-level failure would announce at all.
       - name: gosec actually scanned something (denominator)
         run: |
           set -euo pipefail
