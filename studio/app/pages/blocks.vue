@@ -1,8 +1,4 @@
 <script setup lang="ts">
-// CANARY — a deliberate type error, to prove the new studio gate can go RED.
-// Reverted in the very next commit. If you are reading this on main, the revert
-// was lost and the gate is reporting green on a file that does not typecheck.
-const canaryDeliberateTypeError: number = "a string, not a number"
 // Block Library (Storyblok-mønstret): katalog over blok-registret — hvilke
 // blokke findes, og hvilke felter har de. Læses direkte fra schema-API'et
 // (kode-defineret i git), så siden er altid i sync med registret.
