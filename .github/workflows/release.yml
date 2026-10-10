@@ -236,9 +236,20 @@ jobs:
       - name: cosign sign
         run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
-      # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
-      # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
-      # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
+      # J4 - Syft SBOM of EXACTLY the built digest (local file; cosign attest
+      # carries the guarantee -> NO actions:write). The action is pinned to an
+      # immutable commit SHA, because a mutable major tag could change behaviour
+      # without review. The version that SHA corresponds to is the trailing
+      # comment on the `uses:` line itself; this block deliberately does not
+      # repeat it, because a number written in two places goes stale in one of
+      # them - it read v0.24.0 for a while after #115 moved the pin to v0.24.3.
+      #
+      # The pin also fixes the SBOM GENERATOR, which is less obvious: the Syft
+      # version is a compile-time constant inside the action's own bundle
+      # (getSyftVersion() returns getInput("syft-version") || that constant), so
+      # bumping the action moves the tool that produces the document we attest.
+      # #115 moved it from Syft v1.42.3 to v1.54.0 - twelve minor versions - and
+      # the diff showed only a commit SHA.
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ steps.ref.outputs.image }}
@@ -246,6 +257,69 @@ jobs:
           output-file: sbom.spdx.json
           upload-artifact: false
           upload-release-assets: false
+
+      # Ground truth, printed and nothing more. Whether the attested document
+      # records its own generator has never been measured: the run log does not
+      # carry the SBOM body, and reading it back from the registry needs access
+      # nobody here has (anonymous pulls answer 403). But the predicate file is
+      # readable right here, before it is attested - the same bytes, earlier in
+      # the chain, no credentials.
+      #
+      # This step CANNOT fail the run: continue-on-error, a script that always
+      # exits 0, and nothing downstream reads it. An assertion in this position
+      # would fire after the image is pushed and signed, turning a tooling bump
+      # into a release outage found at the worst moment. Measure first, condition
+      # later - and only against a value that has actually been read.
+      - name: record what the SBOM says about its own generator (print only)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          PATH = "sbom.spdx.json"
+          PREFIX = "SBOM-GENERATOR:"
+
+          try:
+              if not os.path.exists(PATH):
+                  print(f"{PREFIX} FILE MISSING - {PATH} does not exist")
+                  sys.exit(0)
+
+              size = os.path.getsize(PATH)
+              print(f"{PREFIX} bytes={size}")
+              if size == 0:
+                  print(f"{PREFIX} FILE EMPTY - 0 bytes")
+                  sys.exit(0)
+
+              try:
+                  with open(PATH, encoding="utf-8") as handle:
+                      doc = json.load(handle)
+              except Exception as exc:
+                  print(f"{PREFIX} UNPARSEABLE - {type(exc).__name__}: {exc}")
+                  sys.exit(0)
+
+              info = doc.get("creationInfo") or {}
+              print(f"{PREFIX} name={doc.get('name')!r}")
+              print(f"{PREFIX} spdxVersion={doc.get('spdxVersion')!r}")
+              print(f"{PREFIX} created={info.get('created')!r}")
+
+              creators = info.get("creators")
+              if not creators:
+                  print(f"{PREFIX} CREATORS ABSENT OR EMPTY - creationInfo.creators={creators!r}")
+                  sys.exit(0)
+
+              print(f"{PREFIX} CREATORS PRESENT - count={len(creators)}")
+              for i, creator in enumerate(creators):
+                  print(f"{PREFIX} creators[{i}]={creator!r}")
+          except Exception as exc:
+              # This step must never be the reason a release stops.
+              print(f"{PREFIX} STEP ERROR - {type(exc).__name__}: {exc}")
+          sys.exit(0)
+          PY
+          exit 0
 
       - name: cosign attach SBOM
         run: |
@@ -449,9 +523,20 @@ jobs:
       - name: cosign sign
         run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
-      # J4 — Syft SBOM af PRÆCIS det byggede digest (lokal fil; cosign attest
-      # bærer garantien → INGEN actions:write). Action pinnet til immutabelt
-      # commit-SHA (v0.24.0) — et mutérbart major-tag kan ændre adfærd uden review.
+      # J4 - Syft SBOM of EXACTLY the built digest (local file; cosign attest
+      # carries the guarantee -> NO actions:write). The action is pinned to an
+      # immutable commit SHA, because a mutable major tag could change behaviour
+      # without review. The version that SHA corresponds to is the trailing
+      # comment on the `uses:` line itself; this block deliberately does not
+      # repeat it, because a number written in two places goes stale in one of
+      # them - it read v0.24.0 for a while after #115 moved the pin to v0.24.3.
+      #
+      # The pin also fixes the SBOM GENERATOR, which is less obvious: the Syft
+      # version is a compile-time constant inside the action's own bundle
+      # (getSyftVersion() returns getInput("syft-version") || that constant), so
+      # bumping the action moves the tool that produces the document we attest.
+      # #115 moved it from Syft v1.42.3 to v1.54.0 - twelve minor versions - and
+      # the diff showed only a commit SHA.
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ steps.ref.outputs.image }}
@@ -459,6 +544,69 @@ jobs:
           output-file: sbom.spdx.json
           upload-artifact: false
           upload-release-assets: false
+
+      # Ground truth, printed and nothing more. Whether the attested document
+      # records its own generator has never been measured: the run log does not
+      # carry the SBOM body, and reading it back from the registry needs access
+      # nobody here has (anonymous pulls answer 403). But the predicate file is
+      # readable right here, before it is attested - the same bytes, earlier in
+      # the chain, no credentials.
+      #
+      # This step CANNOT fail the run: continue-on-error, a script that always
+      # exits 0, and nothing downstream reads it. An assertion in this position
+      # would fire after the image is pushed and signed, turning a tooling bump
+      # into a release outage found at the worst moment. Measure first, condition
+      # later - and only against a value that has actually been read.
+      - name: record what the SBOM says about its own generator (print only)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          PATH = "sbom.spdx.json"
+          PREFIX = "SBOM-GENERATOR:"
+
+          try:
+              if not os.path.exists(PATH):
+                  print(f"{PREFIX} FILE MISSING - {PATH} does not exist")
+                  sys.exit(0)
+
+              size = os.path.getsize(PATH)
+              print(f"{PREFIX} bytes={size}")
+              if size == 0:
+                  print(f"{PREFIX} FILE EMPTY - 0 bytes")
+                  sys.exit(0)
+
+              try:
+                  with open(PATH, encoding="utf-8") as handle:
+                      doc = json.load(handle)
+              except Exception as exc:
+                  print(f"{PREFIX} UNPARSEABLE - {type(exc).__name__}: {exc}")
+                  sys.exit(0)
+
+              info = doc.get("creationInfo") or {}
+              print(f"{PREFIX} name={doc.get('name')!r}")
+              print(f"{PREFIX} spdxVersion={doc.get('spdxVersion')!r}")
+              print(f"{PREFIX} created={info.get('created')!r}")
+
+              creators = info.get("creators")
+              if not creators:
+                  print(f"{PREFIX} CREATORS ABSENT OR EMPTY - creationInfo.creators={creators!r}")
+                  sys.exit(0)
+
+              print(f"{PREFIX} CREATORS PRESENT - count={len(creators)}")
+              for i, creator in enumerate(creators):
+                  print(f"{PREFIX} creators[{i}]={creator!r}")
+          except Exception as exc:
+              # This step must never be the reason a release stops.
+              print(f"{PREFIX} STEP ERROR - {type(exc).__name__}: {exc}")
+          sys.exit(0)
+          PY
+          exit 0
 
       - name: cosign attach SBOM
         run: |
