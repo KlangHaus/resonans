@@ -19,3 +19,7 @@ coverage.out
 .ci-rls.log
 __pycache__/
 .apidocs/
+
+# gosec writes its JSON report into the workspace in CI (ci-go.yml asserts the
+# Files/Lines denominator from it). It is a run artefact, never committed.
+gosec-report.json

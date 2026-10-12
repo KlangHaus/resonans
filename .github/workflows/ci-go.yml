@@ -51,10 +51,67 @@ jobs:
         with:
           version: v2.14.0
 
+      # 🔴 PINNED TO A MASTER COMMIT, and the commit is chosen for the IMAGE it
+      # references — not for its version label.
+      #
+      # `securego/gosec`'s action.yml carries a hard-coded image digest, and the
+      # action's git tags are versioned INDEPENDENTLY of it. Measured 2026-10-10:
+      #   7b1b5ceb (master, 2026-10-09) -> ghcr.io/securego/gosec@sha256:a6cd2f30…  # 2.29.0
+      #   deb54465 (the v2.29.0 TAG)    -> ghcr.io/securego/gosec@sha256:4342ad11…  # 2.28.0
+      # The v2.29.0 tag was cut before the image bump landed on master, so pinning
+      # the TAG delivered the 2.28.0 image. That image ships go1.26.5 while go.mod
+      # requires >= 1.26.9, so gosec loaded ZERO of 19 packages and still printed
+      # `Issues : 0`.
+      #
+      # a6cd2f30… is the digest that was measured scanning this tree (Files 43,
+      # Lines 7256 on bc95bd4), so this pin freezes a KNOWN-GOOD scanner rather
+      # than a known version number.
+      #
+      # 🔴 THIS STEP IS NOT GOVERNED BY OUR GOTOOLCHAIN. Measured: `GOTOOLCHAIN`
+      # is set exactly once in this file (l.110, in the govulncheck step's env),
+      # and gosec is a CONTAINER action — nothing we set here reaches it. Its
+      # hermeticity comes from the image: [sikkerhed] measured `GOTOOLCHAIN=local`
+      # in the Env of both digests. That is THEIR measurement, not mine — ghcr's
+      # anonymous token flow would not yield a readable manifest from this
+      # machine, so I could not confirm it myself and am not claiming to.
+      #
+      # 🔴 CEILING: go 1.27.0. The pinned image's config reports
+      # GOLANG_VERSION 1.27.0 (the rejected one: 1.26.5), so this pin covers a go
+      # directive up to 1.27.0 and no further. REVISIT when the directive moves:
+      # bump this pin in the SAME change, and read the IMAGE digest in
+      # action.yml — never the tag, which is what went wrong the first time.
+      #
+      # 🔴 EXPECTATION, NOT A MEASUREMENT: once actions are pinned by commit,
+      # Dependabot's github-actions ecosystem moves a SHA pin to the latest
+      # RELEASE — which for this action is v2.29.0 = deb54465 = the 2.28.0 image
+      # with go1.26.5. So its first PR here will most likely propose exactly the
+      # regression just removed. The assertion below is what catches it. Read
+      # such a PR by the image digest in action.yml, never by the version tag.
       - name: gosec
-        uses: securego/gosec@master
+        uses: securego/gosec@7b1b5cebe007d62fb58eacb90fc571112939ec30 # master 2026-10-09 -> image sha256:a6cd2f30
         with:
-          args: ./...
+          args: -fmt=json -out=gosec-report.json -stdout ./...
+
+      # 🔴 THE DENOMINATOR. `Issues : 0` means "nothing was FOUND" or "nothing was
+      # SCANNED", and gosec prints the same words for both while exiting 0. The
+      # only fields that separate them are Files and Lines — so they are asserted
+      # here, and a scan that parsed nothing fails instead of passing quietly.
+      #
+      # 🔴 WHAT THIS DOES AND DOES NOT CLAIM. On the rejected pin the gosec STEP
+      # itself was FAILURE, so that break was loud at step level — the assertion
+      # would not have been what caught it, and an earlier version of this
+      # comment said it would. What was actually missing: the check is not
+      # required, and `Issues : 0` reads as a clean result.
+      #
+      # The assertion's real contribution is therefore two things: an
+      # unambiguous message instead of a reader having to notice 19 load errors
+      # above a zero, and coverage of the case where gosec exits 0 having parsed
+      # nothing — which no step-level failure would announce at all.
+      - name: gosec actually scanned something (denominator)
+        run: |
+          set -euo pipefail
+          test -f gosec-report.json || { echo "gosec produced no report file"; exit 1; }
+          python3 -c 'import json,sys; d=json.load(open("gosec-report.json")); st=d.get("Stats") or {}; f=int(st.get("files") or 0); l=int(st.get("lines") or 0); n=len(d.get("Issues") or []); print(f"gosec parsed files={f} lines={l} issues={n}"); sys.exit(0) if f>0 and l>0 else sys.exit(f"gosec scanned NOTHING (files={f} lines={l}): Issues=0 on an unparsed tree is not a clean result")'
 
       # govulncheck scans the stdlib of the Go that RUNS it, so it must run on
       # go.mod's directive — the toolchain the image is built with.
