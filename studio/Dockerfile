@@ -17,7 +17,7 @@
 # 🔴 BOTH stages carry the same digest on purpose: a build stage on one Node and
 # a runtime stage on another is a difference that would not show up in any test
 # here, because the gate builds and typechecks but runs nothing at runtime.
-FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+FROM node:26-slim@sha256:193fe51b64e77981119c98c2002c9e32a70e2f006fb4d25068ce0558998917f0 AS build
 WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
@@ -35,7 +35,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
+FROM node:26-slim@sha256:193fe51b64e77981119c98c2002c9e32a70e2f006fb4d25068ce0558998917f0 AS runtime
 WORKDIR /app
 # Build identity, surfaced at /healthz. Kept as ENV (not runtimeConfig) so the
 # value is readable at request time — runtimeConfig would bake it at build time.
