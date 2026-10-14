@@ -88,7 +88,7 @@ jobs:
       # regression just removed. The assertion below is what catches it. Read
       # such a PR by the image digest in action.yml, never by the version tag.
       - name: gosec
-        uses: securego/gosec@7b1b5cebe007d62fb58eacb90fc571112939ec30 # master 2026-10-09 -> image sha256:a6cd2f30
+        uses: securego/gosec@71577268350e1e0f2f1491de1ef53f1227b43c1f # master 2026-10-09 -> image sha256:a6cd2f30
         with:
           args: -fmt=json -out=gosec-report.json -stdout ./...
 
