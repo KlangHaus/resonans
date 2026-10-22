@@ -140,29 +140,18 @@ func routesFromSource(t *testing.T) []route {
 			if err != nil {
 				t.Fatalf("parse %s: %v", full, err)
 			}
-			ast.Inspect(f, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok || len(call.Args) == 0 {
-					return true
-				}
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || (sel.Sel.Name != "Handle" && sel.Sel.Name != "HandleFunc") {
-					return true
-				}
-				if x, ok := sel.X.(*ast.Ident); !ok || x.Name != "mux" {
-					return true
-				}
-				pos := fset.Position(call.Pos())
-				pattern, err := resolvePattern(call.Args[0])
-				if err != nil {
-					t.Fatalf("%s:%d: cannot read this route pattern: %v", pos.Filename, pos.Line, err)
-				}
+			// add records one registered pattern. Every route reaches the mux one
+			// of two ways — a direct mux.Handle/HandleFunc call, or an entry in a
+			// []Route table that a loop registers (httpapi, ADR 0001: each route
+			// carries its role) — and both feed this.
+			add := func(at token.Pos, pattern string) {
+				pos := fset.Position(at)
 				method, path := "GET", pattern
 				if i := strings.IndexByte(pattern, ' '); i >= 0 {
 					method, path = pattern[:i], pattern[i+1:]
 				}
 				if mountPrefixes[path] {
-					return true
+					return
 				}
 				// `{key...}` and `{key}` are the same endpoint to a reader.
 				path = strings.ReplaceAll(path, "...}", "}")
@@ -174,8 +163,73 @@ func routesFromSource(t *testing.T) []route {
 				// a subtree. Measured 2026-10-02: one registration uses it.
 				path = strings.TrimSuffix(path, "{$}")
 				out = append(out, route{method: method, path: path, where: fmt.Sprintf("%s:%d", pos.Filename, pos.Line)})
+			}
+			tableRoutes, tableLoops := 0, 0
+			ast.Inspect(f, func(n ast.Node) bool {
+				// A route table: []Route{ {"GET /x", role, h}, ... }. The pattern is
+				// the first positional field, or the one keyed Pattern.
+				if lit, ok := n.(*ast.CompositeLit); ok {
+					arr, ok := lit.Type.(*ast.ArrayType)
+					if !ok {
+						return true
+					}
+					if elt, ok := arr.Elt.(*ast.Ident); !ok || elt.Name != "Route" {
+						return true
+					}
+					for _, e := range lit.Elts {
+						entry, ok := e.(*ast.CompositeLit)
+						if !ok || len(entry.Elts) == 0 {
+							t.Fatalf("%s: a Route table entry is not a literal — this test cannot read it", fset.Position(e.Pos()))
+						}
+						patExpr := entry.Elts[0]
+						for _, fe := range entry.Elts {
+							if kv, ok := fe.(*ast.KeyValueExpr); ok {
+								if k, ok := kv.Key.(*ast.Ident); ok && k.Name == "Pattern" {
+									patExpr = kv.Value
+								}
+							}
+						}
+						if kv, ok := patExpr.(*ast.KeyValueExpr); ok {
+							patExpr = kv.Value
+						}
+						pattern, err := resolvePattern(patExpr)
+						if err != nil {
+							t.Fatalf("%s: cannot read this route pattern: %v", fset.Position(entry.Pos()), err)
+						}
+						add(entry.Pos(), pattern)
+						tableRoutes++
+					}
+					return true
+				}
+				call, ok := n.(*ast.CallExpr)
+				if !ok || len(call.Args) == 0 {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || (sel.Sel.Name != "Handle" && sel.Sel.Name != "HandleFunc") {
+					return true
+				}
+				if x, ok := sel.X.(*ast.Ident); !ok || x.Name != "mux" {
+					return true
+				}
+				// The loop that registers a table: its pattern is `<x>.Pattern`.
+				// Accepted only in a file that also holds a []Route literal
+				// (checked below), so a bare variable pattern cannot slip past.
+				if ps, ok := call.Args[0].(*ast.SelectorExpr); ok && ps.Sel.Name == "Pattern" {
+					tableLoops++
+					return true
+				}
+				pattern, err := resolvePattern(call.Args[0])
+				if err != nil {
+					pos := fset.Position(call.Pos())
+					t.Fatalf("%s:%d: cannot read this route pattern: %v", pos.Filename, pos.Line, err)
+				}
+				add(call.Pos(), pattern)
 				return true
 			})
+			if tableLoops > 0 && tableRoutes == 0 {
+				t.Fatalf("%s registers routes from a table this test found no []Route literal for", full)
+			}
 		}
 	}
 	if len(out) == 0 {

@@ -59,52 +59,78 @@ type Handlers struct {
 	log           *slog.Logger
 }
 
-// NewRouter builds the API handler: content routes wrapped in the JWT-auth
-// middleware (which resolves the tenant onto the request context).
+// Route is one editor API route and the least role that may call it
+// (ADR 0001 §3). The table is the single place a route is registered, so a
+// route cannot exist without a role: there is no other way onto the mux.
+type Route struct {
+	Pattern string
+	MinRole auth.Role
+	handler http.HandlerFunc
+}
+
+// Routes returns the editor API's route table.
+func (h *Handlers) Routes() []Route {
+	const (
+		viewer    = auth.RoleViewer
+		editor    = auth.RoleEditor
+		publisher = auth.RolePublisher
+		admin     = auth.RoleAdmin
+	)
+	return []Route{
+		// Schema (editor form/palette source) — filtered to the tenant's enabled
+		// doc-types (content profile).
+		{"GET /api/v1/schema", viewer, h.schemaAll},
+		{"GET /api/v1/schema/{type}", viewer, h.schemaOne},
+		// Per-tenant settings (content profile: enabled doc-types). Changing
+		// them changes what every editor in the tenant can create: admin.
+		{"GET /api/v1/settings", viewer, h.getSettings},
+		{"PUT /api/v1/settings", admin, h.putSettings},
+		// Visual editing: the tenant's frontend preview URL template. The URL
+		// is framed inside the editor, so who sets it is an admin decision.
+		{"GET /api/v1/settings/preview", viewer, h.getPreviewSettings},
+		{"PUT /api/v1/settings/preview", admin, h.putPreviewSettings},
+		// Documents — tenant-scoped authoring.
+		{"GET /api/v1/documents", viewer, h.listDocuments},
+		{"GET /api/v1/documents/{id}", viewer, h.getDocument},
+		{"GET /api/v1/content/{type}/{slug}", viewer, h.getPublished},
+		{"POST /api/v1/documents", editor, h.createDocument},
+		{"PUT /api/v1/documents/{id}", editor, h.updateDocument},
+		// Publishing puts content in front of the public: publisher.
+		{"POST /api/v1/documents/{id}/publish", publisher, h.publishDocument},
+		// Soft delete (Allan 2026-09-20): the bin, not an erasure. DELETE puts the
+		// document away; restore takes it back. Both change what is published.
+		{"DELETE /api/v1/documents/{id}", publisher, h.deleteDocument},
+		{"POST /api/v1/documents/{id}/restore", publisher, h.restoreDocument},
+		// Media assets — tenant-scoped.
+		{"POST /api/v1/assets", editor, h.uploadAsset},
+		{"GET /api/v1/assets", viewer, h.listAssets},
+		{"GET /api/v1/assets/{id}", viewer, h.getAsset},
+		{"DELETE /api/v1/assets/{id}", publisher, h.deleteAsset},
+		{"POST /api/v1/assets/{id}/restore", publisher, h.restoreAsset},
+		// Video plugin (opt-in).
+		{"GET /api/v1/video/embed", viewer, h.videoEmbed},
+		{"GET /api/v1/video/resolve", viewer, h.videoResolve},
+		// Version history + rollback (Fase 5 workflow). A rollback can replace
+		// published content: publisher.
+		{"GET /api/v1/documents/{id}/versions", viewer, h.listVersions},
+		{"POST /api/v1/documents/{id}/rollback/{version}", publisher, h.rollbackDocument},
+		// Preview token issuance (Fase 5 preview) and live preview of an UNSAVED
+		// body, pushed by the editor into the preview iframe on every edit.
+		{"POST /api/v1/preview-token", editor, h.previewToken},
+		{"POST /api/v1/preview/envelope", editor, h.previewEnvelope},
+	}
+}
+
+// NewRouter builds the API handler: every route from the table, gated on its
+// role, inside the JWT-auth middleware (which resolves the actor onto the
+// request context).
 func NewRouter(d Deps) http.Handler {
 	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, settings: d.Settings, previewSecret: []byte(d.PreviewSecret), assets: d.Assets, log: d.Logger}
 
 	mux := http.NewServeMux()
-	// Schema (editor form/palette source) — filtered to the tenant's enabled
-	// doc-types (content profile).
-	mux.HandleFunc("GET /api/v1/schema", h.schemaAll)
-	mux.HandleFunc("GET /api/v1/schema/{type}", h.schemaOne)
-	// Per-tenant settings (content profile: enabled doc-types).
-	mux.HandleFunc("GET /api/v1/settings", h.getSettings)
-	mux.HandleFunc("PUT /api/v1/settings", h.putSettings)
-	// Visual editing: the tenant's frontend preview URL template.
-	mux.HandleFunc("GET /api/v1/settings/preview", h.getPreviewSettings)
-	mux.HandleFunc("PUT /api/v1/settings/preview", h.putPreviewSettings)
-	// Documents — tenant-scoped authoring.
-	mux.HandleFunc("GET /api/v1/documents", h.listDocuments)
-	mux.HandleFunc("GET /api/v1/documents/{id}", h.getDocument)
-	mux.HandleFunc("GET /api/v1/content/{type}/{slug}", h.getPublished)
-	mux.HandleFunc("POST /api/v1/documents", h.createDocument)
-	mux.HandleFunc("PUT /api/v1/documents/{id}", h.updateDocument)
-	mux.HandleFunc("POST /api/v1/documents/{id}/publish", h.publishDocument)
-	// Soft delete (Allan 2026-09-20): the bin, not an erasure. DELETE puts the
-	// document away; restore takes it back. Both are editor actions, both are
-	// tenant-scoped by the verified actor like every other route here.
-	mux.HandleFunc("DELETE /api/v1/documents/{id}", h.deleteDocument)
-	mux.HandleFunc("POST /api/v1/documents/{id}/restore", h.restoreDocument)
-	// Media assets — tenant-scoped.
-	mux.HandleFunc("POST /api/v1/assets", h.uploadAsset)
-	mux.HandleFunc("GET /api/v1/assets", h.listAssets)
-	mux.HandleFunc("GET /api/v1/assets/{id}", h.getAsset)
-	mux.HandleFunc("DELETE /api/v1/assets/{id}", h.deleteAsset)
-	mux.HandleFunc("POST /api/v1/assets/{id}/restore", h.restoreAsset)
-	// Video plugin (opt-in).
-	mux.HandleFunc("GET /api/v1/video/embed", h.videoEmbed)
-	mux.HandleFunc("GET /api/v1/video/resolve", h.videoResolve)
-	// Version history + rollback (Fase 5 workflow).
-	mux.HandleFunc("GET /api/v1/documents/{id}/versions", h.listVersions)
-	mux.HandleFunc("POST /api/v1/documents/{id}/rollback/{version}", h.rollbackDocument)
-	// Preview token issuance (Fase 5 preview).
-	mux.HandleFunc("POST /api/v1/preview-token", h.previewToken)
-	// Live preview: the delivery envelope of an UNSAVED body, pushed by the
-	// Studio into the preview iframe on every edit (visual editing).
-	mux.HandleFunc("POST /api/v1/preview/envelope", h.previewEnvelope)
-
+	for _, rt := range h.Routes() {
+		mux.HandleFunc(rt.Pattern, auth.RequireRole(rt.MinRole, rt.handler))
+	}
 	return auth.Middleware(d.Verifier, d.Logger)(mux)
 }
 

@@ -1,105 +1,64 @@
-// Studio login against the shared BetterAuth service.
+// Editor login (ADR 0001). The editor's own server is the OpenID Connect
+// client; this composable only asks it who is logged in and sends the browser
+// to /auth/login or /auth/logout. It never sees a token.
 //
-// 🔴 THE OPT-IN IS POSITIVE, AND IT MIRRORS THE SERVER'S.
-//    `authBase` empty  -> dev mode: no login, the tenant comes from
-//                         X-Dev-Tenant, exactly as before this file existed.
-//    `authBase` set    -> login required, and every editor call carries
-//                         `Authorization: Bearer <jwt>`.
-//    The server decides the same way (config.EditorDevAuth: JWT configured
-//    wins, otherwise RESONANS_DEV_AUTH must be exactly "1", never in
-//    production). One side cannot quietly drift into trusting a header the
-//    other side has stopped reading: both are driven by whether JWT is
-//    configured, not by a build flag.
+// 🔴 THE MODE COMES FROM THE SERVER, NOT FROM A BUILD FLAG.
+//    GET /auth/me answers 404 when no OIDC issuer is configured (dev mode: no
+//    login, tenant from X-Dev-Tenant, exactly as before), 401 when OIDC is on
+//    and nobody is logged in, 200 with the user otherwise. The server decides
+//    both sides — whether to require a login and how the API is reached — so
+//    the page cannot drift into trusting a header the server no longer reads.
 //
-// 🔴 THE JWT LIVES IN MEMORY ONLY.
-//    Not localStorage, not a cookie we set: a token in localStorage survives
-//    the tab, is readable by any script that gets into the page, and outlives
-//    the sign-out the user thought they performed. The session cookie is
-//    BetterAuth's to own; the JWT is a short-lived derivative we re-mint.
-//
-// The auth ORIGIN is runtime configuration, not a build-time constant, because
-// the choice of which host owns the session is a deployment decision (staging
-// may answer on auth.staging.klanghaus.dk while prod answers on
-// auth.klanghaus.dk). Reading it from the URL or guessing it from the current
-// host would let any page that frames us point the login somewhere else.
-
+// 🔴 AN UNREACHABLE SERVER IS NOT "LOGGED OUT".
+//    Any other status throws. "I could not ask" must not collapse into "no
+//    session": the route guard shows that as its own message.
 export interface AuthUser {
-  id: string
-  email: string
+  sub: string
+  email?: string
   name?: string
 }
 
-interface TokenResponse {
-  token?: string
-}
-
-// Module scope, deliberately: `useState` is serialised into the SSR payload,
-// and a token must never travel in a document. The Studio is ssr:false today,
-// so the payload is empty either way — but a future `ssr: true` must not turn
-// this into a leak by accident.
-let jwt: string | null = null
+export type AuthMode = 'unknown' | 'dev' | 'oidc'
 
 export function useAuth() {
-  const cfg = useRuntimeConfig()
-  const authBase = ((cfg.public.authBase as string) || '').replace(/\/$/, '')
-  // `enabled` is the single source of truth for "is this a logged-in Studio?"
-  const enabled = computed(() => authBase !== '')
+  const mode = useState<AuthMode>('auth-mode', () => 'unknown')
   const user = useState<AuthUser | null>('auth-user', () => null)
   const ready = useState<boolean>('auth-ready', () => false)
+  // `enabled` is the single source of truth for "is this a logged-in editor?"
+  const enabled = computed(() => mode.value === 'oidc')
 
-  async function call<T>(path: string, opts: Record<string, unknown> = {}) {
-    return $fetch<T>(`${authBase}${path}`, {
-      // The session cookie belongs to the auth host; without credentials the
-      // call is anonymous and every answer would be a truthful answer about
-      // the wrong thing: "no session" for a user who has one.
-      credentials: 'include',
-      ...opts,
-    })
-  }
-
-  /** Reads the current session. Null means "no session", and an unreachable
-   *  auth service throws — the two must not collapse into the same answer. */
+  /** Reads the current session. Null means "no session" (or dev mode). */
   async function refresh(): Promise<AuthUser | null> {
-    if (!enabled.value) {
-      ready.value = true
-      return null
+    try {
+      const r = await $fetch<{ user: AuthUser }>('/auth/me')
+      mode.value = 'oidc'
+      user.value = r.user
+    } catch (e: unknown) {
+      const status = (e as { statusCode?: number; status?: number })?.statusCode ?? (e as { status?: number })?.status
+      if (status === 404) mode.value = 'dev'
+      else if (status === 401) mode.value = 'oidc'
+      else throw e
+      user.value = null
     }
-    const s = await call<{ user?: AuthUser } | null>('/api/auth/get-session')
-    user.value = s?.user ?? null
     ready.value = true
     return user.value
   }
 
-  async function signIn(email: string, password: string): Promise<AuthUser | null> {
-    await call('/api/auth/sign-in/email', {
-      method: 'POST',
-      body: { email, password },
-      headers: { 'Content-Type': 'application/json' },
-    })
-    jwt = null // a new session must mint a new token, never reuse the old one
-    return refresh()
+  /** Leaves the page for the provider's login. `next` must be a path here;
+   *  the server re-checks it, so this is a convenience, not the guard. */
+  function signIn(next = '/'): void {
+    window.location.assign(`/auth/login?next=${encodeURIComponent(next)}`)
   }
 
-  async function signOut(): Promise<void> {
-    jwt = null
+  /** Ends the session. Resolves to true when the browser is being sent away
+   *  (to the provider's logout), so the caller should not navigate itself. */
+  async function signOut(): Promise<boolean> {
     user.value = null
-    if (!enabled.value) return
-    await call('/api/auth/sign-out', { method: 'POST' })
+    if (mode.value !== 'oidc') return false
+    const r = await $fetch<{ redirect: string }>('/auth/logout', { method: 'POST' })
+    window.location.assign(r.redirect)
+    return true
   }
 
-  /** Mints (or returns) the JWT the Resonans API requires. Returns null in dev
-   *  mode, where there is no auth service to ask. */
-  async function token(force = false): Promise<string | null> {
-    if (!enabled.value) return null
-    if (jwt && !force) return jwt
-    const r = await call<TokenResponse>('/api/auth/token')
-    jwt = r?.token ?? null
-    return jwt
-  }
-
-  function forget(): void {
-    jwt = null
-  }
-
-  return { enabled, user, ready, refresh, signIn, signOut, token, forget }
+  return { mode, enabled, user, ready, refresh, signIn, signOut }
 }
