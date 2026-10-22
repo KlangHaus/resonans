@@ -84,11 +84,7 @@ jobs:
           test -f .output/server/index.mjs || { echo ".output/server/index.mjs missing — the Dockerfile's CMD would not start"; exit 1; }
           echo ".output/server/index.mjs present: $(wc -c < .output/server/index.mjs) bytes"
 
-# HONEST LIMIT, in the same form ci-go.yml states it: this job produces the
-# check `Studio typecheck + build`, which is NOT on the required list
-# (`jenkins/Lint + Test`, `Secret scan`, `commitlint`). It therefore goes RED and
-# VISIBLE on a pull request but does NOT block a merge. Making it required is a
-# change to ruleset `force-push-guard` (id 20711390) and needs the context name
-# spelled exactly as this job publishes it — which is why that step waits until
-# the job has produced at least one run to read the name from, rather than being
-# guessed in the same change.
+# This job produces the check `Studio typecheck + build`, which is on the
+# required list of ruleset `force-push-guard` (id 20711390), so a red run blocks
+# a merge. The context name there must stay spelled exactly as this job
+# publishes it: a required name nothing produces holds every PR forever.

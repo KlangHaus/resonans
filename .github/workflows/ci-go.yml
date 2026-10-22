@@ -152,10 +152,9 @@ jobs:
       # and a config that fails to load stops releases with no red check and no
       # failed run, which is the silent class semantic-release.yml documents.
       #
-      # HONEST LIMIT: this job produces `Lint + Test`, which is NOT on the
-      # required list (`jenkins/Lint + Test`, `Secret scan`, `commitlint` are).
-      # So this step goes RED and VISIBLE on a PR but does not block a merge.
-      # Making it required is a ruleset change and belongs to [infra].
+      # This job produces `Lint + Test`, which is on the required list (it
+      # replaced `jenkins/Lint + Test` on 2026-10-22, when resonans' CI moved to
+      # Actions), so this step blocks a merge.
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -165,6 +164,13 @@ jobs:
         run: |
           npm ci
           node scripts/release_notes_guard.mjs
+
+      # The release gate decides whether semantic-release may cut a release. Its
+      # decision is a pure function, tested against fixtures — including the old
+      # Jenkins check alone, which must no longer pass. This used to run as
+      # `jenkins/release gate`; it moved here with the rest of resonans' CI.
+      - name: Release gate selftest
+        run: python3 scripts/release_gate.py --selftest scripts/testdata/release-gate
 
       - name: Test (race + coverage)
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -176,3 +182,53 @@ jobs:
           name: coverage-${{ github.sha }}
           path: coverage.out
           retention-days: 14
+
+  # Tenant isolation against a real Postgres: the RLS cells in
+  # internal/persistence (//go:build integration), including the canary that
+  # plants a table WITHOUT row level security and must make the suite fail. This
+  # ran as `jenkins/Tenant isolation` until 2026-10-22; resonans is public, and
+  # a public repo runs its CI in Actions — Jenkins' CI box has no fork discovery,
+  # so an outside contributor's PR never got this check at all.
+  #
+  # The service is this job's own database, so the cells may create and drop
+  # roles and databases freely. They still name them after RESONANS_TEST_SCOPE,
+  # because the same code runs against shared clusters elsewhere.
+  tenant-isolation:
+    name: Tenant isolation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same major as production and the former Jenkins CI database.
+        # Tag + index digest: the tag says what it is, the digest says which bytes.
+        image: postgres:16-alpine@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # A missing DSN is a FAILURE in the test itself, not a skip — a skipped
+      # test looks exactly like a passing one on a check-run.
+      - name: RLS integration cells
+        env:
+          GOTOOLCHAIN: local
+          RESONANS_TEST_DB_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
+          RESONANS_TEST_SCOPE: gh${{ github.run_id }}a${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
+          test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
+          go test -tags=integration -count=1 -v ./internal/persistence/

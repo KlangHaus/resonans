@@ -29,8 +29,12 @@ on:
   # (samme klasse som de otte tags der gav nul semver-images, se release.yml).
   #
   # Nu kører den på push til main og MÅLER i stedet, før den skærer noget:
-  # `scripts/release_gate.py` kræver at `jenkins/Lint + Test` fra app 4785909
-  # er SUCCESS på præcis dette sha. Enhver måde ikke at vide på er sin egen
+  # `scripts/release_gate.py` kræver at `Lint + Test` fra app 15368 (GitHub
+  # Actions, ci-go.yml) er SUCCESS på præcis dette sha. Indtil 2026-10-22 var
+  # det `jenkins/Lint + Test` fra app 4785909; resonans er offentligt, og et
+  # offentligt repo kører sin CI i Actions (Allan 2026-10-22). Navn OG app-id
+  # skiftede sammen — et nyt navn med det gamle id ville aldrig blive fundet,
+  # og navnet alene kan enhver publicere. Enhver måde ikke at vide på er sin egen
   # exit-kode, og ingen af dem er 0 — fraværende, uafsluttet, ikke-grøn og
   # instrument-fejl er fire forskellige udfald, ikke ét.
   #
@@ -51,7 +55,7 @@ permissions:
   contents: write # opret tags + commit CHANGELOG
   issues: write # kommentér på released issues
   pull-requests: write # kommentér på released PRs
-  checks: read # release-gaten læser jenkins/Lint + Test på dette sha
+  checks: read # release-gaten læser Lint + Test (app 15368) på dette sha
 
 concurrency:
   group: semantic-release-${{ github.ref }}
@@ -120,16 +124,17 @@ jobs:
           ref: ${{ github.sha }}
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      # 🔴 GATEN. Intet skæres, før den Jenkins-check der faktisk verificerer
-      # DETTE commit, siger success. Beslutningen er en ren funktion af
-      # check-runs-svaret og er celle-testet mod ti fixturer (grøn, fraværende,
-      # tom, uafsluttet, fejlet, `skipped`, fremmed app, genkørsel begge veje,
-      # misdannet svar) — se `jenkins/release gate`.
+      # 🔴 GATEN. Intet skæres, før den check der faktisk verificerer DETTE
+      # commit, siger success. Beslutningen er en ren funktion af
+      # check-runs-svaret og er celle-testet mod elleve fixturer (grøn,
+      # fraværende, tom, uafsluttet, fejlet, `skipped`, fremmed app, den gamle
+      # Jenkins-check alene, genkørsel begge veje, misdannet svar) — selvtesten
+      # kører i `Lint + Test` (ci-go.yml) på hver PR.
       #
       # `timeout-seconds` på TRINNET er et bagstop for scriptets egen timeout:
       # fejler scriptet at afslutte, dør trinnet alligevel rødt frem for at
       # hænge et job der har `contents: write`.
-      - name: Jenkins skal være grøn på dette commit
+      - name: Lint + Test skal være grøn på dette commit
         timeout-minutes: 35
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,8 +142,8 @@ jobs:
           python3 scripts/release_gate.py \
             --repo "${{ github.repository }}" \
             --sha "${{ github.sha }}" \
-            --check 'jenkins/Lint + Test' \
-            --app-id 4785909 \
+            --check 'Lint + Test' \
+            --app-id 15368 \
             --timeout-seconds 1800
 
       - uses: actions/setup-node@v7
