@@ -8,8 +8,9 @@ Personal preferences live in your global memory; everything here is repo-wide.
 **[resonans]** (builder under [infra] CTO) — prompt:
 `klanghaus/.orchestration/prompts/resonans.md`.
 
-Resonans = KlangHaus' eget self-hostede headless CMS (Go). Intern dogfood,
-**ikke** offentligt OSS-released. Produkt-brief:
+Resonans = KlangHaus' eget self-hostede headless CMS (Go). Open source under
+AGPL-3.0 (offentligt repo siden 2026-10-12, Allans instruks); dogfoodes internt.
+Produkt-brief:
 `klanghaus/docs/product-briefs/resonans/index.md`.
 
 ## Låste beslutninger (denne service)
