@@ -51,7 +51,6 @@ Produkt-brief:
 | Typecheck | `go vet ./...`        |
 | Test      | `go test -race ./...` |
 | Test (én) | `python3 scripts/gotest_run_guard.py <mønster> [pakker]` |
-| Jenkinsfile | `python3 scripts/jenkinsfile_parse_guard.py` |
 | Build     | `go build ./...`      |
 | Dev       | `go run ./cmd/resonans` (eller `docker compose -f docker-compose.tilt.yml up`) |
 
@@ -63,16 +62,6 @@ afvæbner alle stående `-run`-mønstre tavst. Vagten gør det rødt, printer si
 nævner (`listed N name(s)`), og skelner «navnet findes ikke» fra «navnet findes
 og blev sprunget over». Synsfelt: **kun Go**; `pytest -k`, `vitest -t` og
 `jest -t` har samme form og er ikke dækket.
-
-🔴 **`bash -n` på en Jenkinsfile er ikke nok — kør parse-vagten før du pusher.**
-Jenkinsfilen er Groovy, og dens `cmd`-blokke er triple-quoted STRENGE der ligner
-shell. `bash -n` validerer shellen *inde i* strengen og er blind for at strengen
-selv ikke parser. Målt 3/10: et enkelt backslash gjorde at filen ikke
-**kompilerede**, og seks byg faldt i **0 sekunder** med tom output-flade og
-**0 `jenkins/*`-checks** — så det *påkrævede* check var fraværende frem for rødt,
-og et fraværende påkrævet navn hænger en PR for evigt. To lag, to parsere; kør
-begge. Vagten kræver `groovy` på PATH og svarer **exit 2** hvis den mangler —
-det er ikke et bestået.
 
 ## Layout
 

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Release gate: does the Jenkins check that verifies THIS commit say success?
+"""Release gate: does the required check that verifies THIS commit say success?
 
 Until phase C the release chain hung on `workflow_run` of the Actions workflow
 named 'CI (Go)': semantic-release ran only after that workflow completed
 successfully. Deleting ci-go.yml would therefore stop releases SILENTLY — no red
 check, no failed run, just an event that never fires again. This script replaces
 that coupling with a measurement: semantic-release now runs on a push to main
-and asks, before it cuts anything, whether the required Jenkins check is green
-ON THIS EXACT SHA.
+and asks, before it cuts anything, whether the required check is green ON THIS
+EXACT SHA. Since 2026-10-22 that is `Lint + Test` from GitHub Actions (app
+15368); before, it was `jenkins/Lint + Test` from the Jenkins app.
 
 Fail-closed by construction. Every way of not knowing is its own exit code, and
 none of them is 0:
@@ -19,8 +20,8 @@ none of them is 0:
     5  NOT-GREEN it concluded, but not as success
     6  ERROR     the instrument itself failed (HTTP, JSON, missing token)
 
-ABSENT is deliberately NOT folded into PENDING: "Jenkins never built this
-commit" is a different world from "Jenkins is still building it", and the fleet
+ABSENT is deliberately NOT folded into PENDING: "CI never built this commit"
+is a different world from "CI is still building it", and the fleet
 has measured the first one happening (a push whose webhook was lost, riff
 od1se2ro). Both stop the release, but the message must say which.
 

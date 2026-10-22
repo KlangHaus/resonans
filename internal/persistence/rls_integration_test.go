@@ -121,9 +121,9 @@ func testPoolDSN(t *testing.T) (*pgxpool.Pool, string) {
 	// sharing both go one RED and one green. So the isolation is what carries the
 	// passing case, not an accident of timing.
 	//
-	// Done HERE rather than in the Jenkinsfile because the agents deliberately have
-	// no docker ([sikkerhed]'s veto) and psql is not something this repo may assume
-	// is on the image. Doing it in Go means the same code path runs locally, so the
+	// Done HERE rather than in CI config because CI runners may have no docker
+	// (the former Jenkins agents had none, by [sikkerhed]'s veto) and psql is not
+	// something this repo may assume is on the image. Doing it in Go means the same code path runs locally, so the
 	// contract is measurable on a laptop instead of only on an agent.
 	admin, err := pgxpool.New(ctx, dsn)
 	if err != nil {

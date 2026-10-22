@@ -172,8 +172,32 @@ jobs:
       - name: Release gate selftest
         run: python3 scripts/release_gate.py --selftest scripts/testdata/release-gate
 
+      # `pipefail`: without it the step reports tee's status and a failing go test
+      # turns green. The log feeds the coverage gate below; the profile is kept
+      # as an artifact.
       - name: Test (race + coverage)
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: |
+          set -o pipefail
+          go test -race -cover -coverprofile=coverage.out -covermode=atomic ./... 2>&1 | tee .ci-cover.log
+
+      # The gates' own cells first: a gate whose decision function is untested is
+      # a threshold nobody has seen refuse anything.
+      - name: Coverage gate selftest
+        run: python3 scripts/coverage_gate.py --selftest
+
+      # `go test -run <pattern>` prints `[no tests to run]` and exits 0 when the
+      # pattern matches nothing, so a renamed test turns a targeted verification
+      # into a green that measured nothing. The selftest provokes both halves.
+      - name: go test -run guard selftest
+        run: python3 scripts/gotest_run_guard.py --selftest
+
+      # Per-package floors (coverage-floors.json), not a total: an average cannot
+      # answer "did anything get worse". Exit 3 a package with no floor, 4 a floor
+      # with no package, 5 a drop. Measured 2026-10-22: on the same tree this log
+      # and the `-cover` log Jenkins fed it give identical per-package numbers (19
+      # lines each), and a package forced below its floor exits 5.
+      - name: Coverage gate
+        run: python3 scripts/coverage_gate.py --decide < .ci-cover.log
 
       - name: Upload coverage artifact
         if: always()

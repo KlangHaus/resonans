@@ -17,7 +17,7 @@
     "github.com/KlangHaus/resonans/internal/persistence": [
       "0% here is misleading on purpose and must not be 'fixed' by deleting a build tag.",
       "This package IS covered \u2014 by the integration cells in rls_integration_test.go, which",
-      "carry //go:build integration and need a real postgres. The `RLS assertions` check runs",
+      "carry //go:build integration and need a real postgres. The `Tenant isolation` check runs",
       "them; `Lint + Test`, which this gate reads, does not. So the floor is 0 and the real",
       "guard is elsewhere. Anyone raising this number by moving those tests out from behind",
       "the tag would make `go test ./...` require a database."
@@ -39,7 +39,7 @@
     ],
     "github.com/KlangHaus/resonans/migrations": [
       "Embedded .sql plus embed.go. The SQL is measured by applying it against a real",
-      "postgres in the `RLS assertions` check, which is the only measurement that means",
+      "postgres in the `Tenant isolation` check, which is the only measurement that means",
       "anything for a migration."
     ],
     "github.com/KlangHaus/resonans/internal/deploycheck": [

@@ -36,8 +36,8 @@ concurrency:
 jobs:
   images:
     # This name is the check's context, for whoever makes it required later:
-    # read it from a produced run, never guess it. `jenkins/Lint + Test` and
-    # `Lint + Test` are two different names, and a guessed one hangs a PR.
+    # read it from a produced run, never guess it. A guessed name that nothing
+    # produces hangs every PR.
     name: Image builds
     runs-on: ubuntu-latest
     steps:
@@ -64,10 +64,8 @@ jobs:
 
 # HONEST LIMITS, in the form ci-go.yml and ci-studio.yml state theirs:
 #
-# 1. This job produces the check `Image builds`, which is NOT on the required
-#    list (`jenkins/Lint + Test`, `Secret scan`, `commitlint`,
-#    `Studio typecheck + build`). It goes RED and VISIBLE on a pull request but
-#    does not block a merge. Making it required is a ruleset change.
+# 1. This job produces the check `Image builds`, which is on the required list
+#    of ruleset `force-push-guard`, so a red run blocks a merge.
 # 2. It proves the images BUILD. It does not run them: no container is started,
 #    no HEALTHCHECK is exercised, nothing is served. An image that builds and
 #    exits immediately would pass here.
