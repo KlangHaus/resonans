@@ -1,4 +1,4 @@
-# Studio had NO pre-merge gate. Measured 2026-10-08: `Jenkinsfile` mentions
+# Studio had NO pre-merge gate. Measured 2026-10-08: the CI of the day mentioned
 # `studio`/`pnpm` zero times, `ci-go.yml` covers Go only, and of the five
 # workflows the only one that builds studio is `release.yml` — which triggers on
 # `push` to main and on tags, NOT on `pull_request`. So the first thing that

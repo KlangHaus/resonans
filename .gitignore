@@ -14,9 +14,8 @@ coverage/
 /resonans
 coverage.out
 
-# Tools the Jenkins checks install into the workspace.
-.ci-tools/
-.ci-rls.log
+# The coverage gate's input, written by CI (ci-go.yml).
+.ci-cover.log
 __pycache__/
 .apidocs/
 
