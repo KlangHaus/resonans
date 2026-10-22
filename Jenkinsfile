@@ -8,7 +8,7 @@
 // origin/main e1397db):
 //
 //   go   /usr/local/go-1.27.0 (default symlink) + /usr/local/go-1.26.6
-//        — NO /usr/local/go-1.26.9, so `toolchains:` cannot select it
+//        — NO /usr/local/go-1.26.10, so `toolchains:` cannot select it
 //
 // THREE checks — the three names resonans' ruleset requires. Lint, gosec,
 // govulncheck and gofumpt stay in Actions until resonans moves to go 1.27
@@ -41,10 +41,10 @@
 //    commit 435ed42, not only on PR heads.
 //
 // 🔴 WHY GO IS SELF-INSTALLED, AND DECLARED AS SUCH
-//    We ship 1.26.9 (Dockerfile FROM golang:1.26.9-alpine). Testing on the
+//    We ship 1.26.10 (Dockerfile FROM golang:1.26.10-alpine). Testing on the
 //    agent default (1.27.0) would test a stdlib two minors away from the one
-//    we release. The agent lacks 1.26.9, so `go` fetches exactly that
-//    toolchain (GOTOOLCHAIN=go1.26.9 — an exact pin, not `auto`; the command
+//    we release. The agent lacks 1.26.10, so `go` fetches exactly that
+//    toolchain (GOTOOLCHAIN=go1.26.10 — an exact pin, not `auto`; the command
 //    asserts the download is verified against the Go checksum database).
 //    The first version of this file did that SILENTLY, and the library
 //    refused it: "PARALLEL mode without a `tools:` declaration" — so the check
@@ -60,17 +60,17 @@ klanghausPipeline(
   checks: [
     [
       context: 'Lint + Test',
-      selfInstalls: ['go': '1.26.9'],
+      selfInstalls: ['go': '1.26.10'],
       cmd: '''
         set -euo pipefail
-        pinned="1.26.9"
+        pinned="1.26.10"
         directive="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
         if [ "$directive" != "$pinned" ]; then
           echo "go.mod says go ${directive:-<none>}, Jenkinsfile pins ${pinned} - change BOTH"
           exit 1
         fi
         # The fetched toolchain is only as trustworthy as its checksum check.
-        # Asserted BEFORE the pin is exported: with GOTOOLCHAIN=go1.26.9 set,
+        # Asserted BEFORE the pin is exported: with GOTOOLCHAIN=go1.26.10 set,
         # `go env` itself would trigger the download it is meant to guard.
         # GONOSUMCHECK is read from the environment - `go env` does not report it.
         sumdb="$(GOTOOLCHAIN=local go env GOSUMDB)"
@@ -140,7 +140,7 @@ klanghausPipeline(
       // this repo may assume is on the image, so doing it in Go also means the same
       // code path runs on a laptop and the contract is measurable there.
       context: 'Tenant isolation',
-      selfInstalls: ['go': '1.26.9'],
+      selfInstalls: ['go': '1.26.10'],
       cmd: '''
         set -euo pipefail
 
@@ -159,7 +159,7 @@ klanghausPipeline(
         # assertion is NOT repeated here on purpose: it runs on this same commit in
         # `Lint + Test`, so a weakened GOSUMDB would already be red there, and
         # duplicating twelve lines is how two copies drift apart.
-        export GOTOOLCHAIN=go1.26.9
+        export GOTOOLCHAIN=go1.26.10
         ver_out="$(go version)"
         echo "$ver_out"
         # 🔴 EXACT FIELD EQUALITY, NOT A REGEX, AND THAT IS THE FIX FOR A
@@ -180,8 +180,8 @@ klanghausPipeline(
         # measurably accepts go1.26.90 -- and it reports what it found
         # instead of only that it was wrong.
         ver_got="$(awk '{print $3}' <<<"$ver_out")"
-        [ "$ver_got" = "go1.26.9" ] || {
-          echo "go is $ver_got, expected exactly go1.26.9"; exit 1; }
+        [ "$ver_got" = "go1.26.10" ] || {
+          echo "go is $ver_got, expected exactly go1.26.10"; exit 1; }
 
         # The contract for this facility, stated in infra's jenkins.yaml: the role is
         # the cluster owner and may CREATE DATABASE, and each build must make its own
