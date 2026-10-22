@@ -44,8 +44,8 @@ def decide(payload, check, app_id):
     """Return (code, message) for one /check-runs response.
 
     The app id is part of the identity on purpose: a check-run NAME is not a
-    key. Anyone can publish a check-run called 'jenkins/Lint + Test'; only our
-    Jenkins app has the id the ruleset pins, so the gate asks for both.
+    key. Anyone can publish a check-run called 'Lint + Test'; only GitHub
+    Actions (app 15368) has the id the ruleset pins, so the gate asks for both.
     """
     runs = payload.get("check_runs")
     if runs is None:
@@ -92,7 +92,7 @@ def selftest(directory):
     if not files:
         print(f"release-gate selftest: NO FIXTURES in {directory} — refusing to report green on 0 cases")
         return 1
-    check, app_id, bad = "jenkins/Lint + Test", 4785909, 0
+    check, app_id, bad = "Lint + Test", 15368, 0
     for name in files:
         want = int(name.rsplit(".", 2)[1])
         with open(os.path.join(directory, name)) as fh:
@@ -110,8 +110,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
     p.add_argument("--sha", default=os.environ.get("GITHUB_SHA", ""))
-    p.add_argument("--check", default="jenkins/Lint + Test")
-    p.add_argument("--app-id", type=int, default=4785909)
+    p.add_argument("--check", default="Lint + Test")
+    p.add_argument("--app-id", type=int, default=15368)
     p.add_argument("--timeout-seconds", type=int, default=1800)
     p.add_argument("--poll-seconds", type=int, default=20)
     p.add_argument("--decide", action="store_true", help="read one check-runs JSON on stdin and decide")

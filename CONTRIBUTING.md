@@ -113,7 +113,7 @@ and stays, AGPL-3.0; that is not what the paragraph below is about.
 
 **A contributor licence agreement will be required before we can merge code from outside
 the company, and it is not written yet.** KlangHaus decided to adopt one on 2026-09-24 and
-it is being drafted, tracked as KH-1200. A lawyer has not yet reviewed it, and one should
+it is being drafted. A lawyer has not yet reviewed it, and one should
 before it binds anyone — we would rather say that than imply a review that has not happened. Until it exists we cannot accept
 an outside pull request, because merging one would leave the project's licensing unsettled
 in a way that is unpleasant to fix afterwards.
@@ -129,8 +129,7 @@ cannot relicense or hand on someone else's contribution without asking them. The
 is how that changes, and it is the whole reason it exists — we would rather you knew that
 now than read it in the small print later.
 
-The transfer half is named here because [jura] corrected their own requirement list for
-exactly that omission: Ophavsretsloven § 56(2) gives no right to pass a licence onward
+The transfer half is named here because our own first requirement list left it out: Ophavsretsloven § 56(2) gives no right to pass a licence onward
 unless it is customary or clearly presupposed, so a grant that lists relicensing and stops
 there ends at one company. Without the clause, every contributor would have to be asked
 again the day the rights move. A sentence that covers what the writer happened to be
