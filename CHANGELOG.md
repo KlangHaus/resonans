@@ -1,3 +1,25 @@
+# [2.0.0](https://github.com/KlangHaus/resonans/compare/v1.21.8...v2.0.0) (2026-10-22)
+
+
+* feat(auth)!: log in to the editor with standard OIDC, and enforce roles in the API ([78dcf34](https://github.com/KlangHaus/resonans/commit/78dcf3485dcc2e81951fb679f75c4f6a0fc89929))
+
+
+### ACTION REQUIRED
+
+* before upgrading, register the editor as a confidential OIDC
+client at your provider (redirect URI <editor URL>/auth/callback), make the
+provider put an audience and a role into access tokens, and set
+RESONANS_JWT_AUDIENCE, RESONANS_ROLE_CLAIM / RESONANS_ROLE_MAP and the editor's
+NUXT_OIDC_* values (see .env.example). Upgrading the image alone leaves every
+editor locked out with 403.
+
+### BREAKING CHANGES
+
+* the API refuses to start with JWT configured but no
+RESONANS_JWT_AUDIENCE, and refuses every request whose token carries no
+recognised role. The editor's NUXT_PUBLIC_AUTH_BASE is gone; it now needs
+NUXT_OIDC_* settings and a client registered at the provider.
+
 ## [1.21.8](https://github.com/KlangHaus/resonans/compare/v1.21.7...v1.21.8) (2026-10-22)
 
 
