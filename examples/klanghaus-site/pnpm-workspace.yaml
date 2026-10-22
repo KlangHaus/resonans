@@ -1,0 +1,6 @@
+# pnpm 10: settings live here. esbuild's postinstall must run or nuxt build fails
+# with ERR_PNPM_IGNORED_BUILDS on a fresh install.
+packages:
+  - '.'
+onlyBuiltDependencies:
+  - esbuild

@@ -1,0 +1,28 @@
+{
+  "name": "@resonans-examples/klanghaus-site",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "typecheck": "nuxt typecheck",
+    "seed": "node seed/seed.mjs",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@grundtone/design-system": "^2.23.0",
+    "@grundtone/vue": "^2.23.3",
+    "nuxt": "^4.5.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "sass": "^1.97.3",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.3.9"
+  }
+}
