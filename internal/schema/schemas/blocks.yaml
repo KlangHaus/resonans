@@ -53,14 +53,31 @@ blocks:
   # ── Marketing blocks (Page/Post) ────────────────────────
   - name: hero
     fields:
+      - { name: eyebrow, type: string, i18n: true } # small line above the heading
       - { name: heading, type: string, i18n: true, required: true }
       - { name: subheading, type: string, i18n: true }
       - { name: image, type: asset }
+      - { name: imageAlt, type: string, i18n: true }
       - { name: ctaLabel, type: string, i18n: true }
       - { name: ctaHref, type: string }
+      - { name: secondaryCtaLabel, type: string, i18n: true }
+      - { name: secondaryCtaHref, type: string }
+
+  # The head of a landing-page section: a small eyebrow, the heading, a lead
+  # paragraph, and an anchor so navigation can link to it (#anchor). The blocks
+  # that follow, up to the next section_header, are the section's content.
+  - name: section_header
+    fields:
+      - { name: anchor, type: string } # URL fragment, e.g. "pricing"
+      - { name: variant, type: string } # a style hint for the front-end, e.g. "band"; Resonans does not interpret it
+      - { name: eyebrow, type: string, i18n: true }
+      - { name: navLabel, type: string, i18n: true } # the section's name in a site menu, when it differs from the eyebrow
+      - { name: heading, type: string, i18n: true, required: true }
+      - { name: lead, type: string, i18n: true }
 
   - name: feature_grid
     fields:
+      - { name: variant, type: string } # a style hint, e.g. "cards" | "facts" | "steps" | "checklist"; front-end decides
       - name: features
         type: array
         of:

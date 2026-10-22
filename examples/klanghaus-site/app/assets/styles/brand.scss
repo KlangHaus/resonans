@@ -1,0 +1,69 @@
+// KlangHaus-brand → grundtone-tokens (OVERRIDE-LAG).
+//
+// Stedet hvor brandets FARVEVÆRDIER defineres — alt semantisk går herigennem.
+// Præcisering ([review]-fund på #9, min tidligere formulering "eneste sted med hex"
+// var upræcis): to ting står literalt uden for denne fil, begge bevidst —
+//   (a) `#fff` og `rgba(...)` i landing.scss: dér hvor FORLÆGGET selv skriver dem
+//       literalt (ren hvid tekst på mørk flade, gradient-/skygge-alfaer). Pixel-perfect
+//       mod forlægget vejer tungere end at opfinde tokens forlægget ikke har.
+//   (b) `theme-color` i nuxt.config.ts: et <meta>-tag kan ikke referere en CSS-variabel.
+//       Duplikatet er markeret dér med en synk-note.
+// Alt ANDET — flader, tekst, kanter, handling, radii — defineres her og kun her. Forlægget
+// (docs/design/klanghaus/prototypes/landing-lejer.html) er bygget i logoets
+// palette — navy ×2, coral, gold + hvid-tints — og intet udenfor den
+// (landing-lejer.NOTES.md, Note 6). Komponenterne refererer KUN tokens.
+//
+// Mønster = explainers-OEM: brandet udtrykkes som værdier på grundtones
+// token-NAVNE, så GT-komponenter (GTButton m.fl.) arver brandet uden at vi
+// rører deres CSS. Mangler et semantisk token (gold, surface-niveauer på
+// mørk grund), defineres det som `--kh-*` HER — ikke inline i en komponent.
+
+:root {
+  // ── Brand-primitiver (logo) ───────────────────────────────────────────────
+  --kh-navy: #1a1a2e;
+  --kh-deep: #16213e; // ⚠️ duplikeres i nuxt.config.ts (theme-color) — hold dem i synk
+  --kh-coral: #e94560;
+  --kh-coral-dark: #c41e3a;
+  --kh-gold: #c4a35a;
+
+  // ── Flader på mørk grund (forlægget: paper/surface/raised) ────────────────
+  --color-background: var(--kh-deep);
+  --color-background-alt: var(--kh-navy);
+  --color-surface: var(--kh-navy);
+  --color-surface-raised: #1e1e38;
+  // Hero/kontakt-kort: hvid-tint oven på raised (forlæg: rgba(255,255,255,.06))
+  --kh-surface-tint: rgba(255, 255, 255, 0.06);
+
+  // ── Tekst ────────────────────────────────────────────────────────────────
+  --color-text: #f5f5fa;
+  --color-text-secondary: #c9c9d6;
+  --color-text-tertiary: #8f8fa3;
+  --color-text-inverse: var(--kh-navy);
+
+  // ── Kanter ───────────────────────────────────────────────────────────────
+  --color-border-light: rgba(255, 255, 255, 0.1);
+  --color-border-medium: rgba(255, 255, 255, 0.14);
+  --color-border-strong: rgba(255, 255, 255, 0.35);
+
+  // ── Handling = coral ─────────────────────────────────────────────────────
+  // Knap-baggrund er coral-DARK (#c41e3a), ikke coral: designers WCAG-måling
+  // (palette-intranet) — coral #e94560 fejler AA for hvid tekst (3.83:1),
+  // coral-dark består (5.84:1). Hover går LYSERE (→ coral) på mørk grund;
+  // grundtones token hedder `-dark`, men semantikken er "hover-tone".
+  --color-primary: var(--kh-coral-dark);
+  --color-primary-dark: var(--kh-coral);
+  --color-primary-light: var(--kh-coral);
+  --color-on-primary: #ffffff;
+  --color-focus: var(--kh-coral);
+  --color-focus-ring: rgba(233, 69, 96, 0.5);
+  // Coral-tint til ikon-baggrunde (forlæg: rgba(233,69,96,.14))
+  --kh-coral-tint: rgba(233, 69, 96, 0.14);
+  --kh-coral-ring: rgba(233, 69, 96, 0.25);
+
+  // ── Radii uden token-ækvivalent i forlægget ──────────────────────────────
+  // 6/8/12px = radius-md/lg/xl (grundtone). 10px (kort) og 14px (kontakt/ramme)
+  // findes ikke som tokens → brand-tokens her, ikke literaler i komponenter.
+  --kh-radius-card: 10px;
+  --kh-radius-panel: 14px;
+  --kh-radius-logo: 24px;
+}
