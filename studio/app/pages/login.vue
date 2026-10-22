@@ -1,48 +1,29 @@
 <script setup lang="ts">
-// Login for the Studio. Only reachable when an auth service is configured; in
-// dev mode the guard never sends anyone here, and the page says so rather than
-// presenting a form that cannot work.
-const { enabled, signIn, token } = useAuth()
+// Login for the editor. With OIDC configured, the button leaves for the
+// identity provider (via the editor's own /auth/login); there is no password
+// field here, because Resonans keeps no passwords (ADR 0001). In dev mode the
+// guard never sends anyone here, and the page says so.
+const { enabled, ready, refresh, signIn } = useAuth()
 const route = useRoute()
 
-const email = ref('')
-const password = ref('')
-const busy = ref(false)
-const error = ref('')
+// The route guard and the server's callback each say WHY someone is here, and
+// each reason is its own message: an editor who cannot tell "the service is
+// down" from "your login expired" will just click again and again.
+const reason = computed(() => route.query.grund as string | undefined)
+const next = computed(() => {
+  const n = route.query.naeste
+  return typeof n === 'string' && n.startsWith('/') ? n : '/'
+})
 
-// `grund=utilgaengelig` is set by the route guard when the session lookup threw.
-// It is a DIFFERENT message from "wrong password": an editor who cannot tell
-// "the service is down" from "I typed it wrong" will retype it five times.
-const unreachable = computed(() => route.query.grund === 'utilgaengelig')
-
-async function submit() {
-  if (busy.value) return
-  busy.value = true
-  error.value = ''
-  try {
-    const u = await signIn(email.value.trim(), password.value)
-    if (!u) {
-      error.value = 'Login lykkedes, men der kom ingen bruger tilbage. Prøv igen, eller sig til.'
-      return
+onMounted(async () => {
+  if (!ready.value) {
+    try {
+      await refresh()
+    } catch {
+      // Shown below as "could not reach"; nothing else to do here.
     }
-    // Mint the JWT here rather than on the first editor call: a failure now is
-    // readable ("logget ind, men kunne ikke hente adgangsbevis") instead of an
-    // unexplained 401 on the first thing the editor clicks.
-    await token(true)
-    await navigateTo((route.query.naeste as string) || '/')
-  } catch (e: unknown) {
-    const status = (e as { statusCode?: number; status?: number })?.statusCode ?? (e as { status?: number })?.status
-    error.value =
-      status === 401
-        ? 'Forkert e-mail eller kodeord.'
-        : status === 429
-          ? 'For mange forsøg. Vent et øjeblik, og prøv igen.'
-          : 'Kunne ikke nå login-tjenesten. Prøv igen om lidt — og sig til, hvis den bliver ved.'
-  } finally {
-    busy.value = false
-    password.value = ''
   }
-}
+})
 </script>
 
 <template>
@@ -50,36 +31,23 @@ async function submit() {
     <div class="lg__card">
       <h1 class="lg__h">Log ind i Resonans</h1>
 
-      <p v-if="!enabled" class="lg__note">
-        Der er ingen login-tjeneste konfigureret for dette miljø, så login er slået fra. Studio kører i
+      <p v-if="ready && !enabled" class="lg__note">
+        Der er ingen login-tjeneste konfigureret for dette miljø, så login er slået fra. Resonans kører i
         udviklingstilstand.
       </p>
 
       <template v-else>
-        <p v-if="unreachable" class="lg__warn">
+        <p v-if="reason === 'utilgaengelig'" class="lg__warn">
           Vi kunne ikke få fat i login-tjenesten. Du er ikke logget ud — vi ved bare ikke, om du er logget ind.
         </p>
+        <p v-else-if="reason === 'udloebet'" class="lg__warn">
+          Login-forsøget udløb, eller blev startet i en anden fane. Prøv igen.
+        </p>
+        <p v-else-if="reason === 'afvist'" class="lg__warn">
+          Login-tjenesten sagde nej, eller svaret kunne ikke bekræftes. Prøv igen — og sig til, hvis det bliver ved.
+        </p>
 
-        <form @submit.prevent="submit">
-          <label class="lg__l" for="email">E-mail</label>
-          <input id="email" v-model="email" type="email" autocomplete="username" required class="lg__i" />
-
-          <label class="lg__l" for="password">Kodeord</label>
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            required
-            class="lg__i"
-          />
-
-          <p v-if="error" class="lg__err">{{ error }}</p>
-
-          <button type="submit" class="lg__btn" :disabled="busy">
-            {{ busy ? 'Logger ind…' : 'Log ind' }}
-          </button>
-        </form>
+        <button type="button" class="lg__btn" @click="signIn(next)">Log ind</button>
       </template>
     </div>
   </div>
@@ -105,25 +73,6 @@ async function submit() {
   margin: 0 0 18px;
   font-size: 18px;
 }
-.lg__l {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--rz-text-muted);
-  margin-bottom: 4px;
-}
-.lg__i {
-  width: 100%;
-  padding: 8px 10px;
-  margin-bottom: 14px;
-  border: 1px solid var(--rz-border);
-  border-radius: 7px;
-  background: var(--rz-bg);
-  color: var(--rz-text);
-  font: inherit;
-}
 .lg__btn {
   width: 100%;
   padding: 9px 12px;
@@ -137,11 +86,6 @@ async function submit() {
 .lg__btn:disabled {
   opacity: 0.6;
   cursor: default;
-}
-.lg__err {
-  margin: 0 0 12px;
-  font-size: 12.5px;
-  color: #b3261e;
 }
 .lg__warn,
 .lg__note {

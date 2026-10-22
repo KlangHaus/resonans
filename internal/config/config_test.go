@@ -36,6 +36,7 @@ func TestAuthEnabled(t *testing.T) {
 	t.Setenv("NODE_ENV", "development")
 	t.Setenv("RESONANS_JWT_ISSUER", "https://auth.klanghaus.dk")
 	t.Setenv("RESONANS_JWKS_URL", "https://auth.klanghaus.dk/.well-known/jwks.json")
+	t.Setenv("RESONANS_JWT_AUDIENCE", "resonans")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -114,6 +115,7 @@ func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
 			if c.jwt {
 				t.Setenv("RESONANS_JWT_ISSUER", "https://auth.example")
 				t.Setenv("RESONANS_JWKS_URL", "https://auth.example/jwks.json")
+				t.Setenv("RESONANS_JWT_AUDIENCE", "resonans")
 			}
 			if c.deliveryToken {
 				t.Setenv("RESONANS_DELIVERY_TOKEN", "svc")
@@ -268,6 +270,7 @@ func TestProductionDemandsHTTPSForTheTrustAnchor(t *testing.T) {
 			t.Setenv("NODE_ENV", tc.nodeEnv)
 			t.Setenv("RESONANS_JWT_ISSUER", tc.issuer)
 			t.Setenv("RESONANS_JWKS_URL", tc.jwks)
+			t.Setenv("RESONANS_JWT_AUDIENCE", "resonans")
 			t.Setenv("RESONANS_ALLOW_INSECURE_JWKS", tc.waive)
 			t.Setenv("RESONANS_DELIVERY_TOKEN", "t")
 			t.Setenv("RESONANS_STORAGE_DIR", "/tmp/resonans-assets")

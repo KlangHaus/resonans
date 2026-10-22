@@ -98,13 +98,23 @@ func Run(ctx context.Context) error {
 			logger.Warn("RESONANS_DEV_AUTH=1 ignored for the editor API: JWT is configured, X-Dev-Tenant is not read")
 		}
 		verifier, err = auth.NewVerifier(ctx, auth.VerifierConfig{
-			Issuer:  cfg.JWTIssuer,
-			JWKSURL: cfg.JWKSURL,
+			Issuer:      cfg.JWTIssuer,
+			JWKSURL:     cfg.JWKSURL,
+			Audience:    cfg.JWTAudience,
+			TenantClaim: cfg.TenantClaim,
+			RoleClaim:   cfg.RoleClaim,
+			RoleMap:     cfg.RoleMap,
+			FixedTenant: cfg.TenantID,
 		})
 		if err != nil {
 			return fmt.Errorf("jwt verifier: %w", err)
 		}
-		logger.Info("jwt_verifier_active", "issuer", cfg.JWTIssuer)
+		tenantFrom := "claim " + cfg.TenantClaim
+		if cfg.TenantID != "" {
+			tenantFrom = "single-tenant " + cfg.TenantID
+		}
+		logger.Info("jwt_verifier_active", "issuer", cfg.JWTIssuer, "audience", cfg.JWTAudience,
+			"tenant", tenantFrom, "roleClaim", cfg.RoleClaim, "roleMapEntries", len(cfg.RoleMap))
 		// A waiver nobody can see is worse than no waiver: it looks like the
 		// default. Config refuses plain http for the trust anchor in production,
 		// so reaching this line means someone declared the opt-in on purpose —

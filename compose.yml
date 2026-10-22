@@ -67,10 +67,16 @@ services:
       # would trust an unauthenticated tenant header.
       RESONANS_DELIVERY_TOKEN: ${RESONANS_DELIVERY_TOKEN:?set RESONANS_DELIVERY_TOKEN in .env}
       RESONANS_PREVIEW_SECRET: ${RESONANS_PREVIEW_SECRET:-}
-      # Editor login. Both must be set or the server refuses to start — see
-      # .env.example for what to point them at.
+      # Editor login (ADR 0001). Issuer, JWKS and audience must all be set or
+      # the server refuses to start — see .env.example for what to point them at.
       RESONANS_JWT_ISSUER: ${RESONANS_JWT_ISSUER:?set RESONANS_JWT_ISSUER in .env}
       RESONANS_JWKS_URL: ${RESONANS_JWKS_URL:?set RESONANS_JWKS_URL in .env}
+      RESONANS_JWT_AUDIENCE: ${RESONANS_JWT_AUDIENCE:?set RESONANS_JWT_AUDIENCE in .env}
+      RESONANS_ROLE_CLAIM: ${RESONANS_ROLE_CLAIM:-resonans_role}
+      RESONANS_ROLE_MAP: ${RESONANS_ROLE_MAP:-}
+      RESONANS_TENANT_MODE: ${RESONANS_TENANT_MODE:-multi}
+      RESONANS_TENANT_ID: ${RESONANS_TENANT_ID:-}
+      RESONANS_TENANT_CLAIM: ${RESONANS_TENANT_CLAIM:-org}
       # AGPL-3.0 §13: if you modify Resonans and offer it over a network, point
       # this at YOUR source so the offer on /healthz is true.
       RESONANS_SOURCE_URL: ${RESONANS_SOURCE_URL:-}
@@ -86,14 +92,19 @@ services:
     image: ghcr.io/klanghaus/resonans-studio:${RESONANS_VERSION:-latest}
     restart: unless-stopped
     environment:
-      # Browser-side values: these must be reachable from the EDITOR's browser,
-      # not from inside this network. A service name like `api` works between
-      # containers and nowhere else.
-      NUXT_PUBLIC_API_BASE: ${PUBLIC_URL:-http://localhost:3000}
-      # Positive opt-in. Empty means no login at all, which is why compose
-      # requires it: a CMS whose editor opens for anyone is not a default we get
-      # to pick for you.
-      NUXT_PUBLIC_AUTH_BASE: ${RESONANS_AUTH_BASE:?set RESONANS_AUTH_BASE in .env}
+      # The editor's server is the OIDC client (ADR 0001): it talks to the
+      # provider and to the API itself, so the browser never holds a token.
+      # Positive opt-in. Without an issuer there is no login at all, which is
+      # why compose requires it: a CMS whose editor opens for anyone is not a
+      # default we get to pick for you.
+      NUXT_OIDC_ISSUER: ${RESONANS_JWT_ISSUER:?set RESONANS_JWT_ISSUER in .env}
+      NUXT_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID in .env}
+      NUXT_OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET in .env}
+      NUXT_OIDC_SESSION_SECRET: ${EDITOR_SESSION_SECRET:?set EDITOR_SESSION_SECRET in .env}
+      # As the editor's BROWSER reaches it — the redirect URI is built from it.
+      NUXT_OIDC_EDITOR_URL: ${EDITOR_URL:-http://localhost:8080}
+      # Inside this network: the editor's server calls the API directly.
+      NUXT_OIDC_API_URL: http://api:3000
     ports:
       - "${STUDIO_PORT:-8080}:3000"
     depends_on:

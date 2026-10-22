@@ -77,18 +77,14 @@ export function useResonans() {
   const { activeId } = useSpaces()
   const auth = useAuth()
 
-  function headers(extra: Record<string, string> = {}, jwt?: string | null): Record<string, string> {
+  function headers(extra: Record<string, string> = {}): Record<string, string> {
     const h: Record<string, string> = { ...extra }
     // 🔴 THE TWO WAYS IN ARE MUTUALLY EXCLUSIVE, AND THE SERVER AGREES.
-    // With JWT configured, `auth.Middleware` reads ONLY the Bearer token and
-    // never looks at X-Dev-Tenant — so sending both would not be belt and
-    // braces, it would be a header that looks like it does something. With no
-    // auth service configured we are in dev mode and the tenant header is the
-    // only way in.
-    if (jwt) {
-      h.Authorization = `Bearer ${jwt}`
-      return h
-    }
+    // Logged in (OIDC), every call goes through the editor's own server at
+    // /proxy, which adds the bearer token there — this page never holds one,
+    // and the proxy forwards no tenant header. With no OIDC configured we are
+    // in dev mode and the tenant header is the only way in.
+    if (auth.enabled.value) return h
     // Tenant = the ACTIVE SPACE (space ≡ tenant, Beslutning K), falling back to
     // the configured dev-tenant. Dev-mode only: in prod the session/JWT supplies
     // the tenant and this header is ignored server-side.
@@ -105,28 +101,27 @@ export function useResonans() {
     // `headers` goes LAST: spread after `...opts`, a caller's own headers
     // (e.g. Content-Type) replaced the merged set and dropped the tenant header,
     // so every write with a body got 403 while every read worked.
-    const send = (jwt: string | null) =>
-      $fetch<T>(`${base}${path}`, {
+    const prefix = auth.enabled.value ? '/proxy' : base
+    try {
+      return await $fetch<T>(`${prefix}${path}`, {
         credentials: 'include',
         ...opts,
-        headers: headers(opts.headers as Record<string, string>, jwt),
+        headers: headers(opts.headers as Record<string, string>),
       })
-    const jwt = await auth.token()
-    try {
-      return await send(jwt)
     } catch (e: unknown) {
-      // 🔴 EXACTLY ONE RETRY, AND ONLY FOR 401.
-      // A JWT expires while the session is still valid, so one silent re-mint
-      // is the difference between "your work is gone" and nothing at all. But
-      // a retry loop against an auth service that has stopped saying yes is a
-      // way to hammer it while showing the editor nothing: if the second call
-      // is 401 too, the error surfaces and the route guard sends them to log
-      // in. A 403 is not retried — that is an answer, not an expiry.
+      // 🔴 401 MEANS THE SESSION IS GONE, NOT "TRY AGAIN".
+      // The editor's server already refreshes the token when it can; a 401
+      // from /proxy is what is left when it could not. Show the login page,
+      // with this page as the way back — never jump straight to the provider:
+      // a call that 401s ON the login page would then loop (measured: it did).
+      // A 403 is not a login problem — it is the role answering — and
+      // surfaces as the error it is.
       const status = (e as { statusCode?: number; status?: number })?.statusCode ?? (e as { status?: number })?.status
-      if (status !== 401 || !auth.enabled.value) throw e
-      const fresh = await auth.token(true)
-      if (!fresh) throw e
-      return await send(fresh)
+      if (status === 401 && auth.enabled.value && window.location.pathname !== '/login') {
+        auth.user.value = null
+        await navigateTo({ path: '/login', query: { naeste: window.location.pathname + window.location.search } })
+      }
+      throw e
     }
   }
 

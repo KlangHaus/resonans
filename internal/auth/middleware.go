@@ -40,9 +40,14 @@ func Middleware(verifier Verifier, logger *slog.Logger) func(http.Handler) http.
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if verifier == nil {
 				// Dev/test: optional X-Dev-Tenant header.
+				// The dev actor is admin: dev auth is already the explicit,
+				// never-in-production opt-in to "no checks", and a dev
+				// environment that could not reach settings would only teach
+				// people to work around the role table.
 				if tenant := r.Header.Get(devTenantHeader); tenant != "" {
-					ctx := WithActor(r.Context(), Actor{Sub: "dev-user", Tenant: tenant})
-					setSpanActor(ctx, Actor{Sub: "dev-user", Tenant: tenant})
+					dev := Actor{Sub: "dev-user", Tenant: tenant, Role: RoleAdmin}
+					ctx := WithActor(r.Context(), dev)
+					setSpanActor(ctx, dev)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
