@@ -31,7 +31,7 @@ export const pages = [
       body: [
         b('hero', {
           eyebrow: da('Lydstudier til leje · Raffinaderivej, København S · Amager'),
-          heading: da('KlangHaus er ikke et studie.\nDet er *et hjem for musikere.*'),
+          heading: da('KlangHaus er ikke et studie.|Det er *et hjem for musikere.*'),
           subheading: da(
             'Ti lydregulerede studier i ét hus, drevet af musikere siden 2015. Dit eget faste rum — og et hus fuld af folk der laver det samme som dig.',
           ),
@@ -247,7 +247,7 @@ export const pages = [
       body: [
         b('hero', {
           eyebrow: da('Testside · eksempelindhold i Resonans'),
-          heading: da('Bunkeren\n*en landingsside til test.*'),
+          heading: da('Bunkeren|*en landingsside til test.*'),
           subheading: da(
             'Denne side er skrevet til Resonans-eksemplet for at vise en landingsside ved siden af forsiden. Den beskriver ikke et rigtigt tilbud, og intet her er en pris, en dato eller et løfte.',
           ),

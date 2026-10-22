@@ -40,11 +40,30 @@ local_resource(
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['resonans'],
 )
+# The editor (Resonans Studio) in dev mode — no login, tenant via X-Dev-Tenant —
+# so live preview works out of the box: open a page and press "Visuel". The
+# site's /preview route accepts frames only from this origin (studioOrigin).
+local_resource(
+    'resonans-studio',
+    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port 3030',
+    serve_dir='studio',
+    serve_env={
+        'RESONANS_DEV_API': 'http://localhost:3000',
+        'NUXT_PUBLIC_DEV_TENANT': '11111111-1111-1111-1111-111111111111',
+    },
+    links=[link('http://localhost:3030', 'Resonans editor')],
+    labels=['resonans'],
+    resource_deps=['resonans'],
+)
 local_resource(
     'klanghaus-site',
     serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port 3050',
     serve_dir='examples/klanghaus-site',
-    serve_env={'NUXT_RESONANS_URL': 'http://localhost:3000'},
+    serve_env={
+        'NUXT_RESONANS_URL': 'http://localhost:3000',
+        'NUXT_PUBLIC_RESONANS_PUBLIC_URL': 'http://localhost:3000',
+        'NUXT_PUBLIC_STUDIO_ORIGIN': 'http://localhost:3030',
+    },
     links=[link('http://localhost:3050', 'klanghaus.dk on Resonans')],
     labels=['examples'],
     resource_deps=['resonans'],
