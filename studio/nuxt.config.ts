@@ -29,24 +29,38 @@ export default defineNuxtConfig({
     },
   },
   runtimeConfig: {
+    // 🔴 THE LOGIN SWITCH, AND IT IS A POSITIVE OPT-IN (ADR 0001).
+    // Server-only: none of this reaches the page. Empty issuer = dev mode (no
+    // login, X-Dev-Tenant). Set = the editor's server is an OIDC client and
+    // every editor call goes through /proxy with the session's token. Set from
+    // the environment as NUXT_OIDC_<KEY>, e.g. NUXT_OIDC_ISSUER. Half a
+    // configuration (an issuer without the rest) is refused at the first
+    // request rather than falling back to dev mode.
+    oidc: {
+      issuer: '',
+      clientId: '',
+      clientSecret: '',
+      scopes: 'openid profile email',
+      // The editor's public origin; the redirect URI is <editorUrl>/auth/callback.
+      editorUrl: '',
+      // Where this server reaches the Resonans API (e.g. http://resonans:3000).
+      apiUrl: '',
+      // Seals the session cookie. At least 32 characters; generate with
+      // `openssl rand -base64 32`.
+      sessionSecret: '',
+      // "1" allows plain-http discovery and token calls. Local provider only.
+      allowInsecure: '',
+    },
     public: {
       // Sentry (SaaS EU) — DSN er publishable; tom = Sentry slået fra.
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnv: process.env.NUXT_PUBLIC_SENTRY_ENV || 'staging',
       // Resonans backend base URL.
       apiBase: '',
-      // Dev-only tenant (sent as X-Dev-Tenant when auth is disabled). In prod
-      // the BetterAuth session/JWT supplies the tenant; never trust this header
-      // server-side in prod.
+      // Dev-only tenant (sent as X-Dev-Tenant when OIDC is not configured). With
+      // OIDC the token supplies the tenant; the API never reads this header
+      // when JWT auth is on.
       devTenant: '',
-      // 🔴 THE LOGIN SWITCH, AND IT IS A POSITIVE OPT-IN.
-      // Empty = no auth service for this environment: no login, dev tenant
-      // header, exactly as before. Set = login required and every editor call
-      // carries a Bearer token. Which host owns the session is a DEPLOYMENT
-      // decision (staging and prod answer on different names), so it is
-      // runtime config — never read from the URL, which would let a page that
-      // frames us point the login somewhere else.
-      authBase: '',
     },
   },
 })

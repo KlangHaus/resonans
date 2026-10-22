@@ -63,6 +63,11 @@ login form remains in Resonans.
     browser-based apps.
   - The current "JWT in memory only" rule is kept in spirit and strengthened: the browser
     holds no token at all.
+  - **As implemented:** the session is a sealed (encrypted + MACed) cookie, not a server-side
+    store, so the editor stays stateless and needs no table. It holds the access and refresh
+    tokens and a small user object, never the ID token. Its sealed size is measured on every
+    write and refused above 3 800 bytes with a message naming the cause, instead of the
+    browser silently dropping a cookie over its ~4 kB limit.
 - **Logout:** local session ends; RP-initiated logout (`end_session_endpoint`) is called
   when the provider advertises it.
 
@@ -134,9 +139,9 @@ BetterAuth organization membership (`owner`, `admin`, `member`) through
 
 **Costs**
 
-- The editor UI's server becomes stateful (session store). It needs a signing secret and
-  a store that survives restarts; Postgres is the obvious one, keeping "Postgres plus
-  binaries".
+- The editor UI's server needs a session secret (`NUXT_OIDC_SESSION_SECRET`). Rotating it
+  logs every editor out. A provider that issues very large access tokens can exceed the
+  cookie budget; that is refused loudly, and the cure is fewer claims for this client.
 - Editor API calls gain a hop through the editor's server.
 - Every deployment must configure an OIDC client. There is no "just log in" without a
   provider; the README's quickstart needs a tested example (Keycloak or Authentik in
@@ -163,7 +168,9 @@ BetterAuth organization membership (`owner`, `admin`, `member`) through
 2. Configurable claims, the role middleware and single-tenant mode in the API.
 3. OIDC client and session in the editor UI's server; login page replaced by a redirect.
 4. `auth`: register the client and add `org` + role claims for it ([auth]'s change).
-5. KlangHaus cutover in production; then remove `useAuth.ts`' BetterAuth calls.
+5. KlangHaus cutover in production. (The BetterAuth-specific calls in `useAuth.ts` were
+   removed in the same change as step 3: steps 1–2 already require a role claim, so no
+   KlangHaus editor could have kept working through the old path anyway.)
 6. README quickstart with a provider example, measured from a clean checkout.
 
 Each step ships on its own. Until step 5, KlangHaus keeps today's login.

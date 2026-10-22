@@ -29,7 +29,8 @@ const initials = computed(() => {
   return mail ? mail.slice(0, 2).toUpperCase() : '?'
 })
 async function logOut() {
-  await auth.signOut()
+  // With OIDC the browser is on its way to the provider's logout already.
+  if (await auth.signOut()) return
   await navigateTo('/login')
 }
 

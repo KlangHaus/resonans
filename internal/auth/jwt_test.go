@@ -51,7 +51,7 @@ func signToken(t *testing.T, priv jwk.Key, issuer, sub, org string) string {
 		IssuedAt(time.Now()).
 		Expiration(time.Now().Add(time.Hour))
 	if org != "" {
-		b = b.Claim(orgClaim, org)
+		b = b.Claim(DefaultTenantClaim, org)
 	}
 	tok, err := b.Build()
 	if err != nil {
