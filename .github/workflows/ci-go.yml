@@ -40,7 +40,7 @@ jobs:
           # CI without a commit has not changed, only this instance of it. The
           # hold at v0.11.0 was go >= 1.26 (gofumpt v0.12.0, 2026-09-07) against
           # a go directive kept at 1.25.13 by the golangci-lint v2.5.0 pin; the
-          # go directive now reads 1.26.9, so v0.12.0 installs. Bump the go
+          # go directive now reads 1.26.10, so v0.12.0 installs. Bump the go
           # directive, golangci-lint, gofumpt and govulncheck TOGETHER — each of
           # the four refused a version the others' floor forbade.
           go install mvdan.cc/gofumpt@v0.12.0
@@ -133,7 +133,7 @@ jobs:
           test -n "$v" || { echo "could not parse the go directive from go.mod"; exit 1; }
           test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
           # PINNED. v1.7.0 was the newest that built on go 1.25; v1.8.0 is the
-          # newest MODULE version of golang.org/x/vuln and builds on go 1.26.9.
+          # newest MODULE version of golang.org/x/vuln and builds on go 1.26.10.
           # 🔴 Read the MODULE version, not the GitHub release tag: the repo's
           # latest release tag is v1.1.4 while the module is at v1.8.0, so the
           # two numbers run in opposite directions and the tag would date this
