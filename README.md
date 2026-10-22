@@ -9,8 +9,13 @@ Built by [KlangHaus](https://klanghaus.dk) to replace hosted CMS-as-a-service fo
 sites, and released so you can run the same thing yourself. It is the CMS behind our
 production content — the bugs get found by us first.
 
-**Status:** used in production by its authors. The API is versioned (`/api/v1`) but young;
-read [CHANGELOG.md](CHANGELOG.md) before upgrading.
+**Status: beta.** Resonans runs its authors' production content, but it is not stable yet:
+the API (`/api/v1`), the configuration and the content model can still change in ways
+that need you to act. The 1.x version number does not mean a stable API — it comes from
+the release tooling, which counts every published change and bumps the major only for
+changes marked as breaking. Pin an exact version, and read [CHANGELOG.md](CHANGELOG.md)
+for every version you skip; operator steps are listed there under **ACTION REQUIRED**.
+Questions and help: [SUPPORT.md](SUPPORT.md).
 
 ## Why this and not the others
 
