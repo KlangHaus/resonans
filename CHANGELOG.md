@@ -1,3 +1,11 @@
+## [1.21.8](https://github.com/KlangHaus/resonans/compare/v1.21.7...v1.21.8) (2026-10-22)
+
+
+### Bug Fixes
+
+* **deps:** lift npm bundled by the release chain to 11.21.1, closing five advisories ([29a1b64](https://github.com/KlangHaus/resonans/commit/29a1b6466ef42863e0e25fbbff97ea95a2be60ef))
+* **go:** move to go 1.26.10 for GO-2026-6809 in crypto/x509 ([07dd52e](https://github.com/KlangHaus/resonans/commit/07dd52e558f137bd3a6e276bd3658b3a7d5b883f))
+
 ## [1.21.7](https://github.com/KlangHaus/resonans/compare/v1.21.6...v1.21.7) (2026-10-10)
 
 
