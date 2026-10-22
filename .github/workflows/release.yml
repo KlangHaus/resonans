@@ -232,7 +232,11 @@ jobs:
           echo "image=${first%%:*}@${DIGEST}" >> "$GITHUB_OUTPUT"
 
       # J4 — cosign keyless signing (OIDC, ingen long-lived key)
-      - uses: sigstore/cosign-installer@v3
+      # Pinned to the commit the floating `v3` tag delivered on 2026-10-22 (v3.9.1,
+      # installs cosign v2.5.2) — measured by dereferencing the annotated tag, not
+      # read from its name. Pinning freezes today's behaviour; moving to cosign
+      # 2.6.x is the fleet's separate, verifier-before-signer change.
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
       - name: cosign sign
         run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 
@@ -519,7 +523,11 @@ jobs:
           echo "image=${first%%:*}@${DIGEST}" >> "$GITHUB_OUTPUT"
 
       # J4 — cosign keyless signing (OIDC, ingen long-lived key)
-      - uses: sigstore/cosign-installer@v3
+      # Pinned to the commit the floating `v3` tag delivered on 2026-10-22 (v3.9.1,
+      # installs cosign v2.5.2) — measured by dereferencing the annotated tag, not
+      # read from its name. Pinning freezes today's behaviour; moving to cosign
+      # 2.6.x is the fleet's separate, verifier-before-signer change.
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
       - name: cosign sign
         run: cosign sign --yes "${{ steps.ref.outputs.image }}"
 

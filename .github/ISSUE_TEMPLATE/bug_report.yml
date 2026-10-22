@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in Resonans does not do what the docs or the code say it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **If this could let one tenant read or write another
+        tenant's content, bypass authentication, or execute served content, stop here** and
+        use [private vulnerability reporting](https://github.com/KlangHaus/resonans/security/advisories/new)
+        instead — see [SECURITY.md](https://github.com/KlangHaus/resonans/blob/main/SECURITY.md).
+
+        Resonans is in **beta**. A behaviour that changed between versions may be intended;
+        check [CHANGELOG.md](https://github.com/KlangHaus/resonans/blob/main/CHANGELOG.md)
+        first, and say in the report if it was not mentioned there.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        From `GET /healthz` (`version` and `revision`), or the image tag you run. "latest" is
+        not a version — the digest or the tag it resolved to is.
+      placeholder: "1.21.7 (revision f2114a9…)"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it happen?
+      options:
+        - Content API (/api/v1)
+        - Delivery API
+        - Studio (editor UI)
+        - Assets / uploads
+        - Preview
+        - Migrations / startup / configuration
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: >
+        The smallest sequence that shows it. Requests as `curl` lines are ideal. Remove
+        tokens, passwords and real tenant data before posting — this tracker is public.
+      placeholder: |
+        1. Start with `docker compose up -d` on a fresh volume
+        2. curl -H "Authorization: Bearer <redacted>" …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Include the response body or the log lines. Exact text beats a paraphrase.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Postgres version, how you run it (compose, binary, other), reverse proxy, anything non-default in your configuration.
+    validations:
+      required: false

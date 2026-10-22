@@ -9,8 +9,13 @@ Built by [KlangHaus](https://klanghaus.dk) to replace hosted CMS-as-a-service fo
 sites, and released so you can run the same thing yourself. It is the CMS behind our
 production content — the bugs get found by us first.
 
-**Status:** used in production by its authors. The API is versioned (`/api/v1`) but young;
-read [CHANGELOG.md](CHANGELOG.md) before upgrading.
+**Status: beta.** Resonans runs its authors' production content, but it is not stable yet:
+the API (`/api/v1`), the configuration and the content model can still change in ways
+that need you to act. The 1.x version number does not mean a stable API — it comes from
+the release tooling, which counts every published change and bumps the major only for
+changes marked as breaking. Pin an exact version, and read [CHANGELOG.md](CHANGELOG.md)
+for every version you skip; operator steps are listed there under **ACTION REQUIRED**.
+Questions and help: [SUPPORT.md](SUPPORT.md).
 
 ## Why this and not the others
 
@@ -37,7 +42,7 @@ already run.
 git clone https://github.com/KlangHaus/resonans.git
 cd resonans
 cp .env.example .env
-$EDITOR .env          # fill in the passwords and point the JWT settings at your IdP
+$EDITOR .env          # fill in the passwords and point the login settings at your IdP
 docker compose up -d
 ```
 
@@ -92,10 +97,42 @@ them with the reasoning. The ones that decide whether the server starts at all:
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Postgres DSN. Unset in production the server exits: the in-memory store loses content *and* does not enforce tenant isolation. |
 | `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` | yes, both, and **https** | Editor login. Either one missing and the server exits rather than exposing the editor API to an unauthenticated header. In production both must be `https`, because the JWKS is the trust anchor — over plain http anyone on the path can substitute the signing keys. `RESONANS_ALLOW_INSECURE_JWKS=1` waives it deliberately, and every boot then logs the URL. |
+| `RESONANS_JWT_AUDIENCE` | yes, with the two above | The `aud` your provider puts in Resonans' access tokens. Without it the server exits: it would otherwise accept a token minted for any other service at the same provider. |
+| `RESONANS_TENANT_MODE` + `RESONANS_TENANT_ID` | for one organisation | `single` with a UUID serves one tenant and never reads a tenant claim. Default `multi` reads the tenant from `RESONANS_TENANT_CLAIM` (`org`). |
 | `RESONANS_DELIVERY_TOKEN` | yes | Authenticates the trusted read surface. Unset, `/delivery` would trust a tenant header from anyone. |
 | `RESONANS_STORAGE_DIR` *or* all three `BUNNY_STORAGE_*` | yes, one of them | Where asset bytes live. Neither set, the server exits instead of accepting uploads it will drop on restart. |
 | `PUBLIC_URL` | recommended | The API's externally reachable base URL. Asset URLs are built from it, so a wrong value shows up as broken images, not as an error. |
 | `RESONANS_DEV_AUTH` | never | The single value `1` opens the unauthenticated development paths, outside production only. |
+
+## Login and roles
+
+Resonans keeps no users and no passwords. Editors log in with **standard OpenID Connect**
+at the identity provider you already run — Keycloak, Authentik, Zitadel, Authelia, or
+BetterAuth's OIDC provider, which is what we run. The decision and the alternatives are in
+[ADR 0001](docs/adr/0001-editor-login-with-standard-oidc.md).
+
+1. Register the editor at your provider as a **confidential** client using the
+   authorization code flow with PKCE, redirect URI `<EDITOR_URL>/auth/callback`.
+2. Make the provider put an audience (`RESONANS_JWT_AUDIENCE`, e.g. `resonans`) and a
+   **role** into the access token — and, in multi-tenant mode, the tenant id.
+3. Fill in the login block of [.env.example](.env.example).
+
+The editor's server is the OIDC client. It keeps the tokens and gives the browser only a
+sealed `HttpOnly; SameSite=Strict` cookie, so a script that got into the editor page could
+not read a token even if it tried.
+
+Every request needs a role, and there is no default — a token without one gets `403`:
+
+| Role | Can |
+| --- | --- |
+| `viewer` | Read documents, versions, schema, assets and settings. |
+| `editor` | + create and edit drafts, upload assets, preview. |
+| `publisher` | + publish, delete and restore, roll back to an earlier version. |
+| `admin` | + change tenant settings. |
+
+The role claim (`RESONANS_ROLE_CLAIM`, default `resonans_role`) may be a string or an
+array; the highest role wins. To use groups your provider already issues, map them:
+`RESONANS_ROLE_MAP=cms-admins=admin,cms-writers=editor`.
 
 ## Tenant isolation
 

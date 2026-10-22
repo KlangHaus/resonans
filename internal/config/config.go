@@ -15,6 +15,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/KlangHaus/resonans/internal/auth"
 )
 
 // Config holds all runtime configuration.
@@ -51,11 +55,26 @@ type Config struct {
 	// a BYPASSRLS role.
 	DatabaseURL string
 
-	// JWT / JWKS (Beslutning D + K). Redaktør-login = BetterAuth-JWT verified
-	// locally against the cached JWKS; tenant = the `org` claim. Both required
-	// to enable auth; in production both MUST be set or boot fails.
-	JWTIssuer string
-	JWKSURL   string
+	// JWT / JWKS (Beslutning D + K, ADR 0001). Editor requests carry a JWT
+	// from any OpenID Connect provider, verified locally against the cached
+	// JWKS. Issuer + JWKS URL enable auth; in production both MUST be set or
+	// boot fails. With auth enabled the audience is required too.
+	JWTIssuer   string
+	JWKSURL     string
+	JWTAudience string
+
+	// TenantClaim and RoleClaim name the token claims that carry the tenant and
+	// the role (RESONANS_TENANT_CLAIM, default "org"; RESONANS_ROLE_CLAIM,
+	// default "resonans_role"). RoleMap maps provider values to roles
+	// (RESONANS_ROLE_MAP, "group=admin,other=editor").
+	TenantClaim string
+	RoleClaim   string
+	RoleMap     map[string]auth.Role
+
+	// TenantID is single-tenant mode (RESONANS_TENANT_MODE=single +
+	// RESONANS_TENANT_ID): every editor works in this tenant and the tenant
+	// claim is not read. Empty = multi-tenant, tenant from the claim.
+	TenantID string
 	// DevAuth is the POSITIVE opt-in for the unauthenticated dev paths:
 	// X-Dev-Tenant on /api and X-Scope-OrgID without a service token on
 	// /delivery. It used to be implied by NODE_ENV != "production" — and an
@@ -163,8 +182,11 @@ func Load() (*Config, error) {
 		PublicURL:   getenv("PUBLIC_URL", "http://localhost:3000"),
 		DatabaseURL: getenvOptional("DATABASE_URL"),
 
-		JWTIssuer: getenvOptional("RESONANS_JWT_ISSUER"),
-		JWKSURL:   getenvOptional("RESONANS_JWKS_URL"),
+		JWTIssuer:   getenvOptional("RESONANS_JWT_ISSUER"),
+		JWKSURL:     getenvOptional("RESONANS_JWKS_URL"),
+		JWTAudience: getenvOptional("RESONANS_JWT_AUDIENCE"),
+		TenantClaim: getenv("RESONANS_TENANT_CLAIM", auth.DefaultTenantClaim),
+		RoleClaim:   getenv("RESONANS_ROLE_CLAIM", auth.DefaultRoleClaim),
 		// Exactly "1" opens it. Not getbool: "true", "yes" and "" stay closed, so
 		// only one positively declared value can open an auth gate.
 		DevAuth:       strings.TrimSpace(os.Getenv("RESONANS_DEV_AUTH")) == "1",
@@ -213,6 +235,16 @@ func Load() (*Config, error) {
 		}
 	}
 
+	roleMap, err := auth.ParseRoleMap(getenvOptional("RESONANS_ROLE_MAP"))
+	if err != nil {
+		return nil, fmt.Errorf("RESONANS_ROLE_MAP: %w", err)
+	}
+	cfg.RoleMap = roleMap
+
+	if err := cfg.loadTenantMode(); err != nil {
+		return nil, err
+	}
+
 	// The JWKS is the TRUST ANCHOR for every editor request. Fetched over plain
 	// http, anyone on the path can substitute the signing keys and mint tokens
 	// this server would accept — which is an authentication bypass, not a hygiene
@@ -239,6 +271,13 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Without an audience, any valid token from the issuer is accepted —
+	// including one the provider minted for a different service. Measured on
+	// f2114a9: Audience existed in the verifier and nothing ever set it.
+	if cfg.AuthEnabled() && cfg.JWTAudience == "" {
+		return nil, ErrNoAudience
+	}
+
 	// The source offer is published on /healthz. Today it is a JSON string read
 	// by people, so a scheme other than http(s) is merely useless — but the day
 	// anyone renders it as a link, `javascript:` or `data:` becomes a real XSS
@@ -260,6 +299,29 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// loadTenantMode reads RESONANS_TENANT_MODE and RESONANS_TENANT_ID. The two
+// must agree: single needs a tenant id, and an id without single would be a
+// setting that looks like it does something and does not.
+func (c *Config) loadTenantMode() error {
+	mode := getenv("RESONANS_TENANT_MODE", "multi")
+	id := getenvOptional("RESONANS_TENANT_ID")
+	switch mode {
+	case "multi":
+		if id != "" {
+			return errors.New("RESONANS_TENANT_ID is set but RESONANS_TENANT_MODE is not single — set RESONANS_TENANT_MODE=single, or remove the id")
+		}
+		return nil
+	case "single":
+		if _, err := uuid.Parse(id); err != nil {
+			return fmt.Errorf("RESONANS_TENANT_MODE=single needs RESONANS_TENANT_ID to be a UUID, got %q", id)
+		}
+		c.TenantID = id
+		return nil
+	default:
+		return fmt.Errorf("RESONANS_TENANT_MODE: must be single or multi, got %q", mode)
+	}
+}
+
 // IsProduction reports whether NODE_ENV == "production".
 func (c *Config) IsProduction() bool { return c.NodeEnv == "production" }
 
@@ -270,6 +332,7 @@ func (c *Config) AuthEnabled() bool { return c.JWTIssuer != "" && c.JWKSURL != "
 // ErrNoEditorAuth and ErrNoDeliveryAuth name the refusal to start with an
 // unauthenticated surface that nobody opted into.
 var (
+	ErrNoAudience     = errors.New("RESONANS_JWT_AUDIENCE not set while JWT auth is configured — refusing to start: without an audience the editor API accepts any token the issuer minted, for any service")
 	ErrNoEditorAuth   = errors.New("RESONANS_JWT_ISSUER + RESONANS_JWKS_URL not set and RESONANS_DEV_AUTH is not 1 — refusing to start with unauthenticated editor endpoints (X-Dev-Tenant)")
 	ErrNoDeliveryAuth = errors.New("RESONANS_DELIVERY_TOKEN not set and RESONANS_DEV_AUTH is not 1 — refusing to start with an unauthenticated content-delivery surface (X-Scope-OrgID)")
 	ErrDevAuthInProd  = errors.New("RESONANS_DEV_AUTH=1 with NODE_ENV=production — refusing to start: dev auth is never allowed in production")
