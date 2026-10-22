@@ -1,3 +1,16 @@
+# [2.1.0](https://github.com/KlangHaus/resonans/compare/v2.0.0...v2.1.0) (2026-10-22)
+
+
+### Bug Fixes
+
+* **settings:** qualify tenant_settings with its schema ([208354d](https://github.com/KlangHaus/resonans/commit/208354d73706909e29d8049ff0200480e53b1f1b))
+
+
+### Features
+
+* **examples:** klanghaus.dk on Resonans, with landing pages and a blog ([db7ad00](https://github.com/KlangHaus/resonans/commit/db7ad00238e63cb8df93c15f2ae58a98a1836841))
+* **schema:** landing-page sections — section_header, hero extras, variants ([198bb51](https://github.com/KlangHaus/resonans/commit/198bb51e59c085f2ea43abfcf3932197aa80615b))
+
 # [2.0.0](https://github.com/KlangHaus/resonans/compare/v1.21.8...v2.0.0) (2026-10-22)
 
 
