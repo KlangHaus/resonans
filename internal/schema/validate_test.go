@@ -104,6 +104,31 @@ func TestValidatePageMarketingBlocks(t *testing.T) {
 	}
 }
 
+// A landing page is a sequence of sections. Both directions: a section_header
+// with its heading and the hero's optional fields pass; a section_header
+// without a heading is refused, and so is one in a lesson, where it is not
+// allowed.
+func TestValidateLandingPageSections(t *testing.T) {
+	ok := `{"body": [
+		{"_type": "hero", "eyebrow": {"da": "Lydstudier"}, "heading": {"da": "Velkommen"},
+		 "imageAlt": {"da": "Et studie"}, "secondaryCtaLabel": {"da": "Se mere"}, "secondaryCtaHref": "#a"},
+		{"_type": "section_header", "anchor": "a", "eyebrow": {"da": "Studierne"}, "navLabel": {"da": "Rum"},
+		 "heading": {"da": "Et rum der er dit"}, "lead": {"da": "Kort intro."}},
+		{"_type": "feature_grid", "variant": "cards", "features": [{"title": {"da": "Lydreguleret"}}]}
+	]}`
+	if err := validate(t, "page", ok); err != nil {
+		t.Fatalf("valid landing page rejected: %v", err)
+	}
+	noHeading := `{"body": [{"_type": "section_header", "anchor": "a"}]}`
+	if err := validate(t, "page", noHeading); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("section_header without heading: err = %v, want ErrInvalid", err)
+	}
+	inLesson := `{"body": [{"_type": "section_header", "heading": {"da": "Hej"}}]}`
+	if err := validate(t, "lesson", inLesson); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("section_header in a lesson: err = %v, want ErrInvalid", err)
+	}
+}
+
 // An unrecognized rich_text.format is rejected at the door, so it can never
 // reach storage and be routed by a later reader. The denominator is asserted:
 // if someone adds a format value, this test goes red until it is listed here.

@@ -24,3 +24,28 @@ local_resource(
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['resonans'],
 )
+
+# --- Example: klanghaus.dk on Resonans (examples/klanghaus-site) ---
+# The marketing site, landing pages and blog of klanghaus.dk, with every word and
+# photo served by this Resonans. Press "klanghaus-site-seed" once after
+# "resonans-seed" (the blog posts come from that one), then open
+# http://localhost:3050.
+local_resource(
+    'klanghaus-site-seed',
+    cmd='node seed/seed.mjs',
+    dir='examples/klanghaus-site',
+    env={'RESONANS_URL': 'http://localhost:3000', 'RESONANS_TENANT': '11111111-1111-1111-1111-111111111111'},
+    labels=['examples'],
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['resonans'],
+)
+local_resource(
+    'klanghaus-site',
+    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port 3050',
+    serve_dir='examples/klanghaus-site',
+    serve_env={'NUXT_RESONANS_URL': 'http://localhost:3000'},
+    links=[link('http://localhost:3050', 'klanghaus.dk on Resonans')],
+    labels=['examples'],
+    resource_deps=['resonans'],
+)

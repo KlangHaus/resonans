@@ -51,7 +51,7 @@ function safeImageUrl(u: unknown): string | null {
 // Block icons — the same glyph family as the editor panel's block cards.
 const ICONS: Record<string, string> = {
   rich_text: '¶', video_embed: '▶', image: '▦', callout: '!', quiz: '?', code: '</>',
-  download: '⤓', iframe_embed: '▭', hero: '★', cta: '→', quote: '“', feature_grid: '▦', columns: '▥',
+  download: '⤓', iframe_embed: '▭', hero: '★', section_header: '§', cta: '→', quote: '“', feature_grid: '▦', columns: '▥',
 }
 
 function label(type: string): string {
