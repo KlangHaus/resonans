@@ -1,3 +1,3 @@
 {"total_count":2,"check_runs":[
- {"id":200,"name":"Lint + Test","status":"completed","conclusion":"success","started_at":"2026-09-19T18:20:00Z","app":{"id":15368,"slug":"github-actions"}},
+ {"id":200,"name":"jenkins/Lint + Test","status":"completed","conclusion":"success","started_at":"2026-09-19T18:20:00Z","app":{"id":4785909,"slug":"klanghaus-ci"}},
  {"id":201,"name":"Jenkins","status":"completed","conclusion":"success","started_at":"2026-09-19T18:21:00Z","app":{"id":4785909,"slug":"klanghaus-ci"}}]}
