@@ -50,7 +50,7 @@ func (s *PostgresStore) EnabledTypes(ctx context.Context, tenantID uuid.UUID) ([
 		var raw []byte
 		err := tx.QueryRow(
 			ctx,
-			`select enabled_types from tenant_settings where tenant_id = $1`, tenantID,
+			`select enabled_types from resonans_app.tenant_settings where tenant_id = $1`, tenantID,
 		).Scan(&raw)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // no row = all types enabled (empty slice)
@@ -73,7 +73,7 @@ func (s *PostgresStore) SetEnabledTypes(ctx context.Context, tenantID uuid.UUID,
 	}
 	return s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
-			`insert into tenant_settings (tenant_id, enabled_types, updated_at)
+			`insert into resonans_app.tenant_settings (tenant_id, enabled_types, updated_at)
 			 values ($1, $2, now())
 			 on conflict (tenant_id) do update set enabled_types = excluded.enabled_types, updated_at = now()`,
 			tenantID, raw)
@@ -88,7 +88,7 @@ func (s *PostgresStore) PreviewURL(ctx context.Context, tenantID uuid.UUID) (str
 	var out string
 	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx,
-			`select preview_url from tenant_settings where tenant_id = $1`, tenantID,
+			`select preview_url from resonans_app.tenant_settings where tenant_id = $1`, tenantID,
 		).Scan(&out)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
@@ -104,7 +104,7 @@ func (s *PostgresStore) PreviewURL(ctx context.Context, tenantID uuid.UUID) (str
 func (s *PostgresStore) SetPreviewURL(ctx context.Context, tenantID uuid.UUID, template string) error {
 	return s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
-			`insert into tenant_settings (tenant_id, preview_url, updated_at)
+			`insert into resonans_app.tenant_settings (tenant_id, preview_url, updated_at)
 			 values ($1, $2, now())
 			 on conflict (tenant_id) do update set preview_url = excluded.preview_url, updated_at = now()`,
 			tenantID, template)
