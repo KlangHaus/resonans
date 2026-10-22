@@ -2,24 +2,25 @@
 // The blocks a blog post body uses: rich text, callout, code, a call to action,
 // and columns of those.
 import { GTButton } from '@grundtone/vue'
-import { str, isExternal, type Block } from '~/composables/useSections'
+import { str, isExternal, useEditable, type Block } from '~/composables/useSections'
 
-defineProps<{ block: Block }>()
+defineProps<{ block: Block; index?: number }>()
+const ed = useEditable()
 const cells = (b: Block) => (Array.isArray(b.columns) ? (b.columns as Array<{ content?: Block[] }>) : [])
 </script>
 
 <template>
   <!-- eslint-disable-next-line vue/no-v-html -- Resonans sanitizes rich text on save -->
-  <div v-if="block._type === 'rich_text'" class="kh-prose" v-html="str(block.value)" />
-  <div v-else-if="block._type === 'callout'" class="kh-callout" :class="`kh-callout--${str(block.variant) || 'info'}`" role="note">
+  <div v-if="block._type === 'rich_text'" class="kh-prose" v-bind="ed(index, 'value')" v-html="str(block.value)" />
+  <div v-else-if="block._type === 'callout'" class="kh-callout" :class="`kh-callout--${str(block.variant) || 'info'}`" role="note" v-bind="ed(index, 'value')">
     <!-- eslint-disable-next-line vue/no-v-html -- sanitized on save -->
     <div v-html="str(block.value)" />
   </div>
-  <figure v-else-if="block._type === 'code'" class="kh-code">
+  <figure v-else-if="block._type === 'code'" class="kh-code" v-bind="ed(index, 'value')">
     <figcaption v-if="str(block.filename)">{{ str(block.filename) }}</figcaption>
     <pre><code>{{ str(block.value) }}</code></pre>
   </figure>
-  <div v-else-if="block._type === 'cta'" class="kh-sec__cta">
+  <div v-else-if="block._type === 'cta'" class="kh-sec__cta" v-bind="ed(index, 'label')">
     <p v-if="str(block.heading)" class="kh-sec__lead">{{ str(block.heading) }}</p>
     <GTButton
       as="a"
@@ -31,7 +32,7 @@ const cells = (b: Block) => (Array.isArray(b.columns) ? (b.columns as Array<{ co
       {{ str(block.label) }}
     </GTButton>
   </div>
-  <div v-else-if="block._type === 'columns'" class="kh-columns">
+  <div v-else-if="block._type === 'columns'" class="kh-columns" v-bind="ed(index)">
     <div v-for="(c, i) in cells(block)" :key="i">
       <PostBlock v-for="(inner, j) in c.content ?? []" :key="j" :block="inner" />
     </div>

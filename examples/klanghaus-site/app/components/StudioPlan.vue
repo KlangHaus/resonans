@@ -8,9 +8,10 @@
 // an editor changes it in Resonans and the next request shows it.
 import { GTButton } from '@grundtone/vue'
 import { SITE, PLAN_TOP, PLAN_BOTTOM } from '~/site'
-import type { Feature } from '~/composables/useSections'
+import { useEditable, type Feature } from '~/composables/useSections'
 
-const props = defineProps<{ studios: Feature[] }>()
+const props = defineProps<{ studios: Feature[]; blockIndex?: number }>()
+const ed = useEditable()
 
 const MONTHS = ['januar', 'februar', 'marts', 'april', 'maj', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'december']
 const dateLabel = (iso: string) => {
@@ -24,7 +25,8 @@ const dateShort = (iso: string) => {
 
 const studios = computed(() =>
   props.studios
-    .map((f) => ({
+    .map((f, fi) => ({
+      fi,
       nr: Number.parseInt(String(f.title ?? '').replace(/\D+/g, ''), 10),
       m2: Number.parseInt(String(f.body ?? ''), 10),
       availableFrom: /^\d{4}-\d{2}-\d{2}$/.test(String(f.icon ?? '')) ? String(f.icon) : undefined,
@@ -74,7 +76,7 @@ const lead = computed(() => {
     <div class="kh-plan" role="group" aria-label="Skitse af huset med studie 1 til 10, te-køkken og toilet (ikke i målestok)">
       <ol class="kh-plan__row" aria-label="Studie 5, 4, 3, 2 og 1">
         <template v-for="nr in PLAN_TOP" :key="nr">
-          <li v-if="room(nr)" class="kh-room" :class="{ 'kh-room--free': freeById.has(nr) }" :style="{ '--m': room(nr)!.m2 }">
+          <li v-if="room(nr)" class="kh-room" :class="{ 'kh-room--free': freeById.has(nr) }" :style="{ '--m': room(nr)!.m2 }" v-bind="ed(blockIndex, 'features', room(nr)!.fi)">
             <span class="kh-room__n">{{ nr }}</span>
             <span class="kh-room__m">{{ room(nr)!.m2 }} m²</span>
             <span v-if="freeById.has(nr)" class="kh-room__s">Ledig {{ freeById.get(nr)!.short }}</span>
@@ -84,7 +86,7 @@ const lead = computed(() => {
       <div class="kh-plan__gang" aria-hidden="true">Gang</div>
       <ol class="kh-plan__row" aria-label="Studie 9, 8, 7, 6 og 10, te-køkken og toilet">
         <template v-for="nr in PLAN_BOTTOM" :key="nr">
-          <li v-if="room(nr)" class="kh-room" :class="{ 'kh-room--free': freeById.has(nr) }" :style="{ '--m': room(nr)!.m2 }">
+          <li v-if="room(nr)" class="kh-room" :class="{ 'kh-room--free': freeById.has(nr) }" :style="{ '--m': room(nr)!.m2 }" v-bind="ed(blockIndex, 'features', room(nr)!.fi)">
             <span class="kh-room__n">{{ nr }}</span>
             <span class="kh-room__m">{{ room(nr)!.m2 }} m²</span>
             <span v-if="freeById.has(nr)" class="kh-room__s">Ledig {{ freeById.get(nr)!.short }}</span>

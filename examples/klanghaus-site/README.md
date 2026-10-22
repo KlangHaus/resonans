@@ -37,12 +37,39 @@ NUXT_RESONANS_URL=http://localhost:3000 pnpm dev --port 3050
 
 The seed is safe to run again: a page that exists is updated and republished, not duplicated.
 
+## Live preview in the editor
+
+This site is wired into Resonans' visual editing (the reference is
+`examples/visual-editing`). Open a page in the editor and press **Visuel**: the
+site is framed beside the form, every keystroke re-renders it from the unsaved
+document, and a click on an element in the preview selects its field.
+
+- **Route:** `/preview/{type}/{slug}?token=…&locale=…` renders the draft from
+  `GET /delivery/v1/preview/…` with the editor's short-lived token. No token, a
+  wrong or an expired one is a 401 and no content.
+- **Fenced off:** `Content-Security-Policy: frame-ancestors <editor origin>`,
+  `Cache-Control: no-store`, `X-Robots-Tag: noindex` — on that route only. The
+  editor origin is `NUXT_PUBLIC_STUDIO_ORIGIN`, never read from the URL.
+- **Bridge:** only the preview route loads `<resonans>/bridge/v1/resonans-bridge.js`
+  (`NUXT_PUBLIC_RESONANS_PUBLIC_URL`) and marks values with `data-resonans-path`.
+  The public pages get neither.
+- **Live updates are sanitized here.** Resonans sanitizes rich text when a
+  document is saved, but the unsaved envelope the editor pushes live is built
+  from the body as typed. The preview cleans rich text with DOMPurify before it
+  reaches `v-html`.
+- **Set up by the seed:** `pnpm seed` sets the tenant's preview URL to
+  `${SITE_URL}/preview/{type}/{slug}?token={token}&locale={locale}`
+  (`SITE_URL` defaults to `http://localhost:3050`).
+
 ## How a page becomes a landing page
 
 A Resonans `page` is a flat list of blocks. This site reads it as sections:
 
 - everything before the first `section_header` is the opening — a `hero`, and a `feature_grid`
   with variant `facts` under it;
+- a `hero` heading uses `|` for a line break and `*…*` for the emphasised part
+  (`KlangHaus er ikke et studie.|Det er *et hjem for musikere.*`): the editor
+  edits headings in a single-line field, where a newline would be lost;
 - each `section_header` starts a section (`eyebrow`, `heading`, `lead`, `anchor` for `#links`,
   `navLabel` for the menu) that runs until the next one.
 

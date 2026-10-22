@@ -45,5 +45,12 @@ export default defineNuxtConfig({
     // Empty in Tilt: the dev API runs with RESONANS_DEV_AUTH=1 and trusts the
     // tenant header. Any real deployment sets RESONANS_DELIVERY_TOKEN.
     resonansDeliveryToken: '',
+    public: {
+      // Visual editing (the /preview route only). The editor's exact origin —
+      // the only window allowed to frame a draft or talk to the bridge.
+      studioOrigin: 'http://localhost:3030',
+      // Resonans as the BROWSER reaches it, for the bridge script.
+      resonansPublicUrl: 'http://localhost:3000',
+    },
   },
 })
