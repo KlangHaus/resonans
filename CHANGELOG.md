@@ -1,3 +1,10 @@
+## [2.2.1](https://github.com/KlangHaus/resonans/compare/v2.2.0...v2.2.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** upgrade studio to nuxt 4.6.2 to clear 17 Dependabot alerts ([00c436b](https://github.com/KlangHaus/resonans/commit/00c436b7621657b912b17b64136fe104247366fa))
+
 # [2.2.0](https://github.com/KlangHaus/resonans/compare/v2.1.0...v2.2.0) (2026-10-23)
 
 
