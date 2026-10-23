@@ -1,3 +1,16 @@
+# [2.2.0](https://github.com/KlangHaus/resonans/compare/v2.1.0...v2.2.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* **examples:** the klanghaus preview drops DOMPurify; Resonans sends live previews already clean ([15e666e](https://github.com/KlangHaus/resonans/commit/15e666e2d1039ebc6606b25731ad1dafdbb73150))
+* **sanitize:** one own HTML policy — the API cleans live previews, the editor drops DOMPurify ([48d17fa](https://github.com/KlangHaus/resonans/commit/48d17fa17ba38eeb072ec323f5abd9a7bc927d91))
+
+
+### Features
+
+* **examples:** live preview in the editor for the klanghaus.dk example ([bdded61](https://github.com/KlangHaus/resonans/commit/bdded61b113e50deeafe43c709682fa6e68b7913))
+
 # [2.1.0](https://github.com/KlangHaus/resonans/compare/v2.0.0...v2.1.0) (2026-10-22)
 
 
