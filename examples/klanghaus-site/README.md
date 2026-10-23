@@ -53,10 +53,9 @@ document, and a click on an element in the preview selects its field.
 - **Bridge:** only the preview route loads `<resonans>/bridge/v1/resonans-bridge.js`
   (`NUXT_PUBLIC_RESONANS_PUBLIC_URL`) and marks values with `data-resonans-path`.
   The public pages get neither.
-- **Live updates are sanitized here.** Resonans sanitizes rich text when a
-  document is saved, but the unsaved envelope the editor pushes live is built
-  from the body as typed. The preview cleans rich text with DOMPurify before it
-  reaches `v-html`.
+- **No sanitizer in the site.** Resonans cleans rich text with one server-side
+  policy, both when a document is saved and in the unsaved envelope the editor
+  pushes live, so what reaches `v-html` here is already clean.
 - **Set up by the seed:** `pnpm seed` sets the tenant's preview URL to
   `${SITE_URL}/preview/{type}/{slug}?token={token}&locale={locale}`
   (`SITE_URL` defaults to `http://localhost:3050`).
