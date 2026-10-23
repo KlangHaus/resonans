@@ -113,3 +113,12 @@ $bp-mobile: 820px;
     grid-template-columns: 1fr;
   }
 }
+
+// The hero's ::before is a decorative gradient laid over the whole section
+// (landing.scss). The facts row under it is not positioned, so the layer sat on
+// top of it and swallowed every click: measured with elementFromPoint, a click
+// on "Fiber" hit SECTION.kh-hero instead of the fact. Invisible on the public
+// page; in the editor's preview it made the facts unclickable.
+.kh-hero::before {
+  pointer-events: none;
+}

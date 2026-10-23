@@ -210,6 +210,16 @@ func (h *Handlers) previewEnvelope(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errBody("body must be a JSON object"))
 		return
 	}
+	// 🔴 Sanitized exactly as a save would be. This envelope is rendered by the
+	// tenant's frontend inside the editor (visual editing), and until 2026-10-23
+	// it carried the body as typed: `<img src=x onerror=…>` came back unchanged,
+	// so every frontend had to remember to clean it. Now the one server-side
+	// policy that cleans stored content cleans this too.
+	clean, ok := h.sanitizeBody(w, in.Type, body)
+	if !ok {
+		return
+	}
+	body = clean
 	locale := in.Locale
 	if locale == "" {
 		locale = delivery.DefaultLocale

@@ -10,14 +10,17 @@ import type { Envelope } from '~~/server/utils/resonans'
 const route = useRoute()
 const onHome = computed(() => route.path === '/')
 const { data: home } = await useFetch<Envelope>('/api/pages/forside', { key: 'page-forside' })
+// While the front page is open in the editor's preview, its draft drives the menu.
+const draftHome = useState<Block[] | null>('preview-home', () => null)
+const homeBlocks = computed<Block[]>(() => draftHome.value ?? ((home.value?.components ?? []) as Block[]))
 
 const links = computed(() =>
-  ((home.value?.components ?? []) as Block[])
+  homeBlocks.value
     .map((c) => ({ c, label: str(c.navLabel) || str(c.eyebrow) }))
     .filter(({ c, label }) => c._type === 'section_header' && str(c.anchor) && label)
     .map(({ c, label }) => ({ href: `${onHome.value ? '' : '/'}#${str(c.anchor)}`, label })),
 )
-const hero = computed(() => (home.value?.components ?? []).find((c) => c._type === 'hero'))
+const hero = computed(() => homeBlocks.value.find((c) => c._type === 'hero'))
 // The header button repeats the hero's main call to action, without its arrow.
 const cta = computed(() => ({
   label: str(hero.value?.ctaLabel).replace(/\s*[→↗]\s*$/, ''),

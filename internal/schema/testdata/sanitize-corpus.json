@@ -1,0 +1,30 @@
+{
+  "_why": [
+    "One corpus, two sanitizers: the server's policy (internal/schema/sanitize.go, Go)",
+    "and the editor's own (studio/app/utils/sanitize.ts, TypeScript) must both pass it,",
+    "so the two cannot drift. Outputs are compared on properties, not bytes: the two",
+    "serialize differently (`<br/>` vs `<br>`), and that difference is harmless.",
+    "mustNotContain is checked case-insensitively against the output; mustContain exactly."
+  ],
+  "cases": [
+    { "name": "formatting survives", "input": "<p>ok <strong>fed</strong> <em>skrå</em></p>", "mustContain": ["<p>", "<strong>fed</strong>", "<em>skrå</em>"], "mustNotContain": [] },
+    { "name": "lists and headings survive", "input": "<h2>A</h2><ul><li>x</li></ul><ol><li>y</li></ol><blockquote>q</blockquote>", "mustContain": ["<h2>A</h2>", "<li>x</li>", "<li>y</li>", "<blockquote>q</blockquote>"], "mustNotContain": [] },
+    { "name": "https link survives", "input": "<a href=\"https://klanghaus.dk/\">kh</a>", "mustContain": ["href=\"https://klanghaus.dk/\"", ">kh</a>"], "mustNotContain": [] },
+    { "name": "mailto link survives", "input": "<a href=\"mailto:mail@klanghaus.dk\">m</a>", "mustContain": ["href=\"mailto:mail@klanghaus.dk\""], "mustNotContain": [] },
+    { "name": "img onerror", "input": "<p>ok</p><img src=x onerror=alert(1)>", "mustContain": ["<p>ok</p>"], "mustNotContain": ["onerror", "<img"] },
+    { "name": "script and its content", "input": "<p>a</p><script>alert(1)</script><p>b</p>", "mustContain": ["<p>a</p>", "<p>b</p>"], "mustNotContain": ["<script", "alert(1)"] },
+    { "name": "style and its content", "input": "<style>body{display:none}</style><p>x</p>", "mustContain": ["<p>x</p>"], "mustNotContain": ["<style", "display:none"] },
+    { "name": "javascript: href", "input": "<a href=\"javascript:alert(1)\">x</a>", "mustContain": ["x"], "mustNotContain": ["javascript:"] },
+    { "name": "javascript: with case and whitespace", "input": "<a href=\" JaVaScRiPt:alert(1)\">x</a>", "mustContain": ["x"], "mustNotContain": ["javascript:"] },
+    { "name": "data: href", "input": "<a href=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\">x</a>", "mustContain": ["x"], "mustNotContain": ["data:"] },
+    { "name": "relative href is dropped", "input": "<a href=\"/admin\">x</a>", "mustContain": ["x"], "mustNotContain": ["href"] },
+    { "name": "svg animate onbegin", "input": "<svg><animate onbegin=alert(1) attributeName=x dur=1s></svg>", "mustContain": [], "mustNotContain": ["<svg", "onbegin", "<animate"] },
+    { "name": "iframe", "input": "<iframe src=\"https://evil.example\"></iframe><p>x</p>", "mustContain": ["<p>x</p>"], "mustNotContain": ["<iframe", "evil.example"] },
+    { "name": "event handler on an allowed tag", "input": "<p onclick=\"alert(1)\" style=\"color:red\" class=\"c\" id=\"i\">x</p>", "mustContain": ["<p>x</p>"], "mustNotContain": ["onclick", "style=", "class=", "id="] },
+    { "name": "unknown tag keeps its text", "input": "<span>keep me</span><font color=red>and me</font>", "mustContain": ["keep me", "and me"], "mustNotContain": ["<span", "<font"] },
+    { "name": "comment is dropped", "input": "<p>x</p><!-- <img src=x onerror=alert(1)> -->", "mustContain": ["<p>x</p>"], "mustNotContain": ["onerror", "<!--"] },
+    { "name": "noscript mutation bait", "input": "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></noscript>", "mustContain": [], "mustNotContain": ["onerror", "<img"] },
+    { "name": "math mutation bait", "input": "<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>", "mustContain": [], "mustNotContain": ["onerror", "<img", "<math"] },
+    { "name": "plain text is escaped, not executed", "input": "a < b & c > d", "mustContain": ["&lt;", "&amp;"], "mustNotContain": ["<b"] }
+  ]
+}
