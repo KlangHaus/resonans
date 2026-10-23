@@ -70,6 +70,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # The editor's own HTML sanitizer against the corpus the server's policy
+      # runs too (internal/schema/testdata/sanitize-corpus.json): if either side
+      # drifts, one of the two suites goes red.
+      - name: Unit tests
+        run: pnpm test
+
       - name: Build
         run: pnpm build
 

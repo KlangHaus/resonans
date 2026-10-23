@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -116,5 +117,44 @@ func TestPreviewSettingsRoundtripAndIsolation(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &got)
 	if rec.Code != http.StatusOK || got["previewUrl"] != "" {
 		t.Errorf("clear: %d %v", rec.Code, got)
+	}
+}
+
+// The live preview envelope is rendered by the tenant's frontend inside the
+// editor, so it must be sanitized like a save. Both directions in one test: the
+// formatting survives (positive control), the event handler does not.
+func TestPreviewEnvelopeIsSanitizedLikeASave(t *testing.T) {
+	h := testRouter(t)
+	rec := do(t, h, http.MethodPost, "/api/v1/preview/envelope", tenantA, map[string]any{
+		"type": "page",
+		"slug": "home",
+		"body": map[string]any{
+			"body": []any{map[string]any{
+				"_type":  "rich_text",
+				"format": "html",
+				"value":  map[string]any{"da": `<p>ok <strong>fed</strong></p><img src=x onerror=alert(1)><a href="javascript:alert(1)">x</a>`},
+			}},
+		},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body)
+	}
+	var env struct {
+		Components []map[string]any `json:"components"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Components) != 1 {
+		t.Fatalf("components = %d, want 1", len(env.Components))
+	}
+	got, _ := env.Components[0]["value"].(string)
+	for _, bad := range []string{"onerror", "<img", "javascript:"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("preview envelope kept %q: %s", bad, got)
+		}
+	}
+	if !strings.Contains(got, "<p>ok <strong>fed</strong></p>") {
+		t.Errorf("formatting lost (the control): %s", got)
 	}
 }
