@@ -26,6 +26,8 @@ export default defineEventHandler(async (event) => {
     code_challenge_method: 'S256',
     state,
     nonce,
+    // The token and refresh calls inherit the resource from the grant.
+    ...(s.resource ? { resource: s.resource } : {}),
   })
   return sendRedirect(event, url.href, 302)
 })

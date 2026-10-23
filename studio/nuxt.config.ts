@@ -50,6 +50,11 @@ export default defineNuxtConfig({
       sessionSecret: '',
       // "1" allows plain-http discovery and token calls. Local provider only.
       allowInsecure: '',
+      // RFC 8707 resource indicator for the authorization request, usually the
+      // API's audience (RESONANS_JWT_AUDIENCE). Needed where the provider issues
+      // a verifiable JWT only for a resource-bound grant (BetterAuth's
+      // oauthProvider); leave empty for providers that do not ask for it.
+      resource: '',
     },
     public: {
       // Sentry (SaaS EU) — DSN er publishable; tom = Sentry slået fra.
