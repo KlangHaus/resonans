@@ -16,6 +16,7 @@ coverage.out
 
 # The coverage gate's input, written by CI (ci-go.yml).
 .ci-cover.log
+.it-cover.log
 __pycache__/
 .apidocs/
 

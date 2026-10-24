@@ -246,7 +246,10 @@ jobs:
 
       # A missing DSN is a FAILURE in the test itself, not a skip — a skipped
       # test looks exactly like a passing one on a check-run.
-      - name: RLS integration cells
+      #
+      # internal/content: the Postgres store production runs, as a role WITHOUT
+      # bypassrls. No test called it before these cells.
+      - name: RLS and content store integration cells
         env:
           GOTOOLCHAIN: local
           RESONANS_TEST_DB_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
@@ -255,4 +258,22 @@ jobs:
           set -euo pipefail
           v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
           test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
-          go test -tags=integration -count=1 -v ./internal/persistence/
+          go test -tags=integration -count=1 -v ./internal/persistence/ ./internal/content/
+
+      # Coverage of the same packages WITH the database, against
+      # coverage-floors-integration.json. `Lint + Test` cannot measure this: it
+      # has no database, so there persistence is 0 and content stops at its
+      # memory store.
+      #
+      # A second run, and WITHOUT -v on purpose: -v adds bare `coverage: N%`
+      # lines, a shape the gate refuses to guess at (exit 6, measured). The run
+      # above keeps -v so the log names every cell.
+      - name: Integration coverage gate
+        env:
+          GOTOOLCHAIN: local
+          RESONANS_TEST_DB_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
+          RESONANS_TEST_SCOPE: gh${{ github.run_id }}a${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          go test -tags=integration -count=1 -cover ./internal/persistence/ ./internal/content/ 2>&1 | tee .it-cover.log
+          python3 scripts/coverage_gate.py --floors coverage-floors-integration.json --decide < .it-cover.log

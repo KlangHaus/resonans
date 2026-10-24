@@ -18,175 +18,25 @@ package persistence
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/KlangHaus/resonans/internal/testpg"
 )
 
-const testDSNEnv = "RESONANS_TEST_DB_URL"
+const testDSNEnv = testpg.DSNEnv
 
-// scopeEnv carries a per-build suffix for CLUSTER-WIDE object names.
-const scopeEnv = "RESONANS_TEST_SCOPE"
-
-// testScope makes the roles and databases these cells create unique per build.
-//
-// 🔴 WHY: roles and databases are CLUSTER objects, not database objects. The CI
-// postgres is shared by every repo's agents, so two concurrent builds using a fixed
-// name would create, alter and drop each other's roles — and the failure would look
-// like a flaky test rather than a collision. infra's contract for KH_TEST_PG_DSN
-// states it outright: name your objects after BUILD_TAG and drop them afterwards.
-//
-// Deterministic per build rather than random: a RETRY of the same build reuses the
-// same names, so the `drop ... if exists` in each cell cleans up after a killed run.
-// A random suffix would instead leave a fresh orphan behind on every crash.
-//
-// Empty is a FAILURE, not a default. A cell that silently falls back to a shared
-// name is the collision this function exists to prevent.
-func testScope(t *testing.T) string {
-	t.Helper()
-	raw := strings.TrimSpace(os.Getenv(scopeEnv))
-	if raw == "" {
-		raw = "local"
-	}
-	var b strings.Builder
-	for _, r := range strings.ToLower(raw) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	// Collapse runs of '_' so a BUILD_TAG full of separators does not eat the budget.
-	for strings.Contains(b.String(), "__") {
-		s := strings.ReplaceAll(b.String(), "__", "_")
-		b.Reset()
-		b.WriteString(s)
-	}
-	scope := strings.Trim(b.String(), "_")
-	// Postgres identifiers are capped at 63 bytes and the callers prefix ~25, so
-	// leave room rather than discovering the truncation as a name collision.
-	if len(scope) > 24 {
-		scope = scope[:24]
-	}
-	if scope == "" {
-		t.Fatalf("%s=%q sanitises to an empty identifier — refusing to fall back to a shared "+
-			"name, because a collision between concurrent builds reads as a flaky test", scopeEnv, raw)
-	}
-	return scope
-}
-
-// testPool returns a pool to this build's own database. Use testPoolDSN when the
-// test also needs to CONNECT AS ANOTHER ROLE, because the DSN in the environment
-// points at the ADMIN database and not at the one the migrations ran in.
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool, _ := testPoolDSN(t)
-	return pool
-}
-
-// testPoolDSN returns the pool AND the DSN of this build's own database.
-//
-// 🔴 The DSN matters, and getting it wrong is how this change first failed: the RLS
-// cell rebuilt the app role's DSN from the ENVIRONMENT variable, which points at the
-// admin database. The migrations had run in the per-build database, so the app role
-// connected to a database with no `resonans_app.documents` and the cell died on a
-// missing relation — a correct answer about a NEIGHBOURING object. Every role-swap
-// has to start from the DSN below, not from the environment.
-func testPoolDSN(t *testing.T) (*pgxpool.Pool, string) {
-	t.Helper()
-	dsn := strings.TrimSpace(os.Getenv(testDSNEnv))
-	if dsn == "" {
-		// Not t.Skip. See the package comment: reaching this line means someone
-		// asked for the integration build and did not wire the database, and a
-		// quiet skip would report that as a pass.
-		t.Fatalf("%s is empty — this suite only compiles under -tags=integration, so a missing database is a wiring error, not a reason to pass", testDSNEnv)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// 🔴 EACH BUILD GETS ITS OWN DATABASE, and this is infra's contract for the
-	// shared CI postgres rather than our preference: "create your own database named
-	// after BUILD_TAG, and drop it afterwards", because two concurrent builds of the
-	// same repo would otherwise share a schema and overwrite each other's rows.
-	//
-	// Measured: two concurrent runs with their own database and scope both pass; two
-	// sharing both go one RED and one green. So the isolation is what carries the
-	// passing case, not an accident of timing.
-	//
-	// Done HERE rather than in CI config because CI runners may have no docker
-	// (the former Jenkins agents had none, by [sikkerhed]'s veto) and psql is not
-	// something this repo may assume is on the image. Doing it in Go means the same code path runs locally, so the
-	// contract is measurable on a laptop instead of only on an agent.
-	admin, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect to the admin DSN from %s: %v", testDSNEnv, err)
-	}
-	defer admin.Close()
-	if err := admin.Ping(ctx); err != nil {
-		t.Fatalf("ping the admin DSN: %v", err)
-	}
-
-	dbName := "resonans_ci_" + testScope(t)
-	// Drop first: a killed run leaves the database behind, and because the name is
-	// deterministic per build a retry must be able to reclaim it rather than fail on
-	// "already exists".
-	if _, err := admin.Exec(ctx, "drop database if exists "+dbName+" with (force)"); err != nil {
-		t.Fatalf("reclaim %s: %v", dbName, err)
-	}
-	if _, err := admin.Exec(ctx, "create database "+dbName); err != nil {
-		t.Fatalf("create %s: %v — the DSN's role must be able to CREATE DATABASE, which is "+
-			"what infra's contract for this facility provides", dbName, err)
-	}
-
-	scopedDSN := withDatabase(t, dsn, dbName)
-	pool, err := pgxpool.New(ctx, scopedDSN)
-	if err != nil {
-		t.Fatalf("connect to %s: %v", dbName, err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		t.Fatalf("ping %s: %v", dbName, err)
-	}
-	// LIFO: the pool closes before the drop runs, because `drop database` fails while
-	// a connection is open — and `with (force)` on the reclaim above is the belt for
-	// the case where something else is still attached.
-	t.Cleanup(func() {
-		c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		a, err := pgxpool.New(c, dsn)
-		if err != nil {
-			t.Logf("could not reopen the admin DSN to drop %s: %v — it will be reclaimed by the "+
-				"next run with this scope", dbName, err)
-			return
-		}
-		defer a.Close()
-		if _, err := a.Exec(c, "drop database if exists "+dbName+" with (force)"); err != nil {
-			t.Logf("could not drop %s: %v — it will be reclaimed by the next run with this scope",
-				dbName, err)
-		}
-	})
-	t.Cleanup(pool.Close)
-	return pool, scopedDSN
-}
-
-// withDatabase rewrites a DSN to point at another database on the same server,
-// keeping every other parameter (sslmode in particular) exactly as configured.
-func withDatabase(t *testing.T, dsn, db string) string {
-	t.Helper()
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Fatalf("parse %s as a URL: %v", testDSNEnv, err)
-	}
-	u.Path = "/" + db
-	return u.String()
-}
+// The per-build database helpers live in internal/testpg, shared with the
+// content store's cells. These names keep the cells below unchanged.
+func testScope(t *testing.T) string                    { return testpg.Scope(t) }
+func testPool(t *testing.T) *pgxpool.Pool              { return testpg.Pool(t) }
+func testPoolDSN(t *testing.T) (*pgxpool.Pool, string) { return testpg.PoolDSN(t) }
 
 // coverageSQL runs the file we actually ship, rather than a copy of its query.
 // Two instruments with the same description are one instrument — and if the test
@@ -432,26 +282,6 @@ func withTenant(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, fn 
 	return tx.Commit(ctx)
 }
 
-// rewriteUser swaps the credentials in a DSN, so the probe role connects to the
-// same database the migrations just ran against.
 func rewriteUser(t *testing.T, dsn, user, password string) string {
-	t.Helper()
-	cfg, err := pgx.ParseConfig(dsn)
-	if err != nil {
-		t.Fatalf("parse dsn: %v", err)
-	}
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		user, password, cfg.Host, cfg.Port, cfg.Database, sslMode(dsn))
-}
-
-func sslMode(dsn string) string {
-	if strings.Contains(dsn, "sslmode=") {
-		i := strings.Index(dsn, "sslmode=") + len("sslmode=")
-		rest := dsn[i:]
-		if j := strings.IndexAny(rest, "&"); j >= 0 {
-			return rest[:j]
-		}
-		return rest
-	}
-	return "disable"
+	return testpg.RewriteUser(t, dsn, user, password)
 }

@@ -1,0 +1,18 @@
+{
+  "_why": [
+    "Floors for the packages the `Tenant isolation` job measures with -tags=integration, against a",
+    "real Postgres. coverage-floors.json covers `Lint + Test`, which has no database, so there",
+    "internal/persistence is 0 and internal/content stops at its memory store: 173 of its 337",
+    "statements are postgres.go, the store production runs, which only a database can reach.",
+    "With the tag, a package's unit tests run too, so these numbers are unit + integration.",
+    "",
+    "Same rule as the other file: the measured value rounded DOWN to a whole percent.",
+    "Only the packages the job names are measured. A new integration package must be added to",
+    "the job's `go test` line AND here; MISSING cannot see a package the job never runs.",
+    "Check the job's log with: python3 scripts/coverage_gate.py --floors coverage-floors-integration.json --decide"
+  ],
+  "floors": {
+    "github.com/KlangHaus/resonans/internal/content": 92,
+    "github.com/KlangHaus/resonans/internal/persistence": 61
+  }
+}
