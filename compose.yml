@@ -101,6 +101,8 @@ services:
       NUXT_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID in .env}
       NUXT_OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET in .env}
       NUXT_OIDC_SESSION_SECRET: ${EDITOR_SESSION_SECRET:?set EDITOR_SESSION_SECRET in .env}
+      # Only for providers that issue a JWT for a resource-bound grant alone.
+      NUXT_OIDC_RESOURCE: ${OIDC_RESOURCE:-}
       # As the editor's BROWSER reaches it — the redirect URI is built from it.
       NUXT_OIDC_EDITOR_URL: ${EDITOR_URL:-http://localhost:8080}
       # Inside this network: the editor's server calls the API directly.

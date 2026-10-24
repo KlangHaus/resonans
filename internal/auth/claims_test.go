@@ -68,6 +68,23 @@ func TestAudienceIsEnforced(t *testing.T) {
 	}
 }
 
+// With scope openid some providers (BetterAuth's oauthProvider) issue `aud` as
+// an ARRAY: the API plus the provider's own userinfo endpoint. The token is for
+// us when our audience is one of the values, and not when it is missing.
+func TestAudienceMayBeAnArray(t *testing.T) {
+	priv, set := testKeys(t)
+	v := verifierWith(t, set, VerifierConfig{Audience: testAudience})
+
+	ours := []string{testAudience, "https://auth.example.org/api/auth/oauth2/userinfo"}
+	if _, err := v.Verify(context.Background(), mint(t, priv, map[string]any{"aud": ours})); err != nil {
+		t.Fatalf("array audience containing ours refused: %v", err)
+	}
+	theirs := []string{"permissions", "https://auth.example.org/api/auth/oauth2/userinfo"}
+	if _, err := v.Verify(context.Background(), mint(t, priv, map[string]any{"aud": theirs})); err == nil {
+		t.Fatal("array audience without ours accepted")
+	}
+}
+
 // An HMAC token must be refused on the header, before any key is tried. The
 // control is the same claims signed RS256, which passes.
 func TestOnlyAsymmetricAlgorithmsAreAccepted(t *testing.T) {
