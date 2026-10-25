@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/KlangHaus/resonans/internal/persistence"
 	"github.com/KlangHaus/resonans/internal/testpg"
@@ -35,32 +34,7 @@ func stores(t *testing.T) (app, migrator *PostgresStore) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// The same grants as the RLS cell in internal/persistence: what the app
-	// role is given in production, and no more.
-	role := "content_it_app_" + testpg.Scope(t)
-	const pw = "content-it-not-a-secret"
-	for _, stmt := range []string{
-		`drop role if exists ` + role,
-		`create role ` + role + ` with login password '` + pw + `' nosuperuser nobypassrls noinherit`,
-		`grant usage on schema resonans_app to ` + role,
-		`grant select, insert, update, delete on all tables in schema resonans_app to ` + role,
-	} {
-		if _, err := pool.Exec(ctx, stmt); err != nil {
-			t.Fatalf("%s: %v", stmt, err)
-		}
-	}
-	appPool, err := pgxpool.New(ctx, testpg.RewriteUser(t, scopedDSN, role, pw))
-	if err != nil {
-		t.Fatalf("connect as %s: %v", role, err)
-	}
-	// LIFO: the app pool closes before its role is dropped.
-	t.Cleanup(func() {
-		c := context.Background()
-		_, _ = pool.Exec(c, `revoke all on all tables in schema resonans_app from `+role)
-		_, _ = pool.Exec(c, `revoke all on schema resonans_app from `+role)
-		_, _ = pool.Exec(c, `drop role if exists `+role)
-	})
-	t.Cleanup(appPool.Close)
+	appPool := testpg.AppPool(t, pool, scopedDSN, "content_it_app")
 	return NewPostgresStore(appPool), NewPostgresStore(pool)
 }
 

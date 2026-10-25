@@ -2,8 +2,8 @@
   "_why": [
     "Floors for the packages the `Tenant isolation` job measures with -tags=integration, against a",
     "real Postgres. coverage-floors.json covers `Lint + Test`, which has no database, so there",
-    "internal/persistence is 0 and internal/content stops at its memory store: 173 of its 337",
-    "statements are postgres.go, the store production runs, which only a database can reach.",
+    "internal/persistence is 0, and internal/content and internal/media stop at their memory stores:",
+    "their postgres.go is the store production runs, which only a database can reach.",
     "With the tag, a package's unit tests run too, so these numbers are unit + integration.",
     "",
     "Same rule as the other file: the measured value rounded DOWN to a whole percent.",
@@ -13,6 +13,7 @@
   ],
   "floors": {
     "github.com/KlangHaus/resonans/internal/content": 92,
+    "github.com/KlangHaus/resonans/internal/media": 92,
     "github.com/KlangHaus/resonans/internal/persistence": 61
   }
 }
