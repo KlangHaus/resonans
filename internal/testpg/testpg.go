@@ -236,3 +236,39 @@ func binaryName() string {
 	}
 	return out
 }
+
+// AppPool connects to the build's database as a fresh role WITHOUT bypassrls,
+// with the grants the app role has in production, and drops the role after
+// the test. A store under test must run on this pool: the migrator is a
+// superuser and bypasses RLS, so a cell run as the migrator measures the
+// superuser rather than the policy. name keeps concurrent packages' roles
+// apart (roles are cluster-wide); the scope keeps builds apart.
+func AppPool(t *testing.T, admin *pgxpool.Pool, scopedDSN, name string) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+	role := name + "_" + Scope(t)
+	const pw = "testpg-app-not-a-secret"
+	for _, stmt := range []string{
+		`drop role if exists ` + role,
+		`create role ` + role + ` with login password '` + pw + `' nosuperuser nobypassrls noinherit`,
+		`grant usage on schema resonans_app to ` + role,
+		`grant select, insert, update, delete on all tables in schema resonans_app to ` + role,
+	} {
+		if _, err := admin.Exec(ctx, stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	appPool, err := pgxpool.New(ctx, RewriteUser(t, scopedDSN, role, pw))
+	if err != nil {
+		t.Fatalf("connect as %s: %v", role, err)
+	}
+	// LIFO: the app pool closes before its role is dropped.
+	t.Cleanup(func() {
+		c := context.Background()
+		_, _ = admin.Exec(c, `revoke all on all tables in schema resonans_app from `+role)
+		_, _ = admin.Exec(c, `revoke all on schema resonans_app from `+role)
+		_, _ = admin.Exec(c, `drop role if exists `+role)
+	})
+	t.Cleanup(appPool.Close)
+	return appPool
+}
