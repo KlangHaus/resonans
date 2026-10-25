@@ -69,7 +69,7 @@
     "github.com/KlangHaus/resonans/internal/bridge": 100,
     "github.com/KlangHaus/resonans/internal/config": 93,
     "github.com/KlangHaus/resonans/internal/content": 45,
-    "github.com/KlangHaus/resonans/internal/delivery": 72,
+    "github.com/KlangHaus/resonans/internal/delivery": 92,
     "github.com/KlangHaus/resonans/internal/httpapi": 74,
     "github.com/KlangHaus/resonans/internal/media": 48,
     "github.com/KlangHaus/resonans/internal/observability": 0,
