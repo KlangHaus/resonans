@@ -77,7 +77,7 @@
     "github.com/KlangHaus/resonans/internal/preview": 90,
     "github.com/KlangHaus/resonans/internal/schema": 81,
     "github.com/KlangHaus/resonans/internal/seed": 98,
-    "github.com/KlangHaus/resonans/internal/settings": 29,
+    "github.com/KlangHaus/resonans/internal/settings": 44,
     "github.com/KlangHaus/resonans/migrations": 0,
     "github.com/KlangHaus/resonans/internal/deploycheck": 0,
     "github.com/KlangHaus/resonans/docs/api": 0,
