@@ -247,8 +247,8 @@ jobs:
       # A missing DSN is a FAILURE in the test itself, not a skip — a skipped
       # test looks exactly like a passing one on a check-run.
       #
-      # internal/content and internal/media: the Postgres stores production runs,
-      # as a role WITHOUT bypassrls. No test called either before these cells.
+      # internal/content, media and settings: the Postgres stores production
+      # runs, as a role WITHOUT bypassrls. No test called them before these cells.
       - name: RLS and Postgres store integration cells
         env:
           GOTOOLCHAIN: local
@@ -258,12 +258,12 @@ jobs:
           set -euo pipefail
           v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
           test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
-          go test -tags=integration -count=1 -v ./internal/persistence/ ./internal/content/ ./internal/media/
+          go test -tags=integration -count=1 -v ./internal/persistence/ ./internal/content/ ./internal/media/ ./internal/settings/
 
       # Coverage of the same packages WITH the database, against
       # coverage-floors-integration.json. `Lint + Test` cannot measure this: it
-      # has no database, so there persistence is 0 and content and media stop
-      # at their memory stores.
+      # has no database, so there persistence is 0 and content, media and
+      # settings stop at their memory stores.
       #
       # A second run, and WITHOUT -v on purpose: -v adds bare `coverage: N%`
       # lines, a shape the gate refuses to guess at (exit 6, measured). The run
@@ -275,5 +275,5 @@ jobs:
           RESONANS_TEST_SCOPE: gh${{ github.run_id }}a${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          go test -tags=integration -count=1 -cover ./internal/persistence/ ./internal/content/ ./internal/media/ 2>&1 | tee .it-cover.log
+          go test -tags=integration -count=1 -cover ./internal/persistence/ ./internal/content/ ./internal/media/ ./internal/settings/ 2>&1 | tee .it-cover.log
           python3 scripts/coverage_gate.py --floors coverage-floors-integration.json --decide < .it-cover.log
