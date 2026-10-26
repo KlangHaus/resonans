@@ -32,7 +32,7 @@
 # 🔴 REVISIT when the go directive leaves 1.26: the digest, the tag in this
 # comment and go.mod must move together, and the pinned gosec in ci-go.yml must
 # still be able to read what the new toolchain emits.
-FROM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS build
+FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
@@ -74,7 +74,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
 # The reproducible invariants are the RAW sha256 pinned below and the
 # decompressed size (4 381 105). Both are verified in the build: the digest by
 # sha256sum, which logs `/tmp/renderer.js: OK`, and the archive by `gzip -t`.
-FROM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS apidocs
+FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS apidocs
 ARG SCALAR_VERSION=1.72.4
 ARG SCALAR_SHA256=f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
 # 🔴 THE PIN'S FORMAT IS ASSERTED BEFORE IT IS USED, and that is not belt and
