@@ -165,7 +165,11 @@ have to hold, and each is checked in a different place:
    role with `SUPERUSER` or `BYPASSRLS`, which is why the shipped compose file creates two
    roles: a migrator that owns the schema, and the role the server actually uses. See
    [deploy/initdb/](deploy/initdb/). Collapsing them into one is the mistake this design
-   exists to prevent.
+   exists to prevent. **In production the server checks this itself:** at boot it reads
+   its own role from `pg_roles` and refuses to start if that role is `SUPERUSER` or
+   `BYPASSRLS`, naming the role — and refuses too if it cannot read it. Outside
+   production it starts with a `db_role_bypasses_rls` warning, because a local database
+   is usually a single owner role.
 
    **If you write your own provisioning instead of using that file, read its comment on
    `alter default privileges` first.** Those grants attach to the role that *runs* them, so

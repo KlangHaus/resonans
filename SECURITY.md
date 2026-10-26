@@ -40,5 +40,7 @@ Resonans is multi-tenant and self-hosted, so the things we care about most:
 ## If you run Resonans
 
 Pin a released version rather than `latest`, keep `RESONANS_DEV_AUTH` unset, and do not
-give the role in `DATABASE_URL` `SUPERUSER` or `BYPASSRLS` — that single change silently
-removes every tenant-isolation guarantee in the database.
+give the role in `DATABASE_URL` `SUPERUSER` or `BYPASSRLS` — that single change removes
+every tenant-isolation guarantee in the database. With `NODE_ENV=production` the server
+refuses to start as such a role; in any other environment it starts and logs
+`db_role_bypasses_rls`, so do not run a shared instance in development mode.

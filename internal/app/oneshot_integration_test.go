@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 
+	"github.com/KlangHaus/resonans/internal/persistence"
 	"github.com/KlangHaus/resonans/internal/testpg"
 )
 
@@ -181,17 +183,17 @@ func prodAuth(t *testing.T) (sign func(tenant, role string) string) {
 	}
 }
 
-// Run in production serves from Postgres: content seeded straight into the
-// database is listed through the running API, which the in-memory store could
-// not do (and production refuses to boot without a database anyway).
+// 🔴 The DB-role guard (ClickUp 1amk32fkxc5), over the SAME seeded rows:
 //
-// 🔴 Two runs over the SAME rows, differing ONLY in the database role. As the
-// superuser the CI database gives, another tenant lists every document: the
-// stores' queries carry no tenant_id, and a superuser bypasses RLS. As the app
-// role (no bypassrls, as production connects) it lists none. Run does not
-// check which role it is connected as (ClickUp 1amk32fkxc5), so this
-// difference is the whole of tenant isolation.
-func TestRunInProductionIsolatesOnlyAsTheAppRole(t *testing.T) {
+//   - CONTROL, dev mode as the superuser the CI database gives: another tenant
+//     lists every document. The stores' queries carry no tenant_id, so this is
+//     what a bypassing role does to isolation; without this control the
+//     refusals below could be refusing a harmless thing.
+//   - production as that superuser: refused, naming the role.
+//   - production as a role with ONLY bypassrls: refused. The check is
+//     `rolsuper or rolbypassrls`, and each half gets its own case.
+//   - production as the app role (no bypassrls): serves, isolates, needs a token.
+func TestRunRefusesARoleThatBypassesRLSInProduction(t *testing.T) {
 	ctx := context.Background()
 	base, _ := devEnv(t)
 	pool, scopedDSN := testpg.PoolDSN(t)
@@ -210,44 +212,88 @@ func TestRunInProductionIsolatesOnlyAsTheAppRole(t *testing.T) {
 	}
 	want := countDocs(t, pool, tenant)
 	appDSN := testpg.AppPool(t, pool, scopedDSN, "app_it_app").Config().ConnString()
+	bypassPool := testpg.AppPool(t, pool, scopedDSN, "app_it_bypass")
+	if _, err := pool.Exec(ctx, "alter role app_it_bypass_"+testpg.Scope(t)+" bypassrls"); err != nil {
+		t.Fatalf("give the probe role bypassrls: %v", err)
+	}
+	bypassDSN := bypassPool.Config().ConnString()
+	// The CI user has BOTH attributes, so it cannot tell the two halves of the
+	// check apart; this role is a superuser WITHOUT bypassrls.
+	superPool := testpg.AppPool(t, pool, scopedDSN, "app_it_super")
+	if _, err := pool.Exec(ctx, "alter role app_it_super_"+testpg.Scope(t)+" superuser nobypassrls"); err != nil {
+		t.Fatalf("make the probe role a superuser: %v", err)
+	}
+	superDSN := superPool.Config().ConnString()
+	var super, bypass bool
+	if err := pool.QueryRow(ctx, `select rolsuper, rolbypassrls from pg_roles where rolname = $1`,
+		"app_it_super_"+testpg.Scope(t)).Scan(&super, &bypass); err != nil || !super || bypass {
+		t.Fatalf("control: the superuser-only role has rolsuper=%v rolbypassrls=%v (%v); want true/false", super, bypass, err)
+	}
 
-	sign := prodAuth(t)
-	list := func(tid string) (int, int) {
-		code, body := fetch(t, http.MethodGet, base+"/api/v1/documents",
-			map[string]string{"Authorization": "Bearer " + sign(tid, "viewer")})
+	countFor := func(header map[string]string) (int, int) {
+		code, body := fetch(t, http.MethodGet, base+"/api/v1/documents", header)
 		var resp struct {
 			Documents []map[string]any `json:"documents"`
 		}
 		_ = json.Unmarshal([]byte(body), &resp)
 		return code, len(resp.Documents)
 	}
-	run := func(dsn string, check func()) {
-		t.Setenv("DATABASE_URL", dsn)
-		stop := start(t, ctx, base)
-		check()
-		if err := stop(); err != nil {
-			t.Fatalf("Run after cancel = %v", err)
+
+	// CONTROL: dev as the superuser boots (with a warning) and leaks.
+	stop := start(t, ctx, base)
+	if _, n := countFor(map[string]string{"X-Dev-Tenant": uuid.NewString()}); n != want {
+		t.Fatalf("control: as the superuser another tenant listed %d documents, want all %d — "+
+			"the refusals below would not be shown to matter", n, want)
+	}
+	if err := stop(); err != nil {
+		t.Fatalf("Run after cancel = %v", err)
+	}
+
+	sign := prodAuth(t)
+	for _, c := range []struct{ name, dsn, role string }{
+		{"the CI superuser (both attributes)", scopedDSN, "ci"},
+		{"superuser only", superDSN, "app_it_super_" + testpg.Scope(t)},
+		{"bypassrls only", bypassDSN, "app_it_bypass_" + testpg.Scope(t)},
+	} {
+		t.Setenv("DATABASE_URL", c.dsn)
+		runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		err := Run(runCtx)
+		cancel()
+		if !errors.Is(err, persistence.ErrRoleBypassesRLS) || !strings.Contains(err.Error(), c.role) {
+			t.Errorf("production as %s: Run = %v; want the refusal naming role %q", c.name, err, c.role)
 		}
 	}
 
-	run(scopedDSN, func() {
-		if _, n := list(uuid.NewString()); n != want {
-			t.Fatalf("control: as the superuser another tenant listed %d documents, want all %d — "+
-				"the run below could not show that the role is what isolates", n, want)
-		}
-	})
-	run(appDSN, func() {
-		if code, n := list(tenant.String()); code != http.StatusOK || n != want {
-			t.Errorf("own tenant: %d with %d documents; want 200 and the %d seeded", code, n, want)
-		}
-		if _, n := list(uuid.NewString()); n != 0 {
-			t.Errorf("another tenant listed %d documents as the app role, want 0", n)
-		}
-		// Production auth is real: no token, no access.
-		if code, _ := fetch(t, http.MethodGet, base+"/api/v1/documents", nil); code != http.StatusUnauthorized {
-			t.Errorf("no token = %d, want 401", code)
-		}
-	})
+	t.Setenv("DATABASE_URL", appDSN)
+	stop = start(t, ctx, base)
+	bearer := func(tid string) map[string]string {
+		return map[string]string{"Authorization": "Bearer " + sign(tid, "viewer")}
+	}
+	if code, n := countFor(bearer(tenant.String())); code != http.StatusOK || n != want {
+		t.Errorf("app role, own tenant: %d with %d documents; want 200 and the %d seeded", code, n, want)
+	}
+	if _, n := countFor(bearer(uuid.NewString())); n != 0 {
+		t.Errorf("app role, another tenant listed %d documents, want 0", n)
+	}
+	if code, _ := fetch(t, http.MethodGet, base+"/api/v1/documents", nil); code != http.StatusUnauthorized {
+		t.Errorf("no token = %d, want 401", code)
+	}
+	if err := stop(); err != nil {
+		t.Fatalf("Run after cancel = %v", err)
+	}
+
+	// A check that cannot measure is not a pass: with pg_roles unreadable in this
+	// database, production refuses rather than serving as an unknown role. Last,
+	// because it changes the catalog for every role here (the database is
+	// dropped after the test).
+	if _, err := pool.Exec(ctx, "revoke select on pg_catalog.pg_roles from public"); err != nil {
+		t.Fatalf("hide pg_roles: %v", err)
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := Run(runCtx); err == nil || !strings.Contains(err.Error(), "check the database role") {
+		t.Errorf("production with the role unreadable: Run = %v; want a refusal, not a boot", err)
+	}
 }
 
 // Dev with a database (the Tilt path) migrates at boot: a fresh database has
