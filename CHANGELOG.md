@@ -1,3 +1,21 @@
+# [3.0.0](https://github.com/KlangHaus/resonans/compare/v2.3.0...v3.0.0) (2026-10-26)
+
+
+* fix(app)!: refuse to serve in production as a role that bypasses RLS ([ee56718](https://github.com/KlangHaus/resonans/commit/ee567183f3399d24fe09861541a9f5e9e74f9ff7))
+
+
+### ACTION REQUIRED
+
+* before upgrading, check the role in DATABASE_URL with
+`select rolsuper, rolbypassrls from pg_roles where rolname = current_user`.
+Both must be false; otherwise connect as a role created like
+deploy/initdb/10-app-role.sql.
+
+### BREAKING CHANGES
+
+* with NODE_ENV=production, Resonans no longer starts
+when DATABASE_URL connects as a SUPERUSER or BYPASSRLS role.
+
 # [2.3.0](https://github.com/KlangHaus/resonans/compare/v2.2.1...v2.3.0) (2026-10-24)
 
 
