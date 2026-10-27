@@ -272,3 +272,7 @@ func AppPool(t *testing.T, admin *pgxpool.Pool, scopedDSN, name string) *pgxpool
 	t.Cleanup(appPool.Close)
 	return appPool
 }
+
+// CANARY (never merged): an unchecked error that only a linter reading
+// integration files can see. PR exists to show Lint + Test turn red.
+func plantedLintCanary() { os.Remove("/nonexistent-canary") }
