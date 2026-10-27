@@ -1,0 +1,181 @@
+# SonarQube analysis against our own instance (sonar.klanghaus.dk).
+# Allan 2026-10-27: resonans is out of Jenkins and gets SonarQube through
+# Actions on grundtone's pattern (grundtone develop d432bf2, .github/workflows/
+# sonar.yml). Where this file differs from that one, it says why.
+#
+# REPORTS, does not gate. The quality-gate step is commented out at the end;
+# making it a gate is a decision of its own (who owns the flip, and the order
+# described there), not something a check should start doing on its own.
+#
+# 🔴 PUBLIC REPOSITORY. What keeps the token safe:
+#   · `pull_request`, NEVER `pull_request_target`: a PR from a fork runs with
+#     no secrets at all, so it cannot read SONAR_TOKEN. The scan step is then
+#     skipped and the last step SAYS so, rather than going green on nothing.
+#   · every action is pinned to a 40-hex commit, checked against its tag;
+#   · the token is read-only for the repository (`permissions` below).
+#
+# Repository secrets, not an environment with a branch policy: a policy that
+# only admits main would withhold the secrets from every PR run, and the scan
+# would then only happen AFTER merge — a report, not a barrier, which is the
+# reason grundtone runs it on pull_request at all. Forks are covered by the
+# first bullet above, not by an environment.
+#
+# Branch: main only. resonans has no develop; a PR against any other branch
+# is not analysed, and that is a choice written here, not an omission.
+
+name: SonarQube
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  sonarqube:
+    name: SonarQube analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Job-level `env`, not only on the scanner step: the `secrets` context is
+    # not allowed in a step's `if:`, so the values are lifted here to be tested.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    # The Go coverage includes the integration cells, so they need the same
+    # Postgres the `Tenant isolation` job uses (same tag and digest).
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Sonar uses the history to decide what is NEW code in a change. With
+          # a shallow clone everything looks new.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ── Go: one profile, unit AND integration cells ─────────────────────
+      # -tags=integration compiles the //go:build integration cells in with the
+      # unit tests of the same packages, so content/media/settings/app are
+      # measured with their database (their unit-only numbers are ceilings).
+      # -json goes to the test report Sonar reads; -coverprofile to coverage.
+      - name: Go tests with coverage (unit + integration)
+        env:
+          GOTOOLCHAIN: local
+          RESONANS_TEST_DB_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
+          RESONANS_TEST_SCOPE: sonar${{ github.run_id }}a${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
+          test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
+          go test -tags=integration -count=1 -coverprofile=coverage.out -covermode=atomic -json ./... > go-test-report.json
+
+      # ── Studio: vitest with lcov ────────────────────────────────────────
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          # Same pnpm the Studio pins in package.json (packageManager).
+          version: 10.0.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: studio/pnpm-lock.yaml
+
+      - name: Studio install
+        working-directory: studio
+        run: pnpm install --frozen-lockfile
+
+      # 🔴 The tests import through .nuxt/tsconfig.json, which `nuxt prepare`
+      # generates. ci-studio.yml only gets it because its typecheck step runs
+      # first; here it is explicit. Measured: without it the suite fails with
+      # "Failed to load tsconfig '.nuxt/tsconfig.json'" and writes no lcov.
+      - name: Studio prepare
+        working-directory: studio
+        run: pnpm exec nuxt prepare
+
+      - name: Studio tests with coverage
+        working-directory: studio
+        run: pnpm test:coverage
+
+      # vitest writes paths relative to studio/; the scanner resolves them from
+      # the repository root. Made absolute here, then checked below.
+      - name: Make the Studio lcov paths absolute
+        run: sed -i "s#^SF:#SF:${GITHUB_WORKSPACE}/studio/#" studio/coverage/lcov.info
+
+      # 🔴 Both reports must exist, be non-empty and name real files BEFORE the
+      # scanner runs. Otherwise Sonar reports 0 % — read as a regression, not
+      # as a missing report — or silently ignores a path it cannot resolve.
+      - name: Confirm the coverage reports
+        run: |
+          set -euo pipefail
+          for f in coverage.out go-test-report.json studio/coverage/lcov.info; do
+            if [ ! -s "$f" ]; then
+              echo "::error::$f is missing or empty — Sonar would report 0 % without cause"
+              exit 1
+            fi
+          done
+          gofiles=$(tail -n +2 coverage.out | cut -d: -f1 | sort -u | wc -l)
+          sf=$(grep -c '^SF:' studio/coverage/lcov.info)
+          missing=$(grep '^SF:' studio/coverage/lcov.info | cut -c4- | while read -r p; do [ -f "$p" ] || echo "$p"; done)
+          if [ -n "$missing" ]; then
+            echo "::error::lcov names files that do not exist (the scanner would drop them):"
+            echo "$missing"
+            exit 1
+          fi
+          echo "go: $gofiles files in coverage.out · studio: $sf files in lcov.info, all resolvable"
+
+      # 🔴 Step-skip, never job-skip, when the secrets are absent (a PR from a
+      # fork, or Dependabot, whose runs read a different secret scope): a
+      # skipped JOB reports no status, and should this check ever become
+      # required, those PRs would wait forever for it.
+      - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0 → sonar-scanner 8.1.0.6389
+        if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+
+      # The gate says HOW MANY findings, not WHICH; the detail is behind the
+      # token that only exists here. Diagnostic, never blocking.
+      - name: Print the Sonar findings in the log
+        if: ${{ always() && github.event_name == 'pull_request' && env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        env:
+          SONAR_PROJECT_KEY: KlangHaus_resonans
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bash scripts/print-sonar-findings.sh
+
+      # Not decoration: without it, a green check on a fork's PR cannot be told
+      # apart from a clean analysis.
+      - name: Explain when the analysis was skipped
+        if: ${{ env.SONAR_TOKEN == '' || env.SONAR_HOST_URL == '' }}
+        run: |
+          echo "::notice::SonarQube skipped — SONAR_TOKEN/SONAR_HOST_URL are empty (a fork's PR, Dependabot, or the secrets are not set yet)."
+          echo "::notice::Green here means 'not analysed', NOT 'analysed with no findings'."
+
+      # To make this check GATE rather than report: uncomment this step FIRST,
+      # and only then add "SonarQube analysis" to the required checks. The other
+      # order locks the PR queue in "Expected — waiting for status".
+      # - uses: SonarSource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+      #   timeout-minutes: 5
