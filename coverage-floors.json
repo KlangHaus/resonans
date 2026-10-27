@@ -70,7 +70,7 @@
     "github.com/KlangHaus/resonans/internal/config": 93,
     "github.com/KlangHaus/resonans/internal/content": 45,
     "github.com/KlangHaus/resonans/internal/delivery": 92,
-    "github.com/KlangHaus/resonans/internal/httpapi": 74,
+    "github.com/KlangHaus/resonans/internal/httpapi": 93,
     "github.com/KlangHaus/resonans/internal/media": 71,
     "github.com/KlangHaus/resonans/internal/observability": 0,
     "github.com/KlangHaus/resonans/internal/persistence": 0,
