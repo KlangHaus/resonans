@@ -260,7 +260,7 @@ jobs:
           set -euo pipefail
           v="$(awk '/^go [0-9]/ {print $2; exit}' go.mod)"
           test "$(go env GOVERSION)" = "go${v}" || { echo "running $(go env GOVERSION), go.mod says go${v}"; exit 1; }
-          go test -tags=integration -count=1 -v ./internal/persistence/ ./internal/content/ ./internal/media/ ./internal/settings/ ./internal/app/
+          go test -tags=integration -count=1 -v ./internal/persistence/ ./internal/content/ ./internal/media/ ./internal/settings/ ./internal/app/ ./internal/backfill/
 
       # Coverage of the same packages WITH the database, against
       # coverage-floors-integration.json. `Lint + Test` cannot measure this: it
@@ -277,5 +277,5 @@ jobs:
           RESONANS_TEST_SCOPE: gh${{ github.run_id }}a${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          go test -tags=integration -count=1 -cover ./internal/persistence/ ./internal/content/ ./internal/media/ ./internal/settings/ ./internal/app/ 2>&1 | tee .it-cover.log
+          go test -tags=integration -count=1 -cover ./internal/persistence/ ./internal/content/ ./internal/media/ ./internal/settings/ ./internal/app/ ./internal/backfill/ 2>&1 | tee .it-cover.log
           python3 scripts/coverage_gate.py --floors coverage-floors-integration.json --decide < .it-cover.log

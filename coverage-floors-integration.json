@@ -13,6 +13,7 @@
   ],
   "floors": {
     "github.com/KlangHaus/resonans/internal/app": 92,
+    "github.com/KlangHaus/resonans/internal/backfill": 92,
     "github.com/KlangHaus/resonans/internal/content": 92,
     "github.com/KlangHaus/resonans/internal/media": 92,
     "github.com/KlangHaus/resonans/internal/persistence": 64,
