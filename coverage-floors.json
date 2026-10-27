@@ -65,7 +65,7 @@
     "github.com/KlangHaus/resonans/internal/apidocs": 0,
     "github.com/KlangHaus/resonans/internal/app": 66,
     "github.com/KlangHaus/resonans/internal/auth": 97,
-    "github.com/KlangHaus/resonans/internal/backfill": 50,
+    "github.com/KlangHaus/resonans/internal/backfill": 52,
     "github.com/KlangHaus/resonans/internal/bridge": 100,
     "github.com/KlangHaus/resonans/internal/config": 93,
     "github.com/KlangHaus/resonans/internal/content": 45,
