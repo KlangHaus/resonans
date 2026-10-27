@@ -13,6 +13,8 @@ coverage/
 # Go
 /resonans
 coverage.out
+# The Go test report SonarQube reads, written by sonar.yml.
+go-test-report.json
 
 # The coverage gate's input, written by CI (ci-go.yml).
 .ci-cover.log
