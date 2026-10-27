@@ -117,20 +117,20 @@ func TestRoleWithoutValidTenantIsRefused(t *testing.T) {
 	}
 }
 
-// Every route, through the real router, with an admin that has no tenant:
-// none of them may answer with tenant data. The role gate passes (admin), so
-// this exercises each handler's own tenant check — the line that keeps an
-// org-less token out of every tenant's content.
+// Every route, through the real router, with an admin whose token carries no
+// usable tenant: none of them may answer, and each must refuse BECAUSE of the
+// tenant — exactly 403 with the tenant message, not just any error. A route
+// that forgot its tenant check and then failed on something else (a 404 for a
+// document under the nil tenant, a 400 on the body) would pass a looser test.
+//
+// [sikkerhed]'s condition on auth#182 (ClickUp 1amk32fku5x): auth only issues
+// org from the server's session and member table, so a client can at worst get
+// NO org — which is only safe if every route refuses that. Two forms are
+// checked: no org at all, and an org that is not a UUID. The second is the
+// real shape [auth] measured for a non-content org (BetterAuth's default ids),
+// e.g. an editor whose active org is the root org.
 func TestNoRouteServesATenantlessActor(t *testing.T) {
 	mediaSvc := media.NewService(media.NewMemoryStore(), media.NewMemoryBackend(), media.NewURLBuilder("https://cdn.test"))
-	h := NewRouter(Deps{
-		Store:    content.NewMemoryStore(),
-		Registry: mustRegistry(t),
-		Media:    mediaSvc,
-		Video:    media.NewVimeoProvider(),
-		Settings: settings.NewMemoryStore(),
-		Verifier: fixedVerifier{auth.Actor{Sub: "u", Role: auth.RoleAdmin}},
-	})
 	// Tenant-free by design: these answer about the CMS itself (a doc-type's
 	// schema) or a third party (a video URL), never about a tenant's content.
 	tenantFree := map[string]bool{
@@ -138,21 +138,41 @@ func TestNoRouteServesATenantlessActor(t *testing.T) {
 		"GET /api/v1/video/embed":   true,
 		"GET /api/v1/video/resolve": true,
 	}
-	for _, rt := range (&Handlers{}).Routes() {
-		if tenantFree[rt.Pattern] {
-			continue
-		}
-		method, path, _ := strings.Cut(rt.Pattern, " ")
-		path = strings.NewReplacer("{id}", "00000000-0000-0000-0000-000000000001", "{type}", "post",
-			"{slug}", "hello", "{version}", "1").Replace(path)
-		t.Run(rt.Pattern, func(t *testing.T) {
-			r := httptest.NewRequest(method, path, strings.NewReader("{}"))
-			r.Header.Set("Authorization", "Bearer x")
-			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
-			if w.Code < 400 {
-				t.Fatalf("status %d for a tenantless actor, body %q", w.Code, w.Body.String())
-			}
+	for _, tc := range []struct{ name, tenant, want string }{
+		{"no org", "", `{"error":"no tenant in context"}`},
+		{"non-UUID org", "MICf4sccklrys2eMgfww7XVOoA3uQqQL", `{"error":"invalid tenant"}`},
+	} {
+		h := NewRouter(Deps{
+			Store:    content.NewMemoryStore(),
+			Registry: mustRegistry(t),
+			Media:    mediaSvc,
+			Video:    media.NewVimeoProvider(),
+			Settings: settings.NewMemoryStore(),
+			Verifier: fixedVerifier{auth.Actor{Sub: "u", Tenant: tc.tenant, Role: auth.RoleAdmin}},
 		})
+		checked := 0
+		for _, rt := range (&Handlers{}).Routes() {
+			if tenantFree[rt.Pattern] {
+				continue
+			}
+			checked++
+			method, path, _ := strings.Cut(rt.Pattern, " ")
+			path = strings.NewReplacer("{id}", "00000000-0000-0000-0000-000000000001", "{type}", "post",
+				"{slug}", "hello", "{version}", "1").Replace(path)
+			t.Run(tc.name+" "+rt.Pattern, func(t *testing.T) {
+				r := httptest.NewRequest(method, path, strings.NewReader("{}"))
+				r.Header.Set("Authorization", "Bearer x")
+				w := httptest.NewRecorder()
+				h.ServeHTTP(w, r)
+				if body := strings.TrimSpace(w.Body.String()); w.Code != http.StatusForbidden || body != tc.want {
+					t.Fatalf("status %d body %q; want 403 %s", w.Code, body, tc.want)
+				}
+			})
+		}
+		// The route table has 25 routes (TestEveryRouteHasARole); 3 are
+		// tenant-free. A cell that walked none would pass on nothing.
+		if checked != 22 {
+			t.Fatalf("%s: checked %d routes, want 22", tc.name, checked)
+		}
 	}
 }

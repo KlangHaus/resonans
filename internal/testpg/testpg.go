@@ -74,7 +74,7 @@ func Scope(t *testing.T) string {
 		scope = scope[:24]
 	}
 	if scope == "" {
-		t.Fatalf("%s=%q sanitises to an empty identifier — refusing to fall back to a shared "+
+		t.Fatalf("%s=%q sanitizes to an empty identifier — refusing to fall back to a shared "+
 			"name, because a collision between concurrent builds reads as a flaky test", ScopeEnv, raw)
 	}
 	return scope
@@ -95,7 +95,7 @@ func Pool(t *testing.T) *pgxpool.Pool {
 // cell rebuilt the app role's DSN from the ENVIRONMENT variable, which points at the
 // admin database. The migrations had run in the per-build database, so the app role
 // connected to a database with no `resonans_app.documents` and the cell died on a
-// missing relation — a correct answer about a NEIGHBOURING object. Every role-swap
+// missing relation — a correct answer about a NEIGHBORING object. Every role-swap
 // has to start from the DSN below, not from the environment.
 func PoolDSN(t *testing.T) (*pgxpool.Pool, string) {
 	t.Helper()
