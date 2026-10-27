@@ -1,3 +1,10 @@
+## [3.0.1](https://github.com/KlangHaus/resonans/compare/v3.0.0...v3.0.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **httpapi:** log the cause when the asset list fails ([ada0c6a](https://github.com/KlangHaus/resonans/commit/ada0c6a5dab32cb1ec96f98f2b06e0d621d4dc7a))
+
 # [3.0.0](https://github.com/KlangHaus/resonans/compare/v2.3.0...v3.0.0) (2026-10-26)
 
 
