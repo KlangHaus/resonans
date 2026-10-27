@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: resonans
       POSTGRES_DB: resonans
     ports:
-      - "5433:5432"
+      - "${RESONANS_PG_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U resonans"]
       interval: 5s
@@ -32,7 +32,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: "3000"
-      PUBLIC_URL: http://localhost:3000
+      PUBLIC_URL: http://localhost:${RESONANS_API_PORT:-3000}
       DATABASE_URL: postgres://resonans:resonans@postgres:5432/resonans
       LOG_LEVEL: debug
       # Dev-only conveniences (prod sets these via SOPS):
@@ -43,7 +43,7 @@ services:
       # explicit opt-in: without it the server refuses to start.
       RESONANS_DEV_AUTH: "1"
     ports:
-      - "3000:3000"
+      - "${RESONANS_API_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy

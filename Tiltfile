@@ -7,6 +7,20 @@
 # X-Dev-Tenant (editor) / X-Scope-OrgID (delivery), in-memory storage, boot
 # auto-migrate. Server on http://localhost:3000 (healthz: /healthz).
 
+# Host ports, overridable so this stack can run beside another one (the
+# platform's Tilt holds 3000 and 5433). Defaults are the ports documented here.
+#   RESONANS_API_PORT=3060 RESONANS_PG_PORT=5434 tilt up --port 10351
+api_port = os.getenv('RESONANS_API_PORT', '3000')
+pg_port = os.getenv('RESONANS_PG_PORT', '5433')
+studio_port = os.getenv('RESONANS_STUDIO_PORT', '3030')
+site_port = os.getenv('RESONANS_SITE_PORT', '3050')
+api_url = 'http://localhost:' + api_port
+studio_url = 'http://localhost:' + studio_port
+site_url = 'http://localhost:' + site_port
+# docker-compose.tilt.yml reads the two it maps.
+os.putenv('RESONANS_API_PORT', api_port)
+os.putenv('RESONANS_PG_PORT', pg_port)
+
 docker_compose('docker-compose.tilt.yml')
 
 # Tilt builds the Go image from the compose `build:` context and live-reloads on
@@ -34,7 +48,7 @@ local_resource(
     'klanghaus-site-seed',
     cmd='node seed/seed.mjs',
     dir='examples/klanghaus-site',
-    env={'RESONANS_URL': 'http://localhost:3000', 'RESONANS_TENANT': '11111111-1111-1111-1111-111111111111'},
+    env={'RESONANS_URL': api_url, 'RESONANS_TENANT': '11111111-1111-1111-1111-111111111111'},
     labels=['examples'],
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
@@ -45,26 +59,26 @@ local_resource(
 # site's /preview route accepts frames only from this origin (studioOrigin).
 local_resource(
     'resonans-studio',
-    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port 3030',
+    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port ' + studio_port,
     serve_dir='studio',
     serve_env={
-        'RESONANS_DEV_API': 'http://localhost:3000',
+        'RESONANS_DEV_API': api_url,
         'NUXT_PUBLIC_DEV_TENANT': '11111111-1111-1111-1111-111111111111',
     },
-    links=[link('http://localhost:3030', 'Resonans editor')],
+    links=[link(studio_url, 'Resonans editor')],
     labels=['resonans'],
     resource_deps=['resonans'],
 )
 local_resource(
     'klanghaus-site',
-    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port 3050',
+    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port ' + site_port,
     serve_dir='examples/klanghaus-site',
     serve_env={
-        'NUXT_RESONANS_URL': 'http://localhost:3000',
-        'NUXT_PUBLIC_RESONANS_PUBLIC_URL': 'http://localhost:3000',
-        'NUXT_PUBLIC_STUDIO_ORIGIN': 'http://localhost:3030',
+        'NUXT_RESONANS_URL': api_url,
+        'NUXT_PUBLIC_RESONANS_PUBLIC_URL': api_url,
+        'NUXT_PUBLIC_STUDIO_ORIGIN': studio_url,
     },
-    links=[link('http://localhost:3050', 'klanghaus.dk on Resonans')],
+    links=[link(site_url, 'klanghaus.dk on Resonans')],
     labels=['examples'],
     resource_deps=['resonans'],
 )
