@@ -102,6 +102,6 @@ signature; the file is only the index.**
 ever made, is not binding. No lawyer has reviewed it — [CONTRIBUTING.md](../CONTRIBUTING.md)
 says so, and so do we here.
 
-**Clause 5 mentions a Corporate CLA.** It is not published yet. If your contribution
-belongs to your employer or a client, do not sign this individual agreement for it:
-open an issue first, and we will sort the corporate agreement out with you.
+**Contributing work you made as part of your job, or work your employer could claim
+rights in?** Open an issue before you sign — we need a separate agreement with your
+employer: the [Corporate CLA](corporate-cla.md) that clause 5 mentions.

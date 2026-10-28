@@ -16,8 +16,15 @@ Two kinds of pull request:
               the commit that last changed the agreement, a date not in the future,
               and an ID that has not signed before.
   CODE        anything else. The author must have signed (their ID is in CLA.md
-              on the BASE branch), or be exempt: a bot, or someone the repository
-              already lists as owner, member or collaborator.
+              on the BASE branch), or be named in legal/cla-exemptions.json on the
+              BASE branch, by numeric ID, with a reason.
+
+Exemption is by NAME, never by role ([jura], 2026-10-28). A GitHub role grants
+access, not rights in the work: nobody at KlangHaus is employed, so no employer
+rule covers them, and a friend with collaborator access or a freelancer is covered
+by nothing at all. A bot is exempt only when it is listed, and it is listed only
+when its changes are machine-generated — a bot that lands a patch a person wrote
+would otherwise bypass the agreement.
 
 Exit codes, so a caller can tell the outcomes apart:
 
@@ -51,7 +58,7 @@ NAMES = {PASS: "PASS", NOT_SIGNED: "NOT-SIGNED", BAD_SIGNATURE: "BAD-SIGNATURE",
 
 INDEX = "CLA.md"
 AGREEMENT = "legal/individual-cla.md"
-EXEMPT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+EXEMPTIONS = "legal/cla-exemptions.json"
 
 # | @login | 1234567 | 2026-10-28 | cla-1.0 (a1b2c3d) |
 ROW = re.compile(
@@ -67,18 +74,33 @@ def signed_ids(index_text):
     return {m.group("id") for m in (ROW.match(l) for l in index_text.splitlines()) if m}
 
 
+def exemption_reasons(entries):
+    """{id: reason} from the exemption list, or raise ValueError when an entry
+    lacks an ID or a reason: an unexplained exemption is the thing this list
+    exists to prevent, so a malformed list is an instrument failure, not a pass."""
+    out = {}
+    for e in entries:
+        uid, reason = str(e.get("id", "")), str(e.get("reason", "")).strip()
+        if not uid.isdigit() or not reason:
+            raise ValueError(f"exemption entry without a numeric id and a reason: {e!r}")
+        out[uid] = reason
+    return out
+
+
 def decide(pr):
-    """Pure decision. `pr` holds: author {login, id, type, association},
-    changed_files, base_index, head_index, version, version_sha, today.
-    Returns (exit_code, message)."""
+    """Pure decision. `pr` holds: author {login, id},
+    changed_files, base_index, head_index, version, version_sha, today, and
+    exemptions (the base branch's list). Returns (exit_code, message)."""
     author = pr["author"]
     login, uid = author["login"], str(author["id"])
 
     if INDEX not in pr["changed_files"]:
-        if author.get("type") == "Bot":
-            return PASS, f"exempt: {login!r} is a bot"
-        if author.get("association") in EXEMPT_ASSOCIATIONS:
-            return PASS, f"exempt: {login!r} is a repository {author['association'].lower()}"
+        try:
+            exempt = exemption_reasons(pr["exemptions"])
+        except ValueError as e:
+            return ERROR, f"{EXEMPTIONS}: {e}"
+        if uid in exempt:
+            return PASS, f"exempt: {login!r} (id {uid}) is listed in {EXEMPTIONS}: {exempt[uid]}"
         if uid in signed_ids(pr["base_index"]):
             return PASS, f"{login!r} (id {uid}) has signed"
         return NOT_SIGNED, (
@@ -163,6 +185,13 @@ def selftest(directory):
         print(f"  {'ok ' if got == want else 'FAIL'} {name:<40} want={NAMES[want]} got={NAMES[got]} :: {msg}")
     code, msg = check_docs()
     print(f"  {'ok ' if code == 0 else 'FAIL'} docs: {msg}")
+    try:
+        with open(EXEMPTIONS, encoding="utf-8") as fh:
+            n = len(exemption_reasons(json.load(fh)["exemptions"]))
+        print(f"  ok  {EXEMPTIONS}: {n} entries, each with an id and a reason")
+    except (OSError, KeyError, ValueError) as e:
+        code = 1
+        print(f"  FAIL {EXEMPTIONS}: {type(e).__name__}: {e}")
     print(f"cla-check selftest: {len(files)} cases + docs, {bad + code} failed")
     return 1 if bad or code else 0
 
@@ -192,6 +221,8 @@ def gather(event, repo, token):
 
         blob = api(f"repos/{repo}/contents/{INDEX}?ref={head_sha}", token)
         head_index = base64.b64decode(blob["content"]).decode("utf-8")
+    with open(EXEMPTIONS, encoding="utf-8") as fh:
+        exemptions = json.load(fh)["exemptions"]
     agreement = open(AGREEMENT, encoding="utf-8").read()
     v = re.search(r"^Version:\s*(cla-[0-9]+\.[0-9]+)\s*$", agreement, re.M)
     if not v:
@@ -203,10 +234,9 @@ def gather(event, repo, token):
         "author": {
             "login": pr["user"]["login"],
             "id": pr["user"]["id"],
-            "type": pr["user"].get("type", ""),
-            "association": pr.get("author_association", ""),
         },
         "changed_files": changed,
+        "exemptions": exemptions,
         "base_index": base_index,
         "head_index": head_index,
         "version": v.group(1),

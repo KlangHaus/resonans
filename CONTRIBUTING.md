@@ -180,8 +180,9 @@ word from the agreement:
 Once that pull request is merged, the same check lets your code pull requests through.
 **Issues, bug reports and discussion need no agreement.**
 
-**If an employer or client owns your work**, do not sign the individual agreement for it:
-the Corporate CLA that clause 5 mentions is not published yet. Open an issue first.
+**Contributing work you made as part of your job, or work your employer could claim
+rights in?** Open an issue before you sign — we need a separate agreement with your
+employer: the [Corporate CLA](legal/corporate-cla.md).
 
 A CLA is a real cost to a project: plenty of capable people will not sign one, and we know
 that. It is being adopted deliberately, not as boilerplate.
