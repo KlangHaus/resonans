@@ -1,0 +1,16 @@
+{
+ "author": {
+  "login": "bob",
+  "id": 7654321,
+  "type": "User",
+  "association": "CONTRIBUTOR"
+ },
+ "changed_files": [
+  "internal/x.go"
+ ],
+ "base_index": "# Contributor Licence Agreement \u2014 signatures\n\nThis file is the **index** of who has accepted the\n[Resonans Individual Contributor Licence Agreement](legal/individual-cla.md).\n**It is not the evidence.** The evidence is the pull request each contributor opened\n**from their own GitHub account** to add their own line, and the commit they authored in it.\nA line someone else added proves nothing, so the `CLA` check refuses a line whose user ID\nis not the pull request author's.\n\nHow to sign, and what signing means: [CONTRIBUTING.md \u2192 Licensing of contributions](CONTRIBUTING.md#licensing-of-contributions).\nRead clause 8 there before you sign: **this record is public and permanent.**\n\nOne line per contributor, appended at the end. Existing lines are never edited or removed;\na correction is a new line (see clause 8).\n\n| GitHub | User ID | Date | CLA version |\n|---|---|---|---|\n| @alice | 1234567 | 2026-10-20 | cla-1.0 (a1b2c3d) |\n",
+ "head_index": "# Contributor Licence Agreement \u2014 signatures\n\nThis file is the **index** of who has accepted the\n[Resonans Individual Contributor Licence Agreement](legal/individual-cla.md).\n**It is not the evidence.** The evidence is the pull request each contributor opened\n**from their own GitHub account** to add their own line, and the commit they authored in it.\nA line someone else added proves nothing, so the `CLA` check refuses a line whose user ID\nis not the pull request author's.\n\nHow to sign, and what signing means: [CONTRIBUTING.md \u2192 Licensing of contributions](CONTRIBUTING.md#licensing-of-contributions).\nRead clause 8 there before you sign: **this record is public and permanent.**\n\nOne line per contributor, appended at the end. Existing lines are never edited or removed;\na correction is a new line (see clause 8).\n\n| GitHub | User ID | Date | CLA version |\n|---|---|---|---|\n| @alice | 1234567 | 2026-10-20 | cla-1.0 (a1b2c3d) |\n",
+ "version": "cla-1.0",
+ "version_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+ "today": "2026-10-28"
+}
