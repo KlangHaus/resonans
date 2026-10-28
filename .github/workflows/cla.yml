@@ -22,17 +22,25 @@
 # A change to this file or to scripts/cla_check.py therefore only takes effect
 # once it is merged — which is the point.
 #
-# The `CLA selftest` job is ordinary `pull_request`: it runs the pull request's
-# OWN version of the script against the fixtures, so a change to the rules is
-# tested before it reaches main. It only runs tests; it decides nothing.
+# The exception to "never pull_request_target" is [sikkerhed]'s, given on
+# resonans#158 on these conditions, and ENFORCED, not remembered: the selftest
+# (cla-selftest.yml, scripts/cla_check.py check_workflow) reads this file and
+# fails if any of them stops holding — one trigger, read-only permissions, no
+# secrets, checkout of the base commit without credentials, actions pinned to a
+# commit, only the base tree's script run — or if any OTHER workflow uses
+# pull_request_target.
+#
+# One trigger per file: with `pull_request` in here too, the job named `CLA`
+# was published as "skipped" on every pull request, and GitHub counts a skipped
+# required check as satisfied. The rules' own tests live in cla-selftest.yml.
 
 name: CLA
 
 on:
+  # No `edited`: editing a title is not a push, and the check dates a
+  # contribution by the push it runs for (see scripts/cla_check.py).
   pull_request_target:
-    types: [opened, synchronize, reopened, edited]
-    branches: [main]
-  pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
 
 permissions:
@@ -42,7 +50,6 @@ permissions:
 jobs:
   cla:
     name: CLA
-    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -59,19 +66,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/cla_check.py
-
-  selftest:
-    name: CLA selftest
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # 46 fixtures (every rule, both ways), the shape of the live exemption
-      # list and corporate register, and the check that CONTRIBUTING.md's clause 8 is still the
-      # agreement's, word for word.
-      - name: Selftest
-        run: python3 scripts/cla_check.py --selftest

@@ -97,12 +97,34 @@ COMPANY = re.compile(
 )
 # | @login | 1234567 |
 PERSON = re.compile(r"^\|\s*@(?P<login>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\s*\|\s*(?P<id>[0-9]{1,12})\s*\|\s*$")
+# | @login | 1234567 | covered until 2026-12-01 |
+# The date is the FIRST day the person is no longer covered (CCLA clause 3: "the
+# date from which that person is no longer covered"), so cover holds strictly
+# before it. It is the date of the company's written notice, not of the edit.
+COVER_END = re.compile(
+    r"^\|\s*@(?P<login>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\s*\|\s*(?P<id>[0-9]{1,12})\s*"
+    r"\|\s*covered until (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})\s*\|\s*$"
+)
 TABLE_FRAME = re.compile(r"^\|\s*GitHub\s*\|\s*User ID\s*\|\s*$|^\|-+\|-+\|\s*$")
 
 
 def corporate_ids(text):
     """The numeric IDs in person rows of the corporate register."""
     return {m.group("id") for m in (PERSON.match(l) for l in text.splitlines()) if m}
+
+
+def corporate_cover_ends(text):
+    """{id: first day not covered} from the register's `covered until` rows. A date
+    that does not parse maps to None: check_corporate refuses it on entry, and if
+    one lands anyway the code path reports ERROR rather than reading "no end"."""
+    out = {}
+    for m in (COVER_END.match(l) for l in text.splitlines()):
+        if m:
+            try:
+                out[m.group("id")] = datetime.date.fromisoformat(m.group("date"))
+            except ValueError:
+                out[m.group("id")] = None
+    return out
 
 
 def inserted_lines(base, head):
@@ -124,10 +146,11 @@ def check_corporate(pr):
     if added is None:
         return BAD_SIGNATURE, f"{CORPORATE} may only grow: an existing line was changed or removed"
     added = [l for l in added if l.strip()]
-    seen, under_company = set(), False
+    seen, under_company, block, ended = set(), False, {}, set()
     for line in pr["head_corporate"].splitlines():
-        c, m = COMPANY.match(line), PERSON.match(line)
+        c, m, e = COMPANY.match(line), PERSON.match(line), COVER_END.match(line)
         if line.startswith("## "):
+            block = {}
             if not c:
                 return BAD_SIGNATURE, f"not '## company · number · signatory, role · YYYY-MM-DD · ccla-X.Y': {line!r}"
             under_company = True
@@ -145,10 +168,24 @@ def check_corporate(pr):
             if m.group("id") in seen:
                 return BAD_SIGNATURE, f"id {m.group('id')} is listed twice in {CORPORATE}"
             seen.add(m.group("id"))
+            block[m.group("id")] = m.group("login")
+        elif e:
+            pid = e.group("id")
+            if block.get(pid, "").lower() != e.group("login").lower():
+                return BAD_SIGNATURE, f"'covered until' for a person not listed above it under the same company: {line!r}"
+            if pid in ended:
+                return BAD_SIGNATURE, f"id {pid} already has a 'covered until' row"
+            ended.add(pid)
+            try:
+                end = datetime.date.fromisoformat(e.group("date"))
+            except ValueError:
+                return BAD_SIGNATURE, f"{e.group('date')!r} is not a date"
+            if line in added and end > pr["today"] + datetime.timedelta(days=1):
+                return BAD_SIGNATURE, f"the date {end} is in the future: it records a notice already given"
         elif line in added and not TABLE_FRAME.match(line):
             return BAD_SIGNATURE, f"the added line is neither a company line nor a person row: {line!r}"
-    if not any(PERSON.match(l) or COMPANY.match(l) for l in added):
-        return BAD_SIGNATURE, f"the change adds no company line and no person row to {CORPORATE}"
+    if not any(PERSON.match(l) or COMPANY.match(l) or COVER_END.match(l) for l in added):
+        return BAD_SIGNATURE, f"the change adds no company line, person row or 'covered until' row to {CORPORATE}"
     return PASS, (
         f"{CORPORATE}: the form is valid. NOT verified here: that the company signed {pr['corporate_version']} "
         "— a maintainer checks the signed agreement before merging."
@@ -191,7 +228,22 @@ def decide(pr):
         if uid in signed_ids(pr["base_index"]):
             return PASS, f"{login!r} (id {uid}) has signed"
         if uid in corporate_ids(pr["base_corporate"]):
-            return PASS, f"{login!r} (id {uid}) is covered by a Corporate CLA in {CORPORATE}"
+            ends = corporate_cover_ends(pr["base_corporate"])
+            if uid in ends and ends[uid] is None:
+                return ERROR, f"{CORPORATE}: the 'covered until' row for id {uid} has no valid date"
+            end = ends.get(uid)
+            if end is None:
+                return PASS, f"{login!r} (id {uid}) is covered by a Corporate CLA in {CORPORATE}"
+            # The contribution's date is the date this check runs for a push to
+            # the pull request — server time, which the contributor cannot set.
+            # NOT the commit date: that is written by the contributor, and the
+            # person whose cover ended is exactly the one who could backdate it.
+            if pr["today"] < end:
+                return PASS, f"{login!r} (id {uid}) is covered by a Corporate CLA in {CORPORATE} until {end}"
+            return NOT_SIGNED, (
+                f"{login!r} (id {uid}) was covered by a Corporate CLA until {end} (first day not covered); "
+                f"this push is dated {pr['today']}. Sign the individual agreement, or ask the company."
+            )
         return NOT_SIGNED, (
             f"{login!r} (id {uid}) has not signed the contributor agreement. "
             "See CONTRIBUTING.md → Licensing of contributions; signing is a separate pull request "
@@ -255,6 +307,53 @@ def check_docs(root="."):
     return 0, "clause 8 in CONTRIBUTING.md is the agreement's, word for word"
 
 
+WORKFLOW = ".github/workflows/cla.yml"
+ALLOWED_EXPRESSIONS = {"github.event.pull_request.base.sha", "github.token"}
+
+
+def check_workflow(root="."):
+    """[sikkerhed]'s conditions for running this check on pull_request_target
+    (resonans#158), as a cell that fails closed: the job may see a foreign pull
+    request only while it holds no write token, no secrets and no foreign code.
+    Returns a list of broken conditions; empty means all hold. Comments are
+    stripped first, since the file's own comments name what it must not do."""
+    wf_dir = os.path.join(root, ".github", "workflows")
+    text = open(os.path.join(root, WORKFLOW), encoding="utf-8").read()
+    code = "\n".join(re.sub(r"(^|\s)#.*$", "", l) for l in text.splitlines())
+    lines = [l for l in code.splitlines() if l.strip()]
+    broken = []
+    on_block = re.search(r"^on:\s*\n((?:[ ].*\n?)*)", code + "\n", re.M)
+    triggers = re.findall(r"^  ([a-z_]+):", on_block.group(1), re.M) if on_block else []
+    if triggers != ["pull_request_target"]:
+        broken.append(f"triggers are {triggers!r}, not only pull_request_target")
+    perms = re.findall(r"^\s*([a-z-]+):\s*(read|write|none)\s*$", code, re.M)
+    if code.count("permissions:") != 1 or any(level != "read" for _, level in perms) or "write" in code:
+        broken.append(f"permissions are not read-only in one block: {perms!r}")
+    if "secrets." in code or "secrets[" in code:
+        broken.append("the workflow references secrets")
+    exprs = {e.strip() for e in re.findall(r"\$\{\{(.*?)\}\}", code)}
+    if exprs - ALLOWED_EXPRESSIONS:
+        broken.append(f"expressions beyond the base SHA and the token: {sorted(exprs - ALLOWED_EXPRESSIONS)!r}")
+    uses = re.findall(r"uses:\s*(\S+)", code)
+    unpinned = [u for u in uses if not re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", u)]
+    if unpinned:
+        broken.append(f"actions not pinned to a commit: {unpinned!r}")
+    checkouts = [u for u in uses if u.startswith("actions/checkout@")]
+    if len(checkouts) != 1 or code.count("ref: ${{ github.event.pull_request.base.sha }}") != 1 \
+            or code.count("persist-credentials: false") != 1:
+        broken.append("not exactly one checkout, of the base commit, without credentials")
+    runs = [r.strip() for r in re.findall(r"run:\s*(.*)$", code, re.M)]
+    if runs != ["python3 scripts/cla_check.py"]:
+        broken.append(f"runs something other than the base tree's script: {runs!r}")
+    for name in sorted(os.listdir(wf_dir)):
+        path = os.path.join(wf_dir, name)
+        if path != os.path.join(root, WORKFLOW) and name.endswith((".yml", ".yaml")):
+            other = "\n".join(re.sub(r"(^|\s)#.*$", "", l) for l in open(path, encoding="utf-8"))
+            if "pull_request_target" in other:
+                broken.append(f"{name} also uses pull_request_target; the exception is for {WORKFLOW} alone")
+    return broken
+
+
 CORPORATE_EMPTY = "# Corporate CLA signatures\n\n"
 
 
@@ -300,6 +399,12 @@ def selftest(directory):
     else:
         live_code, live_msg = PASS, "no companies yet"
     code = code or (1 if live_code else 0)
+    broken = check_workflow()
+    for b in broken:
+        print(f"  FAIL {WORKFLOW}: {b}")
+    if not broken:
+        print(f"  ok  {WORKFLOW}: the pull_request_target exception's conditions hold")
+    code = code or (1 if broken else 0)
     print(f"  {'ok ' if live_code == PASS else 'FAIL'} {CORPORATE}: {n} covered persons; {live_msg}")
     print(f"cla-check selftest: {len(files)} cases + docs, {bad + code} failed")
     return 1 if bad or code else 0
