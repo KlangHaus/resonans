@@ -70,8 +70,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # 30 fixtures (every rule, both ways), the shape of the live exemption
-      # list, and the check that CONTRIBUTING.md's clause 8 is still the
+      # 46 fixtures (every rule, both ways), the shape of the live exemption
+      # list and corporate register, and the check that CONTRIBUTING.md's clause 8 is still the
       # agreement's, word for word.
       - name: Selftest
         run: python3 scripts/cla_check.py --selftest

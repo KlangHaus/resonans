@@ -8,16 +8,29 @@ is only the index. So the decisive rule is not the line's format but WHO added i
 the line's numeric user ID must be the pull request author's. A line a maintainer
 adds for someone else proves nothing, and this check refuses it.
 
-Two kinds of pull request:
+Three kinds of pull request:
 
   SIGNATURE   it changes CLA.md. It must change ONLY CLA.md, the file may only
               grow by exactly one table row, and that row must name the author
               (login and numeric ID), the current agreement version and the SHA of
               the commit that last changed the agreement, a date not in the future,
               and an ID that has not signed before.
-  CODE        anything else. The author must have signed (their ID is in CLA.md
-              on the BASE branch), or be named in legal/cla-exemptions.json on the
-              BASE branch, by numeric ID, with a reason.
+  CORPORATE   it changes legal/corporate-signatures.md, the Corporate CLA's
+              register. It must change ONLY that file, and only by inserting
+              lines: a company's signature line, or a person's row under one.
+              The company signs, not the person, so the individual rule (the
+              line names the author) cannot apply here. This check verifies the
+              FORM only; that the signed agreement exists is a maintainer's
+              review, and the check says so in its pass message.
+  CODE        anything else. The author's ID must be on the BASE branch in
+              CLA.md, or in a person row of legal/corporate-signatures.md, or in
+              legal/cla-exemptions.json with a reason.
+
+Two registers and one exemption list, each meaning ONE thing ([jura], docs
+b527055): the registers say "an agreement EXISTS", the exemption list says "NO
+agreement is needed". A person covered by a Corporate CLA is in the corporate
+register, never in the exemption list: an exemption whose reason is "there is an
+agreement" would record the opposite of the truth.
 
 Exemption is by NAME, never by role ([jura], 2026-10-28). A GitHub role grants
 access, not rights in the work: nobody at KlangHaus is employed, so no employer
@@ -45,6 +58,7 @@ network — see --selftest.
 """
 
 import argparse
+import base64
 import datetime
 import json
 import os
@@ -59,6 +73,8 @@ NAMES = {PASS: "PASS", NOT_SIGNED: "NOT-SIGNED", BAD_SIGNATURE: "BAD-SIGNATURE",
 INDEX = "CLA.md"
 AGREEMENT = "legal/individual-cla.md"
 EXEMPTIONS = "legal/cla-exemptions.json"
+CORPORATE = "legal/corporate-signatures.md"
+CORPORATE_AGREEMENT = "legal/corporate-cla.md"
 
 # | @login | 1234567 | 2026-10-28 | cla-1.0 (a1b2c3d) |
 ROW = re.compile(
@@ -72,6 +88,71 @@ ROW = re.compile(
 def signed_ids(index_text):
     """The numeric IDs that have signed, from the index's table rows."""
     return {m.group("id") for m in (ROW.match(l) for l in index_text.splitlines()) if m}
+
+
+# ## Example ApS · CVR 12345678 · Jane Doe, CEO · 2026-10-28 · ccla-1.0
+COMPANY = re.compile(
+    r"^## (?P<company>[^·|]+?) · (?P<number>[^·|]+?) · (?P<signatory>[^·|]+?) · "
+    r"(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2}) · (?P<version>ccla-[0-9]+\.[0-9]+)\s*$"
+)
+# | @login | 1234567 |
+PERSON = re.compile(r"^\|\s*@(?P<login>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\s*\|\s*(?P<id>[0-9]{1,12})\s*\|\s*$")
+TABLE_FRAME = re.compile(r"^\|\s*GitHub\s*\|\s*User ID\s*\|\s*$|^\|-+\|-+\|\s*$")
+
+
+def corporate_ids(text):
+    """The numeric IDs in person rows of the corporate register."""
+    return {m.group("id") for m in (PERSON.match(l) for l in text.splitlines()) if m}
+
+
+def inserted_lines(base, head):
+    """The lines head adds to base, or None when head also changes or removes a
+    base line: every base line must survive, in order."""
+    b, added, i = base.splitlines(), [], 0
+    for line in head.splitlines():
+        if i < len(b) and line == b[i]:
+            i += 1
+        else:
+            added.append(line)
+    return added if i == len(b) else None
+
+
+def check_corporate(pr):
+    """A corporate-register pull request: insertions only, each a company line or
+    a person row under one, current ccla version, no date in the future."""
+    added = inserted_lines(pr["base_corporate"], pr["head_corporate"])
+    if added is None:
+        return BAD_SIGNATURE, f"{CORPORATE} may only grow: an existing line was changed or removed"
+    added = [l for l in added if l.strip()]
+    seen, under_company = set(), False
+    for line in pr["head_corporate"].splitlines():
+        c, m = COMPANY.match(line), PERSON.match(line)
+        if line.startswith("## "):
+            if not c:
+                return BAD_SIGNATURE, f"not '## company · number · signatory, role · YYYY-MM-DD · ccla-X.Y': {line!r}"
+            under_company = True
+            try:
+                date = datetime.date.fromisoformat(c.group("date"))
+            except ValueError:
+                return BAD_SIGNATURE, f"{c.group('date')!r} is not a date"
+            if line in added and date > pr["today"] + datetime.timedelta(days=1):
+                return BAD_SIGNATURE, f"the date {date} is in the future"
+            if line in added and c.group("version") != pr["corporate_version"]:
+                return BAD_SIGNATURE, f"{c.group('version')!r} is not the current Corporate CLA, {pr['corporate_version']!r}"
+        elif m:
+            if not under_company:
+                return BAD_SIGNATURE, f"a person row before any company line: {line!r}"
+            if m.group("id") in seen:
+                return BAD_SIGNATURE, f"id {m.group('id')} is listed twice in {CORPORATE}"
+            seen.add(m.group("id"))
+        elif line in added and not TABLE_FRAME.match(line):
+            return BAD_SIGNATURE, f"the added line is neither a company line nor a person row: {line!r}"
+    if not any(PERSON.match(l) or COMPANY.match(l) for l in added):
+        return BAD_SIGNATURE, f"the change adds no company line and no person row to {CORPORATE}"
+    return PASS, (
+        f"{CORPORATE}: the form is valid. NOT verified here: that the company signed {pr['corporate_version']} "
+        "— a maintainer checks the signed agreement before merging."
+    )
 
 
 def exemption_reasons(entries):
@@ -94,6 +175,12 @@ def decide(pr):
     author = pr["author"]
     login, uid = author["login"], str(author["id"])
 
+    if CORPORATE in pr["changed_files"]:
+        others = sorted(f for f in pr["changed_files"] if f != CORPORATE)
+        if others:
+            return BAD_SIGNATURE, f"a corporate signature changes only {CORPORATE}; this one also changes {others!r}"
+        return check_corporate(pr)
+
     if INDEX not in pr["changed_files"]:
         try:
             exempt = exemption_reasons(pr["exemptions"])
@@ -103,6 +190,8 @@ def decide(pr):
             return PASS, f"exempt: {login!r} (id {uid}) is listed in {EXEMPTIONS}: {exempt[uid]}"
         if uid in signed_ids(pr["base_index"]):
             return PASS, f"{login!r} (id {uid}) has signed"
+        if uid in corporate_ids(pr["base_corporate"]):
+            return PASS, f"{login!r} (id {uid}) is covered by a Corporate CLA in {CORPORATE}"
         return NOT_SIGNED, (
             f"{login!r} (id {uid}) has not signed the contributor agreement. "
             "See CONTRIBUTING.md → Licensing of contributions; signing is a separate pull request "
@@ -166,6 +255,9 @@ def check_docs(root="."):
     return 0, "clause 8 in CONTRIBUTING.md is the agreement's, word for word"
 
 
+CORPORATE_EMPTY = "# Corporate CLA signatures\n\n"
+
+
 def selftest(directory):
     """Run the fixture table. Expected exit code is in the file name:
     `<case>.<code>.json`. An empty table FAILS rather than passing on 0 cases."""
@@ -179,6 +271,9 @@ def selftest(directory):
         with open(os.path.join(directory, name)) as fh:
             pr = json.load(fh)
         pr["today"] = datetime.date.fromisoformat(pr["today"])
+        pr.setdefault("base_corporate", CORPORATE_EMPTY)
+        pr.setdefault("head_corporate", pr["base_corporate"])
+        pr.setdefault("corporate_version", "ccla-1.0")
         got, msg = decide(pr)
         if got != want:
             bad += 1
@@ -192,6 +287,20 @@ def selftest(directory):
     except (OSError, KeyError, ValueError) as e:
         code = 1
         print(f"  FAIL {EXEMPTIONS}: {type(e).__name__}: {e}")
+    live = open(CORPORATE, encoding="utf-8").read()
+    n = len(corporate_ids(live))
+    if any(l.startswith(("## ", "|")) for l in live.splitlines()):
+        # The prose above the first signature is the base; everything from there
+        # on must be signatures, so check it as if it had all just been added.
+        lines = live.splitlines(keepends=True)
+        first = next(i for i, l in enumerate(lines) if l.startswith(("## ", "|")))
+        live_code, live_msg = check_corporate({"base_corporate": "".join(lines[:first]), "head_corporate": live,
+                                               "corporate_version": "ccla-1.0",
+                                               "today": datetime.datetime.now(datetime.timezone.utc).date()})
+    else:
+        live_code, live_msg = PASS, "no companies yet"
+    code = code or (1 if live_code else 0)
+    print(f"  {'ok ' if live_code == PASS else 'FAIL'} {CORPORATE}: {n} covered persons; {live_msg}")
     print(f"cla-check selftest: {len(files)} cases + docs, {bad + code} failed")
     return 1 if bad or code else 0
 
@@ -217,12 +326,18 @@ def gather(event, repo, token):
     base_index = open(INDEX, encoding="utf-8").read()
     head_index = base_index
     if INDEX in changed:
-        import base64
-
         blob = api(f"repos/{repo}/contents/{INDEX}?ref={head_sha}", token)
         head_index = base64.b64decode(blob["content"]).decode("utf-8")
     with open(EXEMPTIONS, encoding="utf-8") as fh:
         exemptions = json.load(fh)["exemptions"]
+    base_corporate = open(CORPORATE, encoding="utf-8").read()
+    head_corporate = base_corporate
+    if CORPORATE in changed:
+        blob = api(f"repos/{repo}/contents/{CORPORATE}?ref={head_sha}", token)
+        head_corporate = base64.b64decode(blob["content"]).decode("utf-8")
+    cv = re.search(r"^Version:\s*(ccla-[0-9]+\.[0-9]+)\s*$", open(CORPORATE_AGREEMENT, encoding="utf-8").read(), re.M)
+    if not cv:
+        raise RuntimeError(f"{CORPORATE_AGREEMENT} has no 'Version: ccla-X.Y' line")
     agreement = open(AGREEMENT, encoding="utf-8").read()
     v = re.search(r"^Version:\s*(cla-[0-9]+\.[0-9]+)\s*$", agreement, re.M)
     if not v:
@@ -237,6 +352,9 @@ def gather(event, repo, token):
         },
         "changed_files": changed,
         "exemptions": exemptions,
+        "base_corporate": base_corporate,
+        "head_corporate": head_corporate,
+        "corporate_version": cv.group(1),
         "base_index": base_index,
         "head_index": head_index,
         "version": v.group(1),

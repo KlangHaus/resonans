@@ -182,7 +182,8 @@ Once that pull request is merged, the same check lets your code pull requests th
 
 **Contributing work you made as part of your job, or work your employer could claim
 rights in?** Open an issue before you sign — we need a separate agreement with your
-employer: the [Corporate CLA](legal/corporate-cla.md).
+employer: the [Corporate CLA](legal/corporate-cla.md). Your employer signs it, not you,
+and the people it covers are listed in [legal/corporate-signatures.md](legal/corporate-signatures.md).
 
 A CLA is a real cost to a project: plenty of capable people will not sign one, and we know
 that. It is being adopted deliberately, not as boilerplate.

@@ -7,8 +7,10 @@ Clauses 2 and 3 of the Individual Contributor Licence Agreement
 (legal/individual-cla.md) are incorporated by reference, not repeated, and clauses 4
 and 6-9 apply to it: two texts for one right could drift apart; one text cannot.
 
-A company does not sign by pull request. Start by opening an issue (see
-CONTRIBUTING.md); the signature and the Schedule are recorded out of band.
+A company signs by opening an issue first (see CONTRIBUTING.md). Once the signed
+agreement is with KlangHaus, the company's signatory opens a pull request adding the
+company line and its Schedule to legal/corporate-signatures.md, the register clause 6
+describes; a maintainer checks it against the signed agreement before merging.
 -->
 
 **Corporate Contributor Licence Agreement — Resonans**

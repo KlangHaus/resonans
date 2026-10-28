@@ -1,5 +1,5 @@
 {
-  "_about": "Identities whose code pull requests the CLA check lets through without a signature. Matched on the numeric user ID, never the login. Every entry needs a reason a reader can check. A GitHub role (owner, member, collaborator) is NOT a reason: it grants access, not rights in the work ([jura], 2026-10-28). Bots belong here only when their changes are machine-generated; a bot that lands a patch a person wrote would bypass the agreement. Read from the base branch, so a pull request that edits this file only takes effect once merged.",
+  "_about": "Identities whose code pull requests the CLA check lets through without a signature. Matched on the numeric user ID, never the login. Every entry needs a reason a reader can check. A GitHub role (owner, member, collaborator) is NOT a reason: it grants access, not rights in the work ([jura], 2026-10-28). Bots belong here only when their changes are machine-generated; a bot that lands a patch a person wrote would bypass the agreement. A person covered by a Corporate CLA is NOT an exemption: an agreement exists, so they belong in legal/corporate-signatures.md ([jura], docs b527055). Read from the base branch, so a pull request that edits this file only takes effect once merged.",
   "exemptions": [
     {
       "login": "dependabot[bot]",
