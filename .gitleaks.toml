@@ -1,0 +1,18 @@
+[extend]
+useDefault = true
+
+# Exceptions are dangerous because they are silent, so this one is ONE exact
+# value: not a file, not a pattern.
+#
+# `generic-api-key` fires on the SonarQube project key because its UUID has
+# high entropy. The key is a public project address on our own Sonar instance;
+# access needs SONAR_TOKEN, which lives in GitHub Secrets and never in the
+# repository. An identifier is not a disclosure.
+#
+# grundtone measured why it must be the literal value: an allowlisted PATH
+# (`sonar-project.properties`) also let a planted `ghp_` token in that file
+# through. Bound to the value instead, a change of project key turns the scan
+# red again, and someone has to decide again. That is on purpose.
+[allowlist]
+description = "SonarQube projectKey: a public identifier, not a credential"
+regexes = ['''KlangHaus_resonans_7e9bb7e1-ee71-479d-9904-a02be28f4d30''']
