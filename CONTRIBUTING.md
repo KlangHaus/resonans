@@ -111,39 +111,79 @@ Resonans is [AGPL-3.0](LICENSE); the copyright is held by the authors of the wor
 the company that publishes it — [NOTICE](NOTICE) explains why. Everything published here is,
 and stays, AGPL-3.0; that is not what the paragraph below is about.
 
-**A contributor licence agreement will be required before we can merge code from outside
-the company, and it is not written yet.** KlangHaus decided to adopt one on 2026-09-24 and
-it is being drafted. A lawyer has not yet reviewed it, and one should
-before it binds anyone — we would rather say that than imply a review that has not happened. Until it exists we cannot accept
-an outside pull request, because merging one would leave the project's licensing unsettled
-in a way that is unpleasant to fix afterwards.
+**Outside contributions need a signed contributor licence agreement.** The agreement is
+[legal/individual-cla.md](legal/individual-cla.md) (version `cla-1.0`). **No lawyer has
+reviewed it** — KlangHaus decided not to pay for one, and we would rather say that than imply
+a review that has not happened. Read it before you sign; it is one page.
 
-**What it will and will not change.** Everything published here stays AGPL-3.0. What the
-agreement covers is two things, and the second one is easy to leave out: whether KlangHaus
-may additionally grant your contribution under other terms, **and whether those rights may
-be transferred onward to another legal entity** — a group company, or a company in the same
-ownership — without asking you again.
+**What it changes.** Everything published here stays AGPL-3.0. The agreement adds two things,
+and the second one is easy to leave out: KlangHaus may additionally grant your contribution
+under other terms, including proprietary ones, **and may transfer those rights onward to
+another legal entity** — a group company, or a company in the same ownership — without asking
+you again. It is a **licence**, not an assignment: you keep your copyright.
 
-Today we can do neither: we hold the copyright only to what we wrote ourselves, and we
-cannot relicense or hand on someone else's contribution without asking them. The agreement
-is how that changes, and it is the whole reason it exists — we would rather you knew that
-now than read it in the small print later.
+Without it we hold the copyright only to what we wrote ourselves and cannot relicense or hand
+on someone else's contribution without asking them. The transfer half is named because our own
+first requirement list left it out: Ophavsretsloven § 56(2) gives no right to pass a licence
+onward unless it is customary or clearly presupposed, so a grant that lists relicensing and
+stops there ends at one company.
 
-The transfer half is named here because our own first requirement list left it out: Ophavsretsloven § 56(2) gives no right to pass a licence onward
-unless it is customary or clearly presupposed, so a grant that lists relicensing and stops
-there ends at one company. Without the clause, every contributor would have to be asked
-again the day the rights move. A sentence that covers what the writer happened to be
-thinking of is the failure mode here, on both sides of the agreement.
+### 🔴 Before you sign: clause 8, in full
 
-We would rather tell you this before you spend an evening on a patch than after. So:
+This is the clause a signer most needs to read **before** signing, so here it is, word for
+word from the agreement:
 
-- **Issues, bug reports and discussion need no agreement.** They are welcome now.
-- **A patch is welcome too, but expect it to wait** for the agreement rather than being
-  reviewed and merged straight away.
-- When the agreement lands, this section will say exactly what it asks for and what it does
-  not, in plain language and before you are asked to sign anything. If it turns out to ask
-  for more than you want to give, that is a fair reason not to contribute, and we would
-  rather you could tell.
+> **8. Your personal data and the public record.** To record this agreement, KlangHaus
+> processes Your **GitHub username, Your GitHub numeric user ID, the date, and the
+> version of this agreement You accepted**, held in a file in the Project's public
+> repository. **We record no email address in that file.** Note that the commit You make
+> carries whatever author identity Your own git configuration uses, which may include an
+> email address; that is Your setting, not our record, and GitHub can supply a
+> `noreply` address instead if You prefer.
+>
+> The purpose is to show who granted which rights. The basis is **Article 6(1)(b) GDPR**
+> (this agreement is with You) and **6(1)(f)** (keeping the record as evidence). **The
+> record is kept for as long as the Contribution is distributed, plus the general
+> limitation period** — the evidence has to outlive what it proves.
+>
+> 🔴 **This record is public and permanent.** It is part of the repository's history, it
+> is copied into every clone and fork, and **it cannot be removed.** We will refuse a
+> request to erase it, because the record is what establishes that the Project may use
+> and distribute Your Contribution (**Article 17(3)(e) GDPR**: processing necessary for
+> the establishment, exercise or defence of legal claims). **You can ask us to correct an
+> entry that is wrong**, and we will do so by adding a correcting entry rather than by
+> rewriting history.
+
+### How to sign
+
+1. **Read [the agreement](legal/individual-cla.md), and clause 8 above.**
+2. **Find your numeric GitHub user ID.** It does not change when you rename your account,
+   which is why it is recorded:
+   `gh api users/<your-username> --jq .id`, or open `https://api.github.com/users/<your-username>`
+   and read `"id"`.
+3. **Find the version you are accepting:** the short SHA of the last commit that changed the
+   agreement — `git log -1 --format=%h -- legal/individual-cla.md` in a current clone.
+4. **From your own GitHub account**, open a pull request that changes **only**
+   [CLA.md](CLA.md), appending one line at the end of the table:
+
+   ```
+   | @your-username | 1234567 | 2026-10-28 | cla-1.0 (a1b2c3d) |
+   ```
+
+   Today's date, UTC. Your username as GitHub shows it.
+5. **The `CLA` check verifies the line against the pull request itself**: the user ID and
+   username must be the pull request author's, the version must be the current one and its
+   SHA the commit that last changed the agreement, the file may only grow by your one line,
+   and you must not have signed before. **A line added for someone else is refused** — the
+   evidence is that you added it yourself.
+
+Once that pull request is merged, the same check lets your code pull requests through.
+**Issues, bug reports and discussion need no agreement.**
+
+**Contributing work you made as part of your job, or work your employer could claim
+rights in?** Open an issue before you sign — we need a separate agreement with your
+employer: the [Corporate CLA](legal/corporate-cla.md). Your employer signs it, not you,
+and the people it covers are listed in [legal/corporate-signatures.md](legal/corporate-signatures.md).
 
 A CLA is a real cost to a project: plenty of capable people will not sign one, and we know
 that. It is being adopted deliberately, not as boilerplate.

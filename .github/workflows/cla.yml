@@ -1,0 +1,68 @@
+# Contributor licence agreement check. The model is [jura]'s (docs 52cbb84,
+# legal/cla-resonans-udkast.md §C.3): a contributor signs by adding their OWN
+# line to CLA.md in a pull request from their own account, and the decisive rule
+# is that the line's user ID is the pull request author's. scripts/cla_check.py
+# holds the rules and says why each one exists.
+#
+# 🔴 WHY `pull_request_target` HERE — and why it is safe here.
+#
+# The other workflows in this repository use `pull_request`, and must: they
+# build and test the pull request's code. This one is the exception, for the
+# opposite reason. On `pull_request` the workflow file AND the script come from
+# the pull request itself, so a contributor could edit this check to pass. On
+# `pull_request_target` both come from main.
+#
+# What makes that safe is what this job does NOT do:
+#   · it never checks out or runs the pull request's code — checkout is pinned to
+#     the BASE commit, and the pull request's CLA.md and file list are fetched
+#     through the API as DATA, bound to its head SHA;
+#   · it uses no secrets, and its token is read-only (`permissions` below);
+#   · text from the pull request is printed with repr(), so it cannot inject
+#     workflow commands into the log.
+# A change to this file or to scripts/cla_check.py therefore only takes effect
+# once it is merged — which is the point.
+#
+# The exception to "never pull_request_target" is [sikkerhed]'s, given on
+# resonans#158 on these conditions, and ENFORCED, not remembered: the selftest
+# (cla-selftest.yml, scripts/cla_check.py check_workflow) reads this file and
+# fails if any of them stops holding — one trigger, read-only permissions, no
+# secrets, checkout of the base commit without credentials, actions pinned to a
+# commit, only the base tree's script run — or if any OTHER workflow uses
+# pull_request_target.
+#
+# One trigger per file: with `pull_request` in here too, the job named `CLA`
+# was published as "skipped" on every pull request, and GitHub counts a skipped
+# required check as satisfied. The rules' own tests live in cla-selftest.yml.
+
+name: CLA
+
+on:
+  # No `edited`: editing a title is not a push, and the check dates a
+  # contribution by the push it runs for (see scripts/cla_check.py).
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  cla:
+    name: CLA
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The BASE commit — trusted code — never the pull request's head.
+          ref: ${{ github.event.pull_request.base.sha }}
+          # Full history: the agreement's version SHA is the last commit that
+          # changed legal/individual-cla.md, read with `git log`.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the contributor agreement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/cla_check.py
