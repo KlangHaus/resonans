@@ -26,6 +26,15 @@ request — server time — not by the commit date, which the contributor writes
 set to any day. A pull request pushed while cover held keeps that green result; a
 later push, or a reopen, after the date is refused.
 
+The push time can only be later than the commit, never earlier, so the check can
+refuse a contribution the agreement covers but cannot pass one it does not. **When a
+maintainer overrides such a refusal, that is not an exception to the agreement**: it
+is the agreement applying where the check could not see the commit's real date
+(clause 3 licenses a contribution when it is made).
+
+An end date that does not parse is never read as "no end": the check reports an
+error. A licence field that fails open would grant rights nobody gave.
+
 The form, indented here so the check does not read it as a signature (the check only
 reads lines that start at the left margin):
 
