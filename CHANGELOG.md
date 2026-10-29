@@ -1,3 +1,10 @@
+## [3.0.2](https://github.com/KlangHaus/resonans/compare/v3.0.1...v3.0.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** golang.org/x/net v0.62.0 for GO-2026-6860 and GO-2026-6866 ([183d406](https://github.com/KlangHaus/resonans/commit/183d40625892bbad8a0adf094dac1a648f34bb59))
+
 ## [3.0.1](https://github.com/KlangHaus/resonans/compare/v3.0.0...v3.0.1) (2026-10-27)
 
 
