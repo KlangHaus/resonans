@@ -162,7 +162,8 @@ jobs:
       - name: Print the Sonar findings in the log
         if: ${{ always() && github.event_name == 'pull_request' && env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
         env:
-          SONAR_PROJECT_KEY: KlangHaus_resonans
+          # Same key as sonar-project.properties.
+          SONAR_PROJECT_KEY: KlangHaus_resonans_7e9bb7e1-ee71-479d-9904-a02be28f4d30
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: bash scripts/print-sonar-findings.sh
 
