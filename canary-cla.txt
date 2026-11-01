@@ -1,0 +1,1 @@
+Canary for the CLA check: a code pull request from a fork by an author who has not signed. Expected: CLA fails with NOT-SIGNED. Not for merging.
