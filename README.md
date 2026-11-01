@@ -316,5 +316,5 @@ If the AGPL does not fit what you want to build, ask us — but note that a diff
 needs the agreement of everyone who holds copyright in the part you want, and that is the
 authors rather than the company. See [NOTICE](NOTICE).
 
-A contributor licence agreement is being prepared, and outside patches wait for it — see
-[CONTRIBUTING.md](CONTRIBUTING.md) before spending an evening on one.
+Outside contributions need a signed contributor licence agreement first — see
+[CONTRIBUTING.md](CONTRIBUTING.md#licensing-of-contributions) before spending an evening on a patch.
