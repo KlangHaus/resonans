@@ -58,7 +58,11 @@ func TestMigrateAsLeastPrivilegeMigrator(t *testing.T) {
 	})
 
 	adminOnProbe := connectAs(t, probeDSN(t, "", ""), db)
-	defer adminOnProbe.Close(ctx)
+	defer func() {
+		if err := adminOnProbe.Close(ctx); err != nil {
+			t.Logf("close the superuser connection to the probe database: %v", err)
+		}
+	}()
 	if _, err := adminOnProbe.Exec(ctx,
 		"create schema resonans_app authorization "+role); err != nil {
 		t.Fatalf("pre-create schema as superuser: %v", err)

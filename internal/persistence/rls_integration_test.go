@@ -53,7 +53,7 @@ func coverageSQL(t *testing.T) string {
 	// Strip the psql-only meta-command; pgx speaks SQL, not psql.
 	sql = strings.ReplaceAll(sql, `\set ON_ERROR_STOP on`, "")
 	if !strings.Contains(sql, "relforcerowsecurity") {
-		t.Fatalf("%s does not look like the coverage assertion — refusing to report on a file whose content I cannot recognise", path)
+		t.Fatalf("%s does not look like the coverage assertion — refusing to report on a file whose content I cannot recognize", path)
 	}
 	return sql
 }

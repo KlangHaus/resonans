@@ -2,6 +2,13 @@ version: "2"
 
 run:
   timeout: 5m
+  # Lint the //go:build integration files too. Without this the required
+  # `Lint + Test` never compiled them (the `go test -race ./...` there has no
+  # tags either), so 8 files — the RLS cells and every Postgres store cell —
+  # were checked by nothing but the compiler in `Tenant isolation`. Measured
+  # when this was added: 4 findings on main that no check could see.
+  build-tags:
+    - integration
 
 linters:
   default: standard # errcheck, govet, ineffassign, staticcheck, unused

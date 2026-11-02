@@ -7,5 +7,15 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['app/**/*.test.ts'],
+    // `pnpm test:coverage` writes coverage/lcov.info for SonarQube
+    // (sonar-project.properties). Only the editor's own code is measured:
+    // Nuxt's generated .nuxt/ and the tests themselves are not ours to cover.
+    coverage: {
+      provider: 'v8',
+      reporter: ['lcov', 'text-summary'],
+      reportsDirectory: 'coverage',
+      include: ['app/**/*.ts', 'server/**/*.ts'],
+      exclude: ['**/*.test.ts', '**/*.d.ts'],
+    },
   },
 })

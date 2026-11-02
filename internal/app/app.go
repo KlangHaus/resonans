@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -138,6 +139,11 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("connect db: %w", err)
 		}
 		defer pool.Close()
+
+		role, bypassesRLS, roleErr := persistence.ConnectedRole(ctx, pool)
+		if err := checkDBRole(logger, cfg.IsProduction(), role, bypassesRLS, roleErr); err != nil {
+			return err
+		}
 
 		// In production the server connects as the NOBYPASSRLS app-role, which
 		// has no DDL privileges — migrations run via the `resonans migrate`
@@ -459,6 +465,29 @@ func SlugAudit(ctx context.Context) error {
 	newStdoutLogger(cfg.LogLevel, cfg.OTelServiceName, cfg.NodeEnv).
 		Info("slug_audit", "scanned", rep.Scanned, "invalid", rep.Invalid, "findings", rep.Findings)
 	return err
+}
+
+// checkDBRole decides whether Run may serve as the database role it connected
+// as (ClickUp 1amk32fkxc5). Tenant isolation is RLS alone, and RLS does not
+// apply to a SUPERUSER or BYPASSRLS role. Production refuses to serve as one,
+// and refuses too when the role could not be read: a check that could not
+// measure is not a pass. Elsewhere it warns, by a name an environment can be
+// searched for, because a local database is usually a single owner role.
+func checkDBRole(logger *slog.Logger, production bool, role string, bypassesRLS bool, readErr error) error {
+	switch {
+	case readErr != nil && production:
+		return fmt.Errorf("check the database role: %w", readErr)
+	case readErr != nil:
+		logger.Warn("db_role_unchecked", "err", readErr)
+	case bypassesRLS && production:
+		return fmt.Errorf("refusing to start as database role %q: %w", role, persistence.ErrRoleBypassesRLS)
+	case bypassesRLS:
+		logger.Warn("db_role_bypasses_rls", "role", role,
+			"detail", "every tenant can read every other tenant's rows; dev only — production refuses to start")
+	default:
+		logger.Info("db_role", "role", role, "bypassesRLS", false)
+	}
+	return nil
 }
 
 // mediaAssetResolver adapts the media service to delivery.AssetResolver: it
