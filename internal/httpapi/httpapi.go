@@ -392,7 +392,10 @@ func (h *Handlers) listAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	assets, err := h.media.List(r.Context(), tid, f)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
+		// Through writeMediaErr like every other media route: it answers the
+		// same 500, and it is the one that LOGS the cause. Writing the 500
+		// here directly left a failing asset library with no trace.
+		h.writeMediaErr(w, err)
 		return
 	}
 	out := make([]assetResponse, 0, len(assets))

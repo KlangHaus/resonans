@@ -1,3 +1,35 @@
+## [3.0.2](https://github.com/KlangHaus/resonans/compare/v3.0.1...v3.0.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** golang.org/x/net v0.62.0 for GO-2026-6860 and GO-2026-6866 ([183d406](https://github.com/KlangHaus/resonans/commit/183d40625892bbad8a0adf094dac1a648f34bb59))
+
+## [3.0.1](https://github.com/KlangHaus/resonans/compare/v3.0.0...v3.0.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **httpapi:** log the cause when the asset list fails ([ada0c6a](https://github.com/KlangHaus/resonans/commit/ada0c6a5dab32cb1ec96f98f2b06e0d621d4dc7a))
+
+# [3.0.0](https://github.com/KlangHaus/resonans/compare/v2.3.0...v3.0.0) (2026-10-26)
+
+
+* fix(app)!: refuse to serve in production as a role that bypasses RLS ([ee56718](https://github.com/KlangHaus/resonans/commit/ee567183f3399d24fe09861541a9f5e9e74f9ff7))
+
+
+### ACTION REQUIRED
+
+* before upgrading, check the role in DATABASE_URL with
+`select rolsuper, rolbypassrls from pg_roles where rolname = current_user`.
+Both must be false; otherwise connect as a role created like
+deploy/initdb/10-app-role.sql.
+
+### BREAKING CHANGES
+
+* with NODE_ENV=production, Resonans no longer starts
+when DATABASE_URL connects as a SUPERUSER or BYPASSRLS role.
+
 # [2.3.0](https://github.com/KlangHaus/resonans/compare/v2.2.1...v2.3.0) (2026-10-24)
 
 

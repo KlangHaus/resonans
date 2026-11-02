@@ -1,0 +1,32 @@
+# Tests for the contributor-agreement check. Ordinary `pull_request`: it runs the
+# pull request's OWN version of scripts/cla_check.py against the fixtures, so a
+# change to the rules is tested before it reaches main. It only runs tests; it
+# decides nothing about the agreement — that is cla.yml, on its own trigger.
+#
+# It also enforces the conditions of cla.yml's pull_request_target exception
+# (check_workflow): a change that breaks one of them turns this check red.
+
+name: CLA selftest
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: CLA selftest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 57 fixtures (every rule, both ways), the shape of the live exemption
+      # list and corporate register, clause 8 in CONTRIBUTING.md word for word,
+      # and the conditions of cla.yml's pull_request_target exception.
+      - name: Selftest
+        run: python3 scripts/cla_check.py --selftest
