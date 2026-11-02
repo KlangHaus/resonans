@@ -171,6 +171,18 @@ word from the agreement:
    ```
 
    Today's date, UTC. Your username as GitHub shows it.
+
+   **Use this commit message**, also in GitHub's "Commit changes" dialog when you edit
+   the file in the browser:
+
+   ```
+   docs(cla): sign as @your-username
+   ```
+
+   The repository requires [Conventional Commits](https://www.conventionalcommits.org/),
+   and the `commitlint` check refuses any other message. The commit is your signature,
+   so a wrong message cannot be fixed by someone else rewriting it: you would have to
+   make the commit again.
 5. **The `CLA` check verifies the line against the pull request itself**: the user ID and
    username must be the pull request author's, the version must be the current one and its
    SHA the commit that last changed the agreement, the file may only grow by your one line,
