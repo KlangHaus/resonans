@@ -15,3 +15,4 @@ a correction is a new line (see clause 8).
 
 | GitHub | User ID | Date | CLA version |
 |---|---|---|---|
+| @allanasp | 126660659 | 2026-11-01 | cla-1.0 (bb753fe) |
