@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,9 @@ import (
 
 	"github.com/KlangHaus/resonans/internal/auth"
 )
+
+// localePattern is the shape of a language tag: en, da, pt-BR, zh-Hant.
+var localePattern = regexp.MustCompile(`^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
 
 // Config holds all runtime configuration.
 type Config struct {
@@ -62,6 +66,11 @@ type Config struct {
 	JWTIssuer   string
 	JWKSURL     string
 	JWTAudience string
+
+	// DefaultLocale is delivered when a request names no locale, and is the
+	// fallback for a field with no text in the requested one.
+	// Deploy contract: RESONANS_DEFAULT_LOCALE.
+	DefaultLocale string
 
 	// TenantClaim and RoleClaim name the token claims that carry the tenant and
 	// the role (RESONANS_TENANT_CLAIM, default "org"; RESONANS_ROLE_CLAIM,
@@ -205,8 +214,10 @@ func Load() (*Config, error) {
 
 		SourceURL: getenv("RESONANS_SOURCE_URL", "https://github.com/KlangHaus/resonans"),
 
-		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "klanghaus-resonans"),
-		OTelServiceNamespace: getenv("OTEL_SERVICE_NAMESPACE", "klanghaus"),
+		DefaultLocale: getenv("RESONANS_DEFAULT_LOCALE", "da"),
+
+		OTelServiceName:      getenv("OTEL_SERVICE_NAME", "resonans"),
+		OTelServiceNamespace: getenv("OTEL_SERVICE_NAMESPACE", "resonans"),
 		OTelEnabled:          getbool("OTEL_ENABLED", false),
 	}
 
@@ -240,6 +251,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("RESONANS_ROLE_MAP: %w", err)
 	}
 	cfg.RoleMap = roleMap
+
+	if !localePattern.MatchString(cfg.DefaultLocale) {
+		return nil, fmt.Errorf("RESONANS_DEFAULT_LOCALE: %q is not a language tag like en or pt-BR", cfg.DefaultLocale)
+	}
 
 	if err := cfg.loadTenantMode(); err != nil {
 		return nil, err

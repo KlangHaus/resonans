@@ -337,3 +337,36 @@ func TestNodeEnvDefaultedDistinguishesSourceFromValue(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultLocale(t *testing.T) {
+	t.Run("unset keeps the historic default", func(t *testing.T) {
+		t.Setenv("RESONANS_DEFAULT_LOCALE", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.DefaultLocale != "da" {
+			t.Errorf("DefaultLocale = %q, want da", cfg.DefaultLocale)
+		}
+	})
+	for _, ok := range []string{"en", "da", "fil", "pt-BR", "zh-Hant"} {
+		t.Run("accepts "+ok, func(t *testing.T) {
+			t.Setenv("RESONANS_DEFAULT_LOCALE", ok)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.DefaultLocale != ok {
+				t.Errorf("DefaultLocale = %q, want %q", cfg.DefaultLocale, ok)
+			}
+		})
+	}
+	for _, bad := range []string{"EN", "english", "e", "en_US", "en-", "en us", "../x"} {
+		t.Run("refuses "+bad, func(t *testing.T) {
+			t.Setenv("RESONANS_DEFAULT_LOCALE", bad)
+			if _, err := Load(); err == nil {
+				t.Errorf("Load accepted %q", bad)
+			}
+		})
+	}
+}

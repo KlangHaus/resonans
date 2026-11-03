@@ -44,11 +44,15 @@ type Deps struct {
 	// does, so the frontend renders the draft with the same shape it gets in
 	// production. nil = asset fields are left unresolved.
 	Assets delivery.AssetResolver
-	Logger *slog.Logger
+	// DefaultLocale is the live preview's fallback, the same as delivery's so a
+	// preview matches what is published. "" means delivery.DefaultLocale.
+	DefaultLocale string
+	Logger        *slog.Logger
 }
 
 // Handlers holds the wired dependencies for the route handlers.
 type Handlers struct {
+	defaultLocale string
 	store         content.Store
 	registry      *schema.Registry
 	media         *media.Service
@@ -126,6 +130,10 @@ func (h *Handlers) Routes() []Route {
 // request context).
 func NewRouter(d Deps) http.Handler {
 	h := &Handlers{store: d.Store, registry: d.Registry, media: d.Media, video: d.Video, settings: d.Settings, previewSecret: []byte(d.PreviewSecret), assets: d.Assets, log: d.Logger}
+	h.defaultLocale = d.DefaultLocale
+	if h.defaultLocale == "" {
+		h.defaultLocale = delivery.DefaultLocale
+	}
 
 	mux := http.NewServeMux()
 	for _, rt := range h.Routes() {
@@ -222,10 +230,10 @@ func (h *Handlers) previewEnvelope(w http.ResponseWriter, r *http.Request) {
 	body = clean
 	locale := in.Locale
 	if locale == "" {
-		locale = delivery.DefaultLocale
+		locale = h.defaultLocale
 	}
 	doc := content.Document{TenantID: tid, Type: in.Type, Slug: in.Slug, Title: in.Title, Body: body, Status: content.StatusDraft}
-	env := delivery.BuildEnvelope(r.Context(), tid, doc, h.registry, locale, delivery.DefaultLocale, h.assets)
+	env := delivery.BuildEnvelope(r.Context(), tid, doc, h.registry, locale, h.defaultLocale, h.assets)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, env)
 }

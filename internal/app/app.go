@@ -234,6 +234,7 @@ func Run(ctx context.Context) error {
 
 	// --- Editor REST router (tenant-scoped, JWT-gated) ---
 	apiRouter := httpapi.NewRouter(httpapi.Deps{
+		DefaultLocale: cfg.DefaultLocale,
 		Store:         store,
 		Registry:      registry,
 		Media:         mediaSvc,
@@ -252,6 +253,7 @@ func Run(ctx context.Context) error {
 		Assets:        &mediaAssetResolver{media: mediaSvc},
 		ServiceToken:  cfg.DeliveryToken,
 		PreviewSecret: cfg.PreviewSecret,
+		DefaultLocale: cfg.DefaultLocale,
 		Logger:        logger,
 	})
 

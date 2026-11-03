@@ -31,11 +31,10 @@ import (
 // maxList caps a catalog response until cursor pagination lands (follow-up).
 const maxList = 200
 
-// DefaultLocale is used when a request omits ?locale and as the i18n fallback.
-// Exported for the editor's live preview, which must fall back identically.
+// DefaultLocale is the locale used when a request omits ?locale and as the i18n
+// fallback, unless RESONANS_DEFAULT_LOCALE sets another. Exported for the
+// configuration default.
 const DefaultLocale = "da"
-
-const defaultLocale = DefaultLocale
 
 // Deps are the collaborators the delivery API needs.
 type Deps struct {
@@ -44,6 +43,7 @@ type Deps struct {
 	Assets        AssetResolver // may be nil (asset ids then pass through unresolved)
 	ServiceToken  string        // "" in dev/test (X-Scope-OrgID trusted directly)
 	PreviewSecret string        // verifies preview tokens; empty disables preview
+	DefaultLocale string        // "" means DefaultLocale
 	Logger        *slog.Logger
 }
 
@@ -53,6 +53,7 @@ type Handlers struct {
 	registry      *schema.Registry
 	assets        AssetResolver
 	previewSecret []byte
+	defaultLocale string
 	log           *slog.Logger
 }
 
@@ -60,6 +61,10 @@ type Handlers struct {
 // the service-auth middleware (which resolves the tenant onto the context).
 func NewRouter(d Deps) http.Handler {
 	h := &Handlers{store: d.Store, registry: d.Registry, assets: d.Assets, previewSecret: []byte(d.PreviewSecret), log: d.Logger}
+	h.defaultLocale = d.DefaultLocale
+	if h.defaultLocale == "" {
+		h.defaultLocale = DefaultLocale
+	}
 
 	mux := http.NewServeMux()
 	// Published block-schema + per-doc-type allowlists (consumer validation /
@@ -156,7 +161,7 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 	locale := h.locale(r)
 	items := make([]map[string]any, 0, len(docs))
 	for _, d := range docs {
-		env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, defaultLocale, h.assets)
+		env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, h.defaultLocale, h.assets)
 		items = append(items, summarize(d, env))
 	}
 	// nextCursor omitted in v1 (single page up to maxList); `truncated` signals more.
@@ -180,7 +185,7 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	locale := h.locale(r)
-	env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, defaultLocale, h.assets)
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, h.defaultLocale, h.assets)
 	// ?expand=modules.lessons: replace a course's module refs with a nested tree
 	// (module → lesson metadata) resolved in one call (no N+1 in SSR).
 	if d.Type == "course" && strings.Contains(r.URL.Query().Get("expand"), "modules") {
@@ -214,7 +219,7 @@ func (h *Handlers) expandCourseTree(ctx context.Context, tid uuid.UUID, env Enve
 		if err != nil {
 			continue
 		}
-		modEnv := BuildEnvelope(ctx, tid, modDoc, h.registry, locale, defaultLocale, h.assets)
+		modEnv := BuildEnvelope(ctx, tid, modDoc, h.registry, locale, h.defaultLocale, h.assets)
 		node := map[string]any{"id": modEnv.ID, "slug": modEnv.Slug, "title": modEnv.Data["title"], "order": i}
 
 		rawLessons, _ := modEnv.Data["lessons"].([]any)
@@ -224,7 +229,7 @@ func (h *Handlers) expandCourseTree(ctx context.Context, tid uuid.UUID, env Enve
 			if err != nil {
 				continue
 			}
-			lesEnv := BuildEnvelope(ctx, tid, lesDoc, h.registry, locale, defaultLocale, h.assets)
+			lesEnv := BuildEnvelope(ctx, tid, lesDoc, h.registry, locale, h.defaultLocale, h.assets)
 			lesson := map[string]any{"id": lesEnv.ID, "slug": lesEnv.Slug, "title": lesEnv.Data["title"], "order": j}
 			if dur, ok := lesEnv.Data["estimatedMinutes"]; ok {
 				lesson["durationEstimate"] = dur
@@ -339,7 +344,7 @@ func (h *Handlers) previewDraft(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	env := BuildEnvelope(r.Context(), tid, d, h.registry, h.locale(r), defaultLocale, h.assets)
+	env := BuildEnvelope(r.Context(), tid, d, h.registry, h.locale(r), h.defaultLocale, h.assets)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, env)
 }
@@ -349,7 +354,7 @@ func (h *Handlers) locale(r *http.Request) string {
 	if l := r.URL.Query().Get("locale"); l != "" {
 		return l
 	}
-	return defaultLocale
+	return h.defaultLocale
 }
 
 func (h *Handlers) writeErr(w http.ResponseWriter, err error) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -266,4 +267,91 @@ func TestDeliveryServiceToken(t *testing.T) {
 	if rec := get(h, "/delivery/v1/course", "s3cret", ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("token without scope = %d, want 403", rec.Code)
 	}
+}
+
+// The configured default decides what a request with no locale gets, and what a
+// field with no text in the requested locale falls back to.
+func TestDefaultLocaleIsConfigurable(t *testing.T) {
+	s := content.NewMemoryStore()
+	ctx := context.Background()
+	d, err := s.Create(ctx, tenantA, content.CreateInput{
+		Type: "post", Slug: "p1", Title: "T",
+		Body: json.RawMessage(`{"excerpt":{"da":"Hej","en":"Hello"}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name, configured, query, want string
+	}{
+		{"unset keeps the historic default", "", "", "Hej"},
+		{"configured default, no locale asked for", "en", "", "Hello"},
+		{"an explicit locale beats the default", "en", "?locale=da", "Hej"},
+		{"a missing locale falls back to the default", "en", "?locale=de", "Hello"},
+		{"the same fallback under the historic default", "", "?locale=de", "Hej"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := NewRouter(Deps{Store: s, Registry: reg(t), DefaultLocale: c.configured})
+			rec := get(h, "/delivery/v1/post/p1"+c.query, "", tenantA.String())
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+			}
+			var env Envelope
+			if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+				t.Fatal(err)
+			}
+			if env.Data["excerpt"] != c.want {
+				t.Errorf("excerpt = %v, want %q", env.Data["excerpt"], c.want)
+			}
+		})
+	}
+}
+
+// The fallback for the other two routes that render a document: a request for a
+// locale with no text gets the configured default's text, as on the single-document
+// route above.
+func TestDefaultLocaleReachesListAndPreview(t *testing.T) {
+	s := content.NewMemoryStore()
+	ctx := context.Background()
+	body := json.RawMessage(`{"excerpt":{"da":"Hej","en":"Hello"}}`)
+	d, err := s.Create(ctx, tenantA, content.CreateInput{Type: "post", Slug: "p1", Title: "T", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	const secret = "preview-secret"
+	h := NewRouter(Deps{Store: s, Registry: reg(t), DefaultLocale: "en", PreviewSecret: secret})
+
+	t.Run("list", func(t *testing.T) {
+		rec := get(h, "/delivery/v1/post?locale=de", "", tenantA.String())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+		}
+		if !strings.Contains(rec.Body.String(), `"Hello"`) || strings.Contains(rec.Body.String(), `"Hej"`) {
+			t.Errorf("list body = %s", rec.Body)
+		}
+	})
+	t.Run("preview", func(t *testing.T) {
+		tok := preview.Sign([]byte(secret), preview.Claims{
+			Tenant: tenantA.String(), Type: "post", Slug: "p1", Exp: time.Now().Add(time.Minute).Unix(),
+		})
+		rec := get(h, "/delivery/v1/preview/post/p1?locale=de&token="+tok, "", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+		}
+		var env Envelope
+		if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+			t.Fatal(err)
+		}
+		if env.Data["excerpt"] != "Hello" {
+			t.Errorf("excerpt = %v, want Hello", env.Data["excerpt"])
+		}
+	})
 }
