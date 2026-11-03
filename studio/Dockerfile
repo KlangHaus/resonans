@@ -19,7 +19,7 @@
 # here, because the gate builds and typechecks but runs nothing at runtime.
 # --platform=$BUILDPLATFORM: the build's output is JavaScript with no native modules,
 # so it is the same for every target and needs no emulation.
-FROM --platform=$BUILDPLATFORM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+FROM --platform=$BUILDPLATFORM node:26-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39 AS build
 WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
@@ -37,7 +37,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
+FROM node:26-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39 AS runtime
 WORKDIR /app
 # Build identity, surfaced at /healthz. Kept as ENV (not runtimeConfig) so the
 # value is readable at request time — runtimeConfig would bake it at build time.
