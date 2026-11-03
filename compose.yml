@@ -90,6 +90,8 @@ services:
       # AGPL-3.0 §13: if you modify Resonans and offer it over a network, point
       # this at YOUR source so the offer on /healthz is true.
       RESONANS_SOURCE_URL: ${RESONANS_SOURCE_URL:-}
+      # The language delivered when a request names none. See .env.example.
+      RESONANS_DEFAULT_LOCALE: ${RESONANS_DEFAULT_LOCALE:-da}
     volumes:
       - assets_data:/var/lib/resonans/assets
     ports:

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/KlangHaus/resonans/internal/content"
 )
 
 func TestPreviewEnvelopeBuildsFromUnsavedBody(t *testing.T) {
@@ -156,5 +158,29 @@ func TestPreviewEnvelopeIsSanitizedLikeASave(t *testing.T) {
 	}
 	if !strings.Contains(got, "<p>ok <strong>fed</strong></p>") {
 		t.Errorf("formatting lost (the control): %s", got)
+	}
+}
+
+// A live preview must fall back the way delivery does, or an editor previews one
+// language and the site publishes another.
+func TestPreviewEnvelopeUsesTheConfiguredDefaultLocale(t *testing.T) {
+	for _, c := range []struct{ configured, want string }{{"", "Hej"}, {"en", "Hi"}} {
+		h := NewRouter(Deps{Store: content.NewMemoryStore(), Registry: mustRegistry(t), DefaultLocale: c.configured})
+		rec := do(t, h, http.MethodPost, "/api/v1/preview/envelope", tenantA, map[string]any{
+			"type": "page", "slug": "home", "title": "T",
+			"body": map[string]any{"seoTitle": map[string]any{"da": "Hej", "en": "Hi"}},
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body)
+		}
+		var env struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+			t.Fatal(err)
+		}
+		if env.Data["seoTitle"] != c.want {
+			t.Errorf("configured %q: seoTitle = %v, want %q", c.configured, env.Data["seoTitle"], c.want)
+		}
 	}
 }
