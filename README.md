@@ -38,19 +38,41 @@ already run.
 
 ## Quickstart
 
+You need Docker with Compose. Both commands build the images from your checkout, so the
+first run takes a few minutes and no registry account is needed.
+
+### Try it
+
+No login provider of your own needed:
+
 ```bash
 git clone https://github.com/KlangHaus/resonans.git
 cd resonans
+docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml up -d --build
+```
+
+Open <http://localhost:8080> and press log in. You land as an administrator without a
+password: [Dex](https://dexidp.io), an independent OpenID Connect provider, runs alongside
+with a connector that approves everyone. The passwords in `deploy/try/env` are public, so
+this stack only listens on 127.0.0.1 and is for your own machine. CI boots this exact stack
+from a clean clone on every pull request. If your browser cannot resolve `dex.localhost`,
+add `127.0.0.1 dex.localhost` to `/etc/hosts`.
+
+To remove it and its data, run the same command with `down -v` in place of `up -d --build`.
+
+### Run it
+
+```bash
 cp .env.example .env
-$EDITOR .env          # fill in the passwords and point the login settings at your IdP
-docker compose up -d
+$EDITOR .env          # fill in the passwords and point the login settings at your provider
+docker compose up -d --build
 ```
 
 Editor at <http://localhost:8080>, content API at <http://localhost:3000>.
 
-`compose.yml` deliberately does **not** terminate TLS or bind to a public address. Put
-your own reverse proxy in front for that. Publishing an editor to the internet is a
-decision only you can make, so it is not a default.
+`compose.yml` deliberately does **not** terminate TLS, and it publishes its ports on
+127.0.0.1 only (`BIND_ADDRESS`). Put your own reverse proxy in front. Publishing an editor
+to the internet is a decision only you can make, so it is not a default.
 
 ### Onto a Postgres you already run
 
