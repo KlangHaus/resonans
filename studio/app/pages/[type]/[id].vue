@@ -183,10 +183,10 @@ watch(
         <span class="rz-chip">{{ doc.slug }}</span>
       </div>
       <div style="display: flex; gap: 8px; align-items: center">
-        <div class="ve-toggle" role="group" :aria-label="t('View')">
+        <fieldset class="ve-toggle" :aria-label="t('View')">
           <button type="button" :class="{ on: !visual }" :aria-pressed="!visual" @click="setView('form')">{{ t('Form') }}</button>
           <button type="button" :class="{ on: visual }" :aria-pressed="visual" @click="setView('visual')">{{ t('Visual') }}</button>
-        </div>
+        </fieldset>
         <span class="rz-field__hint">{{ msg }}</span>
         <button class="rz-btn" :disabled="saving" @click="save">{{ t('Save') }}</button>
         <button class="rz-btn rz-btn--primary" @click="publish">{{ t('Publish') }}</button>
@@ -257,6 +257,9 @@ watch(
 }
 .ve-toggle {
   display: flex;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
   border: 1px solid var(--rz-border);
   border-radius: 8px;
   overflow: hidden;

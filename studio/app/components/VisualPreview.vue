@@ -48,7 +48,7 @@ const frameWidth = computed(() => VIEWPORTS.find((v) => v.id === viewport.value)
 // the Studio's OWN origin: allow-scripts + allow-same-origin on our own origin
 // would let the framed page remove its sandbox (resonans#50).
 const sameOrigin = computed(
-  () => !!props.settings.previewOrigin && props.settings.previewOrigin === window.location.origin,
+  () => !!props.settings.previewOrigin && props.settings.previewOrigin === globalThis.location.origin,
 )
 const fallback = computed(() => !props.settings.previewReady || sameOrigin.value)
 const srcdoc = ref('')
@@ -73,7 +73,7 @@ async function load() {
     const css = getComputedStyle(document.documentElement)
     const v = (name: string) => css.getPropertyValue(name).trim()
     srcdoc.value = buildSrcdoc(
-      window.location.origin,
+      globalThis.location.origin,
       {
         bg: v('--rz-bg'),
         surface: v('--rz-bg-subtle'),
@@ -149,13 +149,13 @@ watch(
 watch(() => [props.type, props.slug, props.settings.previewUrl, props.locale, fallback.value], load)
 
 onMounted(() => {
-  window.addEventListener('message', onMessage)
-  window.addEventListener('keydown', onKey)
+  globalThis.addEventListener('message', onMessage)
+  globalThis.addEventListener('keydown', onKey)
   load()
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('message', onMessage)
-  window.removeEventListener('keydown', onKey)
+  globalThis.removeEventListener('message', onMessage)
+  globalThis.removeEventListener('keydown', onKey)
 })
 </script>
 
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
         responsive layout to show, so the selector would promise a simulation the
         fallback cannot deliver. The real site keeps it.
       -->
-      <span v-if="!fallback" class="pv__seg" role="group" :aria-label="t('Viewport width')">
+      <fieldset v-if="!fallback" class="pv__seg" :aria-label="t('Viewport width')">
         <button
           v-for="v in VIEWPORTS"
           :key="v.id"
@@ -185,8 +185,8 @@ onBeforeUnmount(() => {
         >
           {{ v.label }}
         </button>
-      </span>
-      <span class="pv__seg" role="group" :aria-label="t('Language')">
+      </fieldset>
+      <fieldset class="pv__seg" :aria-label="t('Language')">
         <button
           v-for="l in LOCALES"
           :key="l"
@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
         >
           {{ l.toUpperCase() }}
         </button>
-      </span>
+      </fieldset>
       <button
         type="button"
         class="pv__reload"
@@ -368,6 +368,9 @@ onBeforeUnmount(() => {
 }
 .pv__seg {
   display: inline-flex;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
   border: 1px solid var(--rz-border);
   border-radius: 7px;
   overflow: hidden;

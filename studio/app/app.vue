@@ -99,18 +99,16 @@ async function reportProblem() {
           out; in dev mode (no auth service configured) it keeps the old static
           label rather than claiming an identity nobody proved.
         -->
-        <div
+        <button
           v-if="auth.enabled.value"
           class="sb-rail__item sb-rail__account"
           :title="auth.user.value?.email || t('Not logged in')"
-          role="button"
-          tabindex="0"
+          type="button"
           @click="logOut"
-          @keydown.enter="logOut"
         >
           <span class="sb-rail__avatar">{{ initials }}</span>
           <span class="sb-rail__label">{{ auth.user.value ? `${auth.user.value.email} · ${t('Log out')}` : t('Log in') }}</span>
-        </div>
+        </button>
         <div v-else class="sb-rail__item sb-rail__account" :title="t('My account (development mode, no login)')">
           <span class="sb-rail__avatar">?</span> <span class="sb-rail__label">{{ t('My account') }}</span>
         </div>

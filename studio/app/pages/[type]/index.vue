@@ -14,14 +14,14 @@ const { data: docs, refresh, error } = await useAsyncData(
 )
 
 async function create() {
-  const slug = window.prompt(t('New {type}: slug?', { type: type.value }))
+  const slug = globalThis.prompt(t('New {type}: slug?', { type: type.value }))
   if (!slug) return
-  const title = window.prompt(t('Title?')) || slug
+  const title = globalThis.prompt(t('Title?')) || slug
   try {
     const d = await createDocument({ type: type.value, slug, title })
     await navigateTo(`/${type.value}/${d.id}`)
   } catch (e) {
-    window.alert(t('Could not create: {message}', { message: (e as Error).message }))
+    globalThis.alert(t('Could not create: {message}', { message: (e as Error).message }))
   }
 }
 </script>

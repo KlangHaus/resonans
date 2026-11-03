@@ -146,11 +146,11 @@ export function buildSrcdoc(studioOrigin: string, theme: Partial<Theme>, selecte
   }
   const n = nonce()
   const csp = `default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; script-src 'nonce-${n}'`
-  const script = `
+  const script = String.raw`
 (function () {
   var O = ${JSON.stringify(studioOrigin)}, V = ${BRIDGE_VERSION};
   var FROM_S = ${JSON.stringify(FROM_STUDIO)}, FROM_B = ${JSON.stringify(FROM_BRIDGE)};
-  var RE = /^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+){0,19}$/;
+  var RE = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){0,19}$/;
   var main = document.getElementById('fp'), sel = null;
   function post(m) { m.source = FROM_B; m.v = V; parent.postMessage(m, O); }
   function byPath(p) { return p && RE.test(p) ? document.querySelector('[data-resonans-path="' + p + '"]') : null; }

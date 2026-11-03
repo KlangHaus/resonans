@@ -15,10 +15,10 @@ export type TParams = Record<string, string | number>
 export function translate(locale: string, key: string, params?: TParams): string {
   const text = DICTIONARIES[locale]?.[key] ?? key
   if (!params) return text
-  return text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole))
+  return text.replaceAll(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole))
 }
 
 export function useT() {
-  const locale = (useRuntimeConfig().public.editorLocale as string) || 'en'
+  const locale = useRuntimeConfig().public.editorLocale || 'en'
   return { locale, t: (key: string, params?: TParams) => translate(locale, key, params) }
 }

@@ -50,7 +50,7 @@ function block(tag: string) {
   cmd('formatBlock', tag)
 }
 function link() {
-  const url = window.prompt(t('Link URL:'))
+  const url = globalThis.prompt(t('Link URL:'))
   if (url) cmd('createLink', url)
 }
 
