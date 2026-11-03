@@ -32,16 +32,22 @@
 # 🔴 REVISIT when the go directive leaves 1.26: the digest, the tag in this
 # comment and go.mod must move together, and the pinned gosec in ci-go.yml must
 # still be able to read what the new toolchain emits.
-FROM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS build
+# --platform=$BUILDPLATFORM: this stage runs natively and cross-compiles for the
+# target, so an arm64 image needs no emulation. CGO is off, so nothing below links
+# target libraries. The runtime stage only copies files, so nothing executes for the
+# target at all.
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
 ARG REVISION=unknown
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
     -ldflags="-s -w -X github.com/KlangHaus/resonans/internal/app.version=${VERSION} -X github.com/KlangHaus/resonans/internal/app.revision=${REVISION}" \
     -o /out/resonans ./cmd/resonans
 
@@ -74,7 +80,8 @@ RUN CGO_ENABLED=0 go build -trimpath \
 # The reproducible invariants are the RAW sha256 pinned below and the
 # decompressed size (4 381 105). Both are verified in the build: the digest by
 # sha256sum, which logs `/tmp/renderer.js: OK`, and the archive by `gzip -t`.
-FROM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS apidocs
+# Downloads a JavaScript bundle: the same bytes for every target.
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS apidocs
 ARG SCALAR_VERSION=1.72.4
 ARG SCALAR_SHA256=f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
 # 🔴 THE PIN'S FORMAT IS ASSERTED BEFORE IT IS USED, and that is not belt and

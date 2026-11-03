@@ -54,12 +54,14 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: false
 
       - name: Build the studio image (node build + runtime stages)
         uses: docker/build-push-action@v7
         with:
           context: studio
+          platforms: linux/amd64,linux/arm64
           push: false
 
 # HONEST LIMITS, in the form ci-go.yml and ci-studio.yml state theirs:

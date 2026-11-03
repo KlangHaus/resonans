@@ -17,7 +17,9 @@
 # 🔴 BOTH stages carry the same digest on purpose: a build stage on one Node and
 # a runtime stage on another is a difference that would not show up in any test
 # here, because the gate builds and typechecks but runs nothing at runtime.
-FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+# --platform=$BUILDPLATFORM: the build's output is JavaScript with no native modules,
+# so it is the same for every target and needs no emulation.
+FROM --platform=$BUILDPLATFORM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
 WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
