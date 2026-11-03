@@ -50,7 +50,10 @@ jobs:
               echo "::error::$image was not pulled from the registry"
               exit 1
             fi
-            echo "$image -> $(docker image inspect --format '{{index .RepoDigests 0}} ({{.Architecture}})' "$image")"
+            # The architecture comes from the image's own config. Stripped, so a line
+            # break in it cannot start a workflow command in this log.
+            named="$(docker image inspect --format '{{index .RepoDigests 0}} ({{.Architecture}})' "$image" | tr -cd '[:alnum:]@:/._() -')"
+            echo "$image -> $named"
           done
 
       - name: Log in, write, publish, read back
