@@ -34,7 +34,10 @@ services:
       # by hand.
       - ./deploy/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U resonans_migrator -d resonans"]
+      # -h: over TCP, not the socket. While it initialises, the image runs a temporary
+      # server on the socket only, which reports ready before the real one starts, so
+      # migrate's connection is refused on a machine slow enough to get there first.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U resonans_migrator -d resonans"]
       interval: 5s
       timeout: 5s
       retries: 20
