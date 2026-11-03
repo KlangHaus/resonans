@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// Assets (media library): spacets uploadede billeder + filer. Upload går til
-// Resonans' asset-API (Bunny/in-memory backend); alt er tenant-scoped (RLS).
+// Assets (media library): the space's uploaded images and files. Uploads go to the
+// Resonans asset API (Bunny/in-memory backend); everything is tenant-scoped (RLS).
+const { t } = useT()
 const { listAssets, uploadAsset } = useResonans()
 
 const { data: assets, refresh, pending } = await useAsyncData('assets', () => listAssets())
@@ -16,9 +17,9 @@ async function onPick(e: Event) {
   try {
     await uploadAsset(file)
     await refresh()
-    msg.value = `Uploadet: ${file.name}`
+    msg.value = t('Uploaded: {name}', { name: file.name })
   } catch (err) {
-    msg.value = `Fejl: ${(err as Error).message}`
+    msg.value = t('Error: {message}', { message: (err as Error).message })
   } finally {
     busy.value = false
     if (fileInput.value) fileInput.value.value = ''
@@ -27,7 +28,7 @@ async function onPick(e: Event) {
 
 function copyId(id: string) {
   navigator.clipboard?.writeText(id)
-  msg.value = 'Asset-id kopieret'
+  msg.value = t('Asset id copied')
 }
 
 function kb(n: number) {
@@ -38,21 +39,21 @@ function kb(n: number) {
 <template>
   <div style="max-width: 880px">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px">
-      <h1 style="margin: 0; font-size: 26px; font-weight: 800">Assets</h1>
+      <h1 style="margin: 0; font-size: 26px; font-weight: 800">{{ t('Assets') }}</h1>
       <div style="display: flex; gap: 10px; align-items: center">
         <span class="rz-field__hint">{{ msg }}</span>
         <button class="rz-btn rz-btn--primary" :disabled="busy" @click="fileInput?.click()">
-          {{ busy ? 'Uploader…' : '+ Upload' }}
+          {{ busy ? t('Uploading…') : t('+ Upload') }}
         </button>
         <input ref="fileInput" type="file" style="display: none" @change="onPick" />
       </div>
     </div>
     <p class="rz-field__hint" style="margin: 0 0 18px">
-      Billeder og filer til dette space — refereres fra image/download-blokke via asset-id.
+      {{ t('Images and files for this space, referenced from image and download blocks by asset id.') }}
     </p>
 
-    <p v-if="pending" class="rz-field__hint">Henter…</p>
-    <p v-else-if="!assets?.length" class="rz-field__hint">Ingen assets endnu — upload det første.</p>
+    <p v-if="pending" class="rz-field__hint">{{ t('Fetching…') }}</p>
+    <p v-else-if="!assets?.length" class="rz-field__hint">{{ t('No assets yet. Upload the first one.') }}</p>
 
     <div class="as__grid">
       <div v-for="a in assets || []" :key="a.id" class="as__card">
@@ -65,7 +66,7 @@ function kb(n: number) {
           <div class="as__sub">
             {{ a.kind }} · {{ kb(a.sizeBytes) }}<template v-if="a.width"> · {{ a.width }}×{{ a.height }}</template>
           </div>
-          <button type="button" class="as__copy" @click="copyId(a.id)">Kopiér id</button>
+          <button type="button" class="as__copy" @click="copyId(a.id)">{{ t('Copy id') }}</button>
         </div>
       </div>
     </div>

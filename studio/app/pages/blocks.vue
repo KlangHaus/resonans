@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// Block Library (Storyblok-mønstret): katalog over blok-registret — hvilke
-// blokke findes, og hvilke felter har de. Læses direkte fra schema-API'et
-// (kode-defineret i git), så siden er altid i sync med registret.
+// Block Library: a catalog of the block registry, read straight from the schema
+// API (defined in code, in git), so the page is always in sync with the registry.
+const { t } = useT()
 const { schema } = useResonans()
 const { data: sch } = await useAsyncData('blocks-lib', () => schema())
 
@@ -14,14 +14,13 @@ const filtered = computed(() =>
 <template>
   <div style="max-width: 880px">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px">
-      <h1 style="margin: 0; font-size: 26px; font-weight: 800">Block Library</h1>
-      <span class="rz-chip">{{ sch?.blocks.length || 0 }} blokke</span>
+      <h1 style="margin: 0; font-size: 26px; font-weight: 800">{{ t('Block Library') }}</h1>
+      <span class="rz-chip">{{ t('{n} blocks', { n: sch?.blocks.length || 0 }) }}</span>
     </div>
     <p class="rz-field__hint" style="margin: 0 0 16px">
-      Blok-biblioteket er kode-defineret (schema i git). Hver indholdstype vælger sine tilladte
-      blokke via sin allow-liste.
+      {{ t('The block library is defined in code (schema in git). Each content type chooses its allowed blocks through its allow list.') }}
     </p>
-    <input v-model="q" class="rz-input" placeholder="Søg blokke…" style="margin-bottom: 18px" />
+    <input v-model="q" class="rz-input" :placeholder="t('Search blocks…')" style="margin-bottom: 18px" />
 
     <div class="bl__grid">
       <div v-for="b in filtered" :key="b.name" class="bl__card">

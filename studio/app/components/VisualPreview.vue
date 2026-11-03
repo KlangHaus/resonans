@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// VisualPreview — the preview pane of visual editing (forlæg:
+// VisualPreview — the preview pane of visual editing (prototype:
 // docs/design/resonans/prototypes/preview-split-screen.html, #4). It loads the
 // tenant's frontend in draft mode (with a short-lived token), pushes the
 // envelope of the UNSAVED body into it on every edit, and exchanges the selected
@@ -28,6 +28,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ select: [path: string]; back: []; 'update:locale': [locale: string] }>()
 
+const { t } = useT()
 const { previewToken } = useResonans()
 
 const frame = ref<HTMLIFrameElement | null>(null)
@@ -35,9 +36,9 @@ const src = ref('')
 const error = ref('')
 const connected = ref(false)
 const VIEWPORTS = [
-  { id: 'desktop', label: 'Desktop', width: '100%' },
-  { id: 'tablet', label: 'Tablet', width: '768px' },
-  { id: 'mobile', label: 'Mobil', width: '390px' },
+  { id: 'desktop', label: t('Desktop'), width: '100%' },
+  { id: 'tablet', label: t('Tablet'), width: '768px' },
+  { id: 'mobile', label: t('Mobile'), width: '390px' },
 ] as const
 const LOCALES = ['da', 'en'] as const
 const viewport = ref<(typeof VIEWPORTS)[number]['id']>('desktop')
@@ -45,7 +46,7 @@ const frameWidth = computed(() => VIEWPORTS.find((v) => v.id === viewport.value)
 
 // Fallback when the space has no usable preview URL. Also when the URL points at
 // the Studio's OWN origin: allow-scripts + allow-same-origin on our own origin
-// would let the framed page remove its sandbox ([sikkerhed], resonans#50).
+// would let the framed page remove its sandbox (resonans#50).
 const sameOrigin = computed(
   () => !!props.settings.previewOrigin && props.settings.previewOrigin === window.location.origin,
 )
@@ -71,14 +72,18 @@ async function load() {
     // theme is passed in (and validated as plain colors inside buildSrcdoc).
     const css = getComputedStyle(document.documentElement)
     const v = (name: string) => css.getPropertyValue(name).trim()
-    srcdoc.value = buildSrcdoc(window.location.origin, {
-      bg: v('--rz-bg'),
-      surface: v('--rz-bg-subtle'),
-      border: v('--rz-border'),
-      text: v('--rz-text'),
-      muted: v('--rz-text-muted'),
-      primary: v('--rz-primary'),
-    })
+    srcdoc.value = buildSrcdoc(
+      window.location.origin,
+      {
+        bg: v('--rz-bg'),
+        surface: v('--rz-bg-subtle'),
+        border: v('--rz-border'),
+        text: v('--rz-text'),
+        muted: v('--rz-text-muted'),
+        primary: v('--rz-primary'),
+      },
+      t('Selected block'),
+    )
     return
   }
   srcdoc.value = ''
@@ -97,7 +102,7 @@ async function load() {
       locale: props.locale,
     })
   } catch (e) {
-    error.value = `Kunne ikke hente preview-token: ${(e as Error).message}`
+    error.value = t('Could not get the preview token: {message}', { message: (e as Error).message })
   }
 }
 
@@ -111,7 +116,8 @@ function send(message: Record<string, unknown>) {
 function pushEnvelope(env: Record<string, unknown> | null) {
   if (!env) return
   if (fallback.value) {
-    send({ type: 'render', html: renderBody(toRaw(env), props.docFields, props.blockDefs) })
+    const labels = { document: t('document'), unknown: t('unknown') }
+    send({ type: 'render', html: renderBody(toRaw(env), props.docFields, props.blockDefs, labels) })
   } else {
     send({ type: 'update', envelope: toRaw(env) })
   }
@@ -156,19 +162,19 @@ onBeforeUnmount(() => {
 <template>
   <div class="pv">
     <div class="pv__top">
-      <button type="button" class="pv__back" @click="emit('back')">‹ Editor</button>
-      <span v-if="fallback" class="pv__badge pv__gbadge">⚠ Generisk preview</span>
-      <span v-else class="pv__badge">Draft-preview</span>
+      <button type="button" class="pv__back" @click="emit('back')">‹ {{ t('Editor') }}</button>
+      <span v-if="fallback" class="pv__badge pv__gbadge">⚠ {{ t('Generic preview') }}</span>
+      <span v-else class="pv__badge">{{ t('Draft preview') }}</span>
       <span class="pv__status" :class="{ 'pv__status--on': connected }" :title="settings.previewOrigin">
-        {{ connected ? 'Forbundet' : 'Venter på preview…' }}
+        {{ connected ? t('Connected') : t('Waiting for preview…') }}
       </span>
       <span class="pv__sp" />
       <!--
         Not in fallback: the generic cards only stack narrower — they have no
         responsive layout to show, so the selector would promise a simulation the
-        fallback cannot deliver ([designer]). The real site keeps it.
+        fallback cannot deliver. The real site keeps it.
       -->
-      <span v-if="!fallback" class="pv__seg" role="group" aria-label="Visningsbredde">
+      <span v-if="!fallback" class="pv__seg" role="group" :aria-label="t('Viewport width')">
         <button
           v-for="v in VIEWPORTS"
           :key="v.id"
@@ -180,7 +186,7 @@ onBeforeUnmount(() => {
           {{ v.label }}
         </button>
       </span>
-      <span class="pv__seg" role="group" aria-label="Sprog">
+      <span class="pv__seg" role="group" :aria-label="t('Language')">
         <button
           v-for="l in LOCALES"
           :key="l"
@@ -195,25 +201,25 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="pv__reload"
-        :title="fullscreen ? 'Tilbage til split (Esc)' : 'Fuldskærm'"
+        :title="fullscreen ? t('Back to split view (Esc)') : t('Fullscreen')"
         :aria-pressed="fullscreen"
         @click="fullscreen = !fullscreen"
       >
         {{ fullscreen ? '⤡' : '⤢' }}
       </button>
-      <button type="button" class="pv__reload" title="Genindlæs preview" @click="load">↻</button>
+      <button type="button" class="pv__reload" :title="t('Reload preview')" @click="load">↻</button>
     </div>
     <p v-if="error" class="pv__error">{{ error }}</p>
     <div class="pv__grid" :class="{ 'pv__grid--full': fullscreen }">
       <div v-show="!fullscreen" class="pv__ed">
-        <p class="pv__edt">Editor</p>
+        <p class="pv__edt">{{ t('Editor') }}</p>
         <slot name="editor" />
       </div>
       <div class="pv__render" :class="{ 'pv__render--generic': fallback }">
         <!-- Outside the iframe: the sandboxed document may not navigate, the link must. -->
         <div v-if="fallback" class="pv__gbanner">
-          ⚠ Generisk preview — I ser strukturen, ikke jeres rigtige site.
-          <NuxtLink to="/settings">Tilføj preview-bro →</NuxtLink>
+          ⚠ {{ t('Generic preview: you are seeing the structure, not your real site.') }}
+          <NuxtLink to="/settings">{{ t('Add a preview bridge') }} →</NuxtLink>
         </div>
         <!--
           sandbox: scripts and same-origin (the frontend needs both to render and
@@ -230,7 +236,7 @@ onBeforeUnmount(() => {
           ref="frame"
           :srcdoc="srcdoc"
           class="pv__frame pv__frame--generic"
-          title="Generisk draft-preview"
+          :title="t('Generic draft preview')"
           sandbox="allow-scripts"
         />
         <iframe
@@ -239,20 +245,20 @@ onBeforeUnmount(() => {
           :src="src"
           :style="{ width: frameWidth }"
           class="pv__frame"
-          title="Live draft-preview"
+          :title="t('Live draft preview')"
           referrerpolicy="no-referrer"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
         />
       </div>
     </div>
     <div class="pv__foot">
-      Live draft-render. <b>Klik en blok → fremhæv i preview · klik i preview → vælg blok i editor</b>
+      {{ t('Live draft render.') }} <b>{{ t('Click a block → highlight in preview · click in preview → select block in editor') }}</b>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Measurements from the forlæg (#4); colors are the Studio theme tokens. */
+/* Measurements from the prototype (#4); colors are the Studio theme tokens. */
 .pv {
   display: flex;
   flex-direction: column;
@@ -272,7 +278,7 @@ onBeforeUnmount(() => {
 .pv__grid--full {
   grid-template-columns: 1fr;
 }
-/* Fallback (forlæg #4, "Fallback" section): generic badge + banner. */
+/* Fallback (prototype #4, "Fallback" section): generic badge + banner. */
 .pv__gbadge {
   background: color-mix(in srgb, #ffc107 30%, transparent);
   color: #7a5b00;

@@ -4,12 +4,13 @@ import type { BlockType, Field } from '~/composables/useResonans'
 // SchemaField renders ONE schema field into an input, driven entirely by the
 // field definition (type + i18n). This is the core of the schema-driven editor:
 // no content type is hardcoded. Scalars + i18n render as inputs; `richtext` uses
-// the rich-text editor; `blocks` uses the visual BlockEditor (Fase 4). `array`
+// the rich-text editor; `blocks` uses the visual BlockEditor. `array`
 // still falls back to a validated JSON editor (next increment). blockDefs is the
 // schema block-registry, threaded down so BlockEditor can render nested blocks.
 // `path` is the field's location in the document body ("seoTitle",
 // "body.2.heading"). Visual editing uses it to jump from a click in the preview
 // to this field; it is optional so the field still works outside the editor.
+const { t } = useT()
 const props = defineProps<{ field: Field; modelValue: unknown; blockDefs?: BlockType[]; path?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [unknown] }>()
 
@@ -133,12 +134,12 @@ const scalar = computed(() => String(props.modelValue ?? ''))
     <input
       v-else-if="field.type === 'asset' || field.type === 'reference'"
       class="rz-input"
-      :placeholder="field.type === 'reference' ? `${field.ref} id` : 'asset id'"
+      :placeholder="field.type === 'reference' ? t('{ref} id', { ref: field.ref ?? '' }) : t('asset id')"
       :value="scalar"
       @input="set(($event.target as HTMLInputElement).value)"
     />
 
-    <!-- blocks: visual block editor (Fase 4) -->
+    <!-- blocks: visual block editor -->
     <BlockEditor
       v-else-if="field.type === 'blocks'"
       :model-value="modelValue"
@@ -152,9 +153,9 @@ const scalar = computed(() => String(props.modelValue ?? ''))
     <template v-else-if="field.type === 'array'">
       <textarea class="rz-textarea" style="min-height: 160px; font-family: ui-monospace, monospace" v-model="jsonText" @blur="commitJson" />
       <p v-if="jsonError" class="rz-field__hint" style="color: var(--rz-danger)">{{ jsonError }}</p>
-      <p class="rz-field__hint">Array-felt — repeater-UI sekvenseres som følge-increment.</p>
+      <p class="rz-field__hint">{{ t('Array field. A repeater UI will follow in a later increment.') }}</p>
     </template>
 
-    <p v-else class="rz-field__hint">Ukendt felt-type: {{ field.type }}</p>
+    <p v-else class="rz-field__hint">{{ t('Unknown field type: {type}', { type: field.type }) }}</p>
   </div>
 </template>

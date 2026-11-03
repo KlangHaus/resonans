@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// Spaces-forsiden (Storyblok-mønstret): kort-grid over spaces m/ søgning, sort
-// og "+ Tilføj Space". Et space = en tenant (Beslutning K) — klik går IND i
-// spacet (sætter aktiv tenant) og videre til første content-type.
+// Spaces landing page: a card grid of spaces with search, sort and "+ Add Space".
+// A space = a tenant; a click enters the space (sets the active tenant).
+const { t } = useT()
 const { spaces, enter } = useSpaces()
 
 const q = ref('')
@@ -16,10 +16,9 @@ const filtered = computed(() => {
 
 const covers = ['cov0', 'cov1', 'cov2', 'cov3']
 
-// Profil-badge pr. space ([designer]-forlæg: LMS/Marketing-type på kortet).
-// Afledt af spacets content-profil: kun web-typer → Marketing; kun LMS-typer →
-// LMS; alt/mix → Alt indhold. Hentes pr. space (eksplicit tenant-header — vi
-// står UDENFOR et space på landingen).
+// Profile badge per space, derived from its content profile: web types only →
+// Marketing; LMS types only → LMS; all or mixed → All content. Fetched per space
+// with an explicit tenant header, because the landing page is outside any space.
 const LMS_TYPES = ['course', 'lesson', 'module', 'quiz', 'resource']
 const badges = ref<Record<string, string>>({})
 watchEffect(async () => {
@@ -30,10 +29,10 @@ watchEffect(async () => {
         headers: { 'X-Dev-Tenant': s.id },
       })
       const enabled = st.enabledTypes || []
-      if (!enabled.length) badges.value[s.id] = 'Alt indhold'
-      else if (enabled.every((t) => !LMS_TYPES.includes(t))) badges.value[s.id] = 'Marketing'
-      else if (enabled.every((t) => LMS_TYPES.includes(t))) badges.value[s.id] = 'LMS'
-      else badges.value[s.id] = 'Alt indhold'
+      if (!enabled.length) badges.value[s.id] = t('All content')
+      else if (enabled.every((t) => !LMS_TYPES.includes(t))) badges.value[s.id] = t('Marketing')
+      else if (enabled.every((t) => LMS_TYPES.includes(t))) badges.value[s.id] = t('LMS')
+      else badges.value[s.id] = t('All content')
     } catch {
       badges.value[s.id] = ''
     }
@@ -42,34 +41,33 @@ watchEffect(async () => {
 
 async function open(id: string) {
   enter(id)
-  // Ind i spacet: første aktive content-type (profil-filtreret pr. space).
   navigateTo('/dashboard')
 }
 
 function since(iso: string) {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
-  if (days < 1) return 'Opdateret i dag'
-  if (days === 1) return 'Opdateret i går'
-  return `Opdateret for ${days} dage siden`
+  if (days < 1) return t('Updated today')
+  if (days === 1) return t('Updated yesterday')
+  return t('Updated {n} days ago', { n: days })
 }
 </script>
 
 <template>
   <div class="sp">
     <div class="sp__head">
-      <h1>Spaces</h1>
-      <NuxtLink to="/spaces/new" class="rz-btn rz-btn--primary">+ Tilføj Space</NuxtLink>
+      <h1>{{ t('Spaces') }}</h1>
+      <NuxtLink to="/spaces/new" class="rz-btn rz-btn--primary">+ {{ t('Add Space') }}</NuxtLink>
     </div>
 
     <div class="sp__tools">
-      <input v-model="q" class="rz-input sp__search" placeholder="Søg i spaces…" />
+      <input v-model="q" class="rz-input sp__search" :placeholder="t('Search spaces…')" />
       <select v-model="sort" class="rz-input sp__sort">
-        <option value="updated">Sortér: Senest opdateret</option>
-        <option value="name">Sortér: Navn</option>
+        <option value="updated">{{ t('Sort: Last updated') }}</option>
+        <option value="name">{{ t('Sort: Name') }}</option>
       </select>
     </div>
 
-    <div class="sp__label">Mine Spaces · {{ filtered.length }}</div>
+    <div class="sp__label">{{ t('My Spaces') }} · {{ filtered.length }}</div>
 
     <div class="sp__grid">
       <button
@@ -89,13 +87,12 @@ function since(iso: string) {
           <span class="sp__meta">{{ since(s.createdAt) }}</span>
           <span class="sp__badges">
             <span v-if="badges[s.id]" class="sp__typebadge">{{ badges[s.id] }}</span>
-            <span class="rz-chip">Staging</span> <span class="rz-chip">EU</span>
           </span>
         </div>
       </button>
     </div>
 
-    <p v-if="!filtered.length" class="rz-field__hint">Ingen spaces matcher søgningen.</p>
+    <p v-if="!filtered.length" class="rz-field__hint">{{ t('No spaces match the search.') }}</p>
   </div>
 </template>
 

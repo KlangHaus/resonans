@@ -107,6 +107,8 @@ services:
       NUXT_OIDC_EDITOR_URL: ${EDITOR_URL:-http://localhost:8080}
       # Inside this network: the editor's server calls the API directly.
       NUXT_OIDC_API_URL: http://api:3000
+      # The interface language: en or da.
+      NUXT_PUBLIC_EDITOR_LOCALE: ${EDITOR_LOCALE:-en}
     ports:
       - "${STUDIO_PORT:-8080}:3000"
     depends_on:

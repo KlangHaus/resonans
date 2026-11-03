@@ -16,11 +16,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
     try {
       await refresh()
     } catch {
-      return navigateTo({ path: '/login', query: { grund: 'utilgaengelig', naeste: to.fullPath } })
+      return navigateTo({ path: '/login', query: { reason: 'unreachable', next: to.fullPath } })
     }
   }
   if (!enabled.value) return
   if (!user.value) {
-    return navigateTo({ path: '/login', query: { naeste: to.fullPath } })
+    return navigateTo({ path: '/login', query: { next: to.fullPath } })
   }
+  if (DEV_ONLY_ROUTES.includes(to.path)) return navigateTo('/dashboard')
 })

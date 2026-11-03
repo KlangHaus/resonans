@@ -76,7 +76,7 @@ function short(f: Field, v: unknown): string {
 
 const PRIMARY = ['heading', 'title', 'quote', 'label', 'value', 'caption', 'videoId']
 
-// One card = one block (forlæg: .pv__gblk). The primary field fills the body;
+// One card = one block (prototype: .pv__gblk). The primary field fills the body;
 // every other filled field is a `name: value` item in the meta line. Every
 // element carries the same data-resonans-path contract as the real bridge, so
 // selection works identically — only the VIEW is generic.
@@ -104,14 +104,20 @@ function card(path: string, type: string, fields: Field[], values: Record<string
 // renderBody turns an envelope into cards: the document's own fields first,
 // then one card per block. Deliberately NOT a page: no page template, no
 // "nice" typography — an editor must not make layout decisions on a fake site.
-export function renderBody(env: Env, docFields: Field[], blockDefs: BlockType[]): string {
+// `labels` holds the translated card tags, because this runs outside setup.
+export function renderBody(
+  env: Env,
+  docFields: Field[],
+  blockDefs: BlockType[],
+  labels: { document: string; unknown: string },
+): string {
   const data = env.data ?? {}
   const docCardFields: Field[] = [{ name: 'title', type: 'string' }, ...docFields.filter((f) => f.type !== 'blocks')]
-  const out = [card('data', 'dokument', docCardFields, data).replace('data-resonans-path="data"', 'data-resonans-path="data.title"')]
+  const out = [card('data', labels.document, docCardFields, data).replace('data-resonans-path="data"', 'data-resonans-path="data.title"')]
   ;(env.components ?? []).forEach((b, i) => {
     const type = String(b._type ?? '')
     const def = blockDefs.find((d) => d.name === type)
-    out.push(def ? card(`components.${i}`, type, def.fields, b) : card(`components.${i}`, type || 'ukendt', [], {}))
+    out.push(def ? card(`components.${i}`, type, def.fields, b) : card(`components.${i}`, type || labels.unknown, [], {}))
   })
   return out.join('\n')
 }
@@ -131,7 +137,7 @@ export type Theme = { bg: string; surface: string; border: string; text: string;
 const COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\))$/
 const FALLBACK_THEME: Theme = { bg: '#ffffff', surface: '#f6f7f9', border: '#e3e6ea', text: '#1c2024', muted: '#6b7280', primary: '#3b5bdb' }
 
-export function buildSrcdoc(studioOrigin: string, theme: Partial<Theme>): string {
+export function buildSrcdoc(studioOrigin: string, theme: Partial<Theme>, selectedLabel: string): string {
   // Theme values land in CSS: only a plain hex or rgb()/rgba() color is accepted.
   const t = { ...FALLBACK_THEME }
   for (const k of Object.keys(t) as (keyof Theme)[]) {
@@ -153,9 +159,9 @@ export function buildSrcdoc(studioOrigin: string, theme: Partial<Theme>): string
     var chip = document.querySelector('.fp-chip'); if (chip) chip.remove();
     sel = p; var el = byPath(p); if (!el) return;
     el.classList.add('fp-on');
-    // "✎ Valgt blok" sits on the CARD that contains the selection (forlæg).
+    // The chip sits on the CARD that contains the selection (prototype).
     var cardEl = el.closest('.gblk') || el;
-    chip = document.createElement('span'); chip.className = 'fp-chip'; chip.textContent = '✎ Valgt blok';
+    chip = document.createElement('span'); chip.className = 'fp-chip'; chip.textContent = ${JSON.stringify(`✎ ${selectedLabel}`)};
     cardEl.appendChild(chip);
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }

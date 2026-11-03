@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// "Create your Space" (Storyblok-mønstret). Et space = en tenant: oprettelsen
-// minter en frisk UUID (Beslutning K: klient-leveret tenant-id) — RLS isolerer
-// indholdet automatisk, så intet backend-kald er nødvendigt for selve
-// oprettelsen. I prod-Studio bliver dette en auth-org-oprettelse i stedet.
+// "Create your Space". A space = a tenant: creating one mints a fresh UUID (a
+// client-supplied tenant id) and RLS isolates its content, so no backend call is
+// needed. In a production Studio this becomes creating an auth org instead.
+const { t } = useT()
 const { create, enter } = useSpaces()
 
 const name = ref('')
@@ -19,17 +19,16 @@ async function submit() {
 
 <template>
   <div class="ns">
-    <NuxtLink to="/" class="ns__back">← Tilbage til Spaces</NuxtLink>
+    <NuxtLink to="/" class="ns__back">← {{ t('Back to Spaces') }}</NuxtLink>
     <div class="ns__inner">
-      <h1>Opret dit Space</h1>
+      <h1>{{ t('Create your Space') }}</h1>
       <p class="ns__sub">
-        Et space er hvor du styrer alt indhold, komponenter og konfiguration for ét projekt —
-        fx en blog, et kursus-katalog eller en hjemmeside.
+        {{ t('A space is where you manage all content, components and configuration for one project, such as a blog, a course catalog or a website.') }}
       </p>
 
       <div class="ns__illustration">
         <div class="ns__card">
-          <div class="ns__cardhead">Space <span>⋯</span></div>
+          <div class="ns__cardhead">{{ t('Space') }} <span>⋯</span></div>
           <div class="ns__avatars">
             <span v-for="i in 4" :key="i" class="ns__av" :style="{ opacity: 1 - i * 0.15 }" />
             <span class="ns__avmore">+3</span>
@@ -38,21 +37,20 @@ async function submit() {
         </div>
       </div>
 
-      <label class="rz-field__label" for="space-name">Space-navn <span style="color: var(--rz-danger)">*</span></label>
+      <label class="rz-field__label" for="space-name">{{ t('Space name') }} <span style="color: var(--rz-danger)">*</span></label>
       <input
         id="space-name"
         v-model="name"
         class="rz-input"
-        placeholder="Mit nye space"
+        :placeholder="t('My new space')"
         @keydown.enter="submit"
       />
 
       <button class="rz-btn rz-btn--primary ns__cta" :disabled="!name.trim() || busy" @click="submit">
-        Opret Space
+        {{ t('Create Space') }}
       </button>
       <p class="rz-field__hint" style="margin-top: 10px">
-        Spacet får sin egen isolerede content-tenant (RLS) og starter med alle indholdstyper aktive —
-        justér profilen under ⚙ Indstillinger.
+        {{ t('The space gets its own isolated content tenant (RLS) and starts with all content types active. Adjust the profile under ⚙ Settings.') }}
       </p>
     </div>
   </div>

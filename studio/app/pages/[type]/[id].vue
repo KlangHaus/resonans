@@ -3,7 +3,7 @@
 // render one SchemaField per field, save (PUT) / publish. Same editor for every
 // content type — the "one editor, many domains" core.
 //
-// Visual mode (forlæg #4, docs/design/resonans/prototypes/preview-split-screen.html)
+// Visual mode (prototype #4, docs/design/resonans/prototypes/preview-split-screen.html)
 // splits the canvas: the form in a 290px editor column, the tenant's frontend in
 // draft mode next to it, updated live from the unsaved body. Selection works
 // both ways: click an element in the preview → its block/field is selected in
@@ -11,6 +11,7 @@
 // the preview.
 import { bodyToEnvelopePath, envelopeToBodyPath } from '~/utils/visualEditing'
 
+const { t } = useT()
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params.id as string)
@@ -34,23 +35,23 @@ async function save() {
   msg.value = ''
   try {
     await updateDocument(doc.value.id, { body: body.value })
-    msg.value = 'Gemt'
+    msg.value = t('Saved')
     await refresh()
   } catch (e) {
-    msg.value = `Fejl: ${(e as Error).message}`
+    msg.value = t('Error: {message}', { message: (e as Error).message })
   } finally {
     saving.value = false
   }
 }
 
-// 🔴 SLETNING ER EN PAPIRKURV, IKKE EN UDSLETNING (Allan 20/9). Derfor
-// spørger vi én gang og siger hvad der faktisk sker — "kan gendannes" er
-// forskellen på en advarsel folk læser og en de klikker forbi.
+// 🔴 DELETING MOVES TO A BIN, IT DOES NOT ERASE. So this asks once and says what
+// actually happens: "can be restored" is the difference between a warning people
+// read and one they click past.
 const deleting = ref(false)
 async function remove() {
   if (!doc.value || deleting.value) return
   const ok = confirm(
-    `Flyt "${doc.value.title}" til papirkurven?\n\nDen forsvinder fra listen og fra jeres sites med det samme. Du kan gendanne den fra Papirkurv-filteret i Content.`,
+    `${t('Move "{title}" to the bin?', { title: doc.value.title })}\n\n${t('It disappears from the list and from your sites right away. You can restore it from the Bin filter in Content.')}`,
   )
   if (!ok) return
   deleting.value = true
@@ -58,7 +59,7 @@ async function remove() {
     await deleteDocument(doc.value.id)
     await navigateTo('/content')
   } catch (e: unknown) {
-    msg.value = `Kunne ikke slette: ${(e as { message?: string })?.message ?? 'ukendt fejl'}`
+    msg.value = t('Could not delete: {message}', { message: (e as { message?: string })?.message ?? t('unknown error') })
   } finally {
     deleting.value = false
   }
@@ -70,9 +71,9 @@ async function publish() {
     await updateDocument(doc.value.id, { body: body.value })
     await publishDocument(doc.value.id)
     await refresh()
-    msg.value = 'Udgivet'
+    msg.value = t('Published')
   } catch (e) {
-    msg.value = `Fejl: ${(e as Error).message}`
+    msg.value = t('Error: {message}', { message: (e as Error).message })
   }
 }
 
@@ -111,7 +112,7 @@ function scheduleEnvelope() {
         envelopeError.value = ''
       }
     } catch (e) {
-      if (mine === seq) envelopeError.value = `Preview kunne ikke opdateres: ${(e as Error).message}`
+      if (mine === seq) envelopeError.value = t('The preview could not be updated: {message}', { message: (e as Error).message })
     }
   }, 250)
 }
@@ -154,7 +155,7 @@ function onEditorPick(e: Event) {
   if (el?.dataset.fieldPath) selected.value = el.dataset.fieldPath
 }
 
-// Mark the selected field AND the block card that contains it (forlæg:
+// Mark the selected field AND the block card that contains it (prototype:
 // .pv__blk--on). Applied to the DOM because fields are rendered recursively.
 watch(
   [selected, visual],
@@ -182,15 +183,15 @@ watch(
         <span class="rz-chip">{{ doc.slug }}</span>
       </div>
       <div style="display: flex; gap: 8px; align-items: center">
-        <div class="ve-toggle" role="group" aria-label="Visning">
-          <button type="button" :class="{ on: !visual }" :aria-pressed="!visual" @click="setView('form')">Formular</button>
-          <button type="button" :class="{ on: visual }" :aria-pressed="visual" @click="setView('visual')">Visuel</button>
+        <div class="ve-toggle" role="group" :aria-label="t('View')">
+          <button type="button" :class="{ on: !visual }" :aria-pressed="!visual" @click="setView('form')">{{ t('Form') }}</button>
+          <button type="button" :class="{ on: visual }" :aria-pressed="visual" @click="setView('visual')">{{ t('Visual') }}</button>
         </div>
         <span class="rz-field__hint">{{ msg }}</span>
-        <button class="rz-btn" :disabled="saving" @click="save">Gem</button>
-        <button class="rz-btn rz-btn--primary" @click="publish">Udgiv</button>
-        <button class="rz-btn rz-btn--danger" :disabled="deleting" title="Flyt til papirkurven" @click="remove">
-          {{ deleting ? 'Sletter…' : 'Slet' }}
+        <button class="rz-btn" :disabled="saving" @click="save">{{ t('Save') }}</button>
+        <button class="rz-btn rz-btn--primary" @click="publish">{{ t('Publish') }}</button>
+        <button class="rz-btn rz-btn--danger" :disabled="deleting" :title="t('Move to the bin')" @click="remove">
+          {{ deleting ? t('Deleting…') : t('Delete') }}
         </button>
       </div>
     </div>
@@ -239,10 +240,10 @@ watch(
         :model-value="body[f.name]"
         @update:model-value="(v: unknown) => (body[f.name] = v)"
       />
-      <p v-if="!docType" class="rz-field__hint">Ukendt doc-type «{{ doc.type }}» — ikke i schemaet.</p>
+      <p v-if="!docType" class="rz-field__hint">{{ t('Unknown document type "{type}": not in the schema.', { type: doc.type }) }}</p>
     </div>
   </div>
-  <p v-else class="rz-field__hint">Indlæser…</p>
+  <p v-else class="rz-field__hint">{{ t('Loading…') }}</p>
 </template>
 
 <style scoped>
@@ -283,7 +284,7 @@ watch(
   min-height: 0;
   margin-top: 8px;
 }
-/* Forlæg: .pv__blk--on — the selected block card. */
+/* Prototype: .pv__blk--on, the selected block card. */
 .ve-editor :deep(.ve-blk-on) {
   border-color: var(--rz-primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--rz-primary) 25%, transparent);
@@ -302,7 +303,7 @@ watch(
 </style>
 
 <style scoped>
-/* The only destructive action in the editor: it must not look like Gem. */
+/* The only destructive action in the editor: it must not look like Save. */
 .rz-btn--danger {
   color: #b3261e;
   border-color: color-mix(in srgb, #b3261e 35%, var(--rz-border));
