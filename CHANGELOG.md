@@ -1,3 +1,16 @@
+# [3.1.0](https://github.com/KlangHaus/resonans/compare/v3.0.2...v3.1.0) (2026-11-03)
+
+
+### Features
+
+* **compose:** boot the quickstart from source and prove the login on Dex ([#168](https://github.com/KlangHaus/resonans/issues/168)) ([b8f2308](https://github.com/KlangHaus/resonans/commit/b8f2308f2dbf3e522bb7dd8955fe825d735992b5))
+
+
+### ACTION REQUIRED
+
+* **compose:** compose.yml now publishes on 127.0.0.1. If a proxy on another host
+reaches these ports, set BIND_ADDRESS=0.0.0.0.
+
 ## [3.0.2](https://github.com/KlangHaus/resonans/compare/v3.0.1...v3.0.2) (2026-10-29)
 
 
