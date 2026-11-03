@@ -1,12 +1,13 @@
 <script setup lang="ts">
-// "Opret ny" — to-trins oprettelse (Storyblok-mønstret, Allan 2026-07-29):
-// content-TYPEN vælges HER (trin 1, kort fra spacets aktive profil — ikke i
-// navigationen), derefter titel + auto-slug (trin 2) → editoren.
+// "Create new", in two steps: the content TYPE is chosen HERE (step 1, cards from the
+// active profile of the space, not in the nav), then title + auto slug (step 2) →
+// the editor.
+const { t } = useT()
 const { schema, createDocument } = useResonans()
 const { activeId } = useSpaces()
 const cfgPub = useRuntimeConfig().public
-// Uden space-kontekst (intet aktivt space + ingen dev-tenant) ville API'et
-// 403'e — send brugeren til Spaces-forsiden i stedet.
+// With no space context (no active space and no dev tenant) the API would answer
+// 403, so send the user to the Spaces landing page instead.
 if (!activeId.value && !(cfgPub.devTenant as string)) {
   navigateTo('/')
 }
@@ -14,13 +15,13 @@ if (!activeId.value && !(cfgPub.devTenant as string)) {
 const { data: sch } = await useAsyncData('content-new-schema', () => schema())
 
 const TYPE_META: Record<string, { label: string; desc: string; ic: string }> = {
-  page: { label: 'Page', desc: 'Fritstående side — marketing, om os, forside-sektioner.', ic: '▢' },
-  post: { label: 'Post', desc: 'Blogindlæg til Journal — author, kategori, dato.', ic: '✎' },
-  course: { label: 'Course', desc: 'Et kursus — beholder for moduler.', ic: '🎓' },
-  module: { label: 'Module', desc: 'Et kapitel/forløb inde i et kursus.', ic: '▤' },
-  lesson: { label: 'Lesson', desc: 'Én lektion — selve undervisningsindholdet.', ic: '▶' },
-  quiz: { label: 'Quiz', desc: 'Spørgsmål m/ svarmuligheder — refereres fra lektioner.', ic: '?' },
-  resource: { label: 'Resource', desc: 'Download/fil-materiale til lektioner.', ic: '⇩' },
+  page: { label: t('Page'), desc: t('A standalone page: marketing, about us, front page sections.'), ic: '▢' },
+  post: { label: t('Post'), desc: t('A blog post: author, category, date.'), ic: '✎' },
+  course: { label: t('Course'), desc: t('A course: a container for modules.'), ic: '🎓' },
+  module: { label: t('Module'), desc: t('A chapter or sequence inside a course.'), ic: '▤' },
+  lesson: { label: t('Lesson'), desc: t('One lesson: the teaching content itself.'), ic: '▶' },
+  quiz: { label: t('Quiz'), desc: t('Questions with answer options, referenced from lessons.'), ic: '?' },
+  resource: { label: t('Resource'), desc: t('Download or file material for lessons.'), ic: '⇩' },
 }
 
 const step = ref<1 | 2>(1)
@@ -39,9 +40,10 @@ function choose(t: string) {
 function slugify(s: string): string {
   return s
     .toLowerCase()
-    .replaceAll('æ', 'ae')
-    .replaceAll('ø', 'oe')
-    .replaceAll('å', 'aa')
+    // Danish letters transliterate, so a Danish title keeps a readable slug.
+    .replaceAll('\u00e6', 'ae')
+    .replaceAll('\u00f8', 'oe')
+    .replaceAll('\u00e5', 'aa')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     // The API rejects slugs over 200 chars (content.ValidSlug): cut at 200 and
@@ -61,7 +63,7 @@ async function submit() {
     const d = await createDocument({ type: chosen.value, slug: slug.value, title: title.value.trim() })
     navigateTo(`/${d.type}/${d.id}`)
   } catch (e) {
-    err.value = `Kunne ikke oprette: ${(e as Error).message}`
+    err.value = t('Could not create: {message}', { message: (e as Error).message })
     busy.value = false
   }
 }
@@ -69,12 +71,12 @@ async function submit() {
 
 <template>
   <div style="max-width: 640px">
-    <NuxtLink to="/content" class="cn__back">← Tilbage til Content</NuxtLink>
-    <h1 style="margin: 10px 0 4px; font-size: 26px; font-weight: 800">Opret ny</h1>
+    <NuxtLink to="/content" class="cn__back">← {{ t('Back to Content') }}</NuxtLink>
+    <h1 style="margin: 10px 0 4px; font-size: 26px; font-weight: 800">{{ t('Create new') }}</h1>
 
-    <!-- Trin 1: vælg content-type -->
+    <!-- Step 1: choose a content type -->
     <template v-if="step === 1">
-      <p class="rz-field__hint" style="margin: 0 0 18px">Vælg hvilken type indhold du vil oprette.</p>
+      <p class="rz-field__hint" style="margin: 0 0 18px">{{ t('Choose which type of content you want to create.') }}</p>
       <div class="cn__grid">
         <button
           v-for="dt in sch?.docTypes || []"
@@ -85,20 +87,20 @@ async function submit() {
         >
           <span class="cn__ic">{{ TYPE_META[dt.type]?.ic || '▢' }}</span>
           <strong>{{ TYPE_META[dt.type]?.label || dt.type }}</strong>
-          <span class="cn__desc">{{ TYPE_META[dt.type]?.desc || `${dt.fields.length} felter` }}</span>
+          <span class="cn__desc">{{ TYPE_META[dt.type]?.desc || t('{n} fields', { n: dt.fields.length }) }}</span>
         </button>
       </div>
     </template>
 
-    <!-- Trin 2: titel + slug -->
+    <!-- Step 2: title + slug -->
     <template v-else>
       <p class="rz-field__hint" style="margin: 0 0 18px">
-        Ny <strong>{{ TYPE_META[chosen]?.label || chosen }}</strong> —
-        <button type="button" class="cn__switch" @click="step = 1">skift type</button>
+        {{ t('New') }} <strong>{{ TYPE_META[chosen]?.label || chosen }}</strong> —
+        <button type="button" class="cn__switch" @click="step = 1">{{ t('change type') }}</button>
       </p>
-      <label class="rz-field__label" for="cn-title">Titel <span style="color: var(--rz-danger)">*</span></label>
-      <input id="cn-title" v-model="title" class="rz-input" placeholder="Min nye titel" @keydown.enter="submit" />
-      <label class="rz-field__label" for="cn-slug" style="margin-top: 12px">Slug</label>
+      <label class="rz-field__label" for="cn-title">{{ t('Title') }} <span style="color: var(--rz-danger)">*</span></label>
+      <input id="cn-title" v-model="title" class="rz-input" :placeholder="t('My new title')" @keydown.enter="submit" />
+      <label class="rz-field__label" for="cn-slug" style="margin-top: 12px">{{ t('Slug') }}</label>
       <input
         id="cn-slug"
         v-model="slug"
@@ -107,9 +109,9 @@ async function submit() {
         @input="slugTouched = true"
         @keydown.enter="submit"
       />
-      <p class="rz-field__hint" style="margin-top: 4px">URL-navnet — genereres automatisk fra titlen.</p>
+      <p class="rz-field__hint" style="margin-top: 4px">{{ t('The URL name, generated automatically from the title.') }}</p>
       <button class="rz-btn rz-btn--primary" style="width: 100%; margin-top: 18px; padding: 11px" :disabled="!title.trim() || !slug.trim() || busy" @click="submit">
-        {{ busy ? 'Opretter…' : 'Opret og åbn editor' }}
+        {{ busy ? t('Creating…') : t('Create and open editor') }}
       </button>
       <p v-if="err" class="rz-field__hint" style="color: var(--rz-danger); margin-top: 8px">{{ err }}</p>
     </template>

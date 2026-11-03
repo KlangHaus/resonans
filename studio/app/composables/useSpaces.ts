@@ -1,6 +1,6 @@
 // useSpaces — the Studio space registry (Storyblok-model: a space = an isolated
-// content-tenant). Architecturally a space IS a tenant (Beslutning K: tenant ≡
-// org-id, client-supplied UUID) — so "creating a space" mints a fresh UUID and
+// content-tenant). Architecturally a space IS a tenant (tenant ≡ org-id,
+// client-supplied UUID) — so "creating a space" mints a fresh UUID and
 // RLS isolates its content automatically; no backend change needed.
 //
 // Dev/staging (no auth): the registry lives in localStorage, seeded with the
@@ -17,7 +17,7 @@ const LS_SPACES = 'resonans.spaces'
 const LS_ACTIVE = 'resonans.activeSpace'
 
 // crypto.randomUUID is [SecureContext]-gated and MISSING on WG-internal staging
-// (plain HTTP) — clicking "Opret" would throw silently (#25). getRandomValues is
+// (plain HTTP) — clicking "Create" would throw silently (#25). getRandomValues is
 // NOT gated, so fall back to a manual RFC 4122 v4 when randomUUID is absent.
 function uuidv4(): string {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
@@ -37,7 +37,13 @@ function load(): Space[] {
   }
 }
 
+// Logged in, the token decides the tenant, so there is one space and nothing to
+// pick. These pages only make sense in dev mode, where the tenant is a choice.
+export const DEV_ONLY_ROUTES = ['/', '/organization', '/spaces/new']
+const SESSION_SPACE: Space = { id: 'session', name: 'Content', createdAt: '' }
+
 export function useSpaces() {
+  const auth = useAuth()
   const cfg = useRuntimeConfig()
   const devTenant = (cfg.public.devTenant as string) || ''
 
@@ -45,24 +51,27 @@ export function useSpaces() {
     const stored = load()
     // Seed: the configured dev-tenant is always present as the first space.
     if (devTenant && !stored.some((s) => s.id === devTenant)) {
-      stored.unshift({ id: devTenant, name: 'KlangHaus', createdAt: new Date().toISOString() })
+      stored.unshift({ id: devTenant, name: 'Default', createdAt: new Date().toISOString() })
     }
     return stored
   })
-  const activeId = useState<string>('activeSpace', () => localStorage.getItem(LS_ACTIVE) || '')
+  const storedActiveId = useState<string>('activeSpace', () => localStorage.getItem(LS_ACTIVE) || '')
+  const activeId = computed(() => (auth.enabled.value ? SESSION_SPACE.id : storedActiveId.value))
 
   function persist() {
     localStorage.setItem(LS_SPACES, JSON.stringify(spaces.value))
   }
 
-  const active = computed(() => spaces.value.find((s) => s.id === activeId.value) || null)
+  const active = computed(() =>
+    auth.enabled.value ? SESSION_SPACE : spaces.value.find((s) => s.id === activeId.value) || null,
+  )
 
   function enter(id: string) {
-    activeId.value = id
+    storedActiveId.value = id
     localStorage.setItem(LS_ACTIVE, id)
   }
   function leave() {
-    activeId.value = ''
+    storedActiveId.value = ''
     localStorage.removeItem(LS_ACTIVE)
   }
   function create(name: string): Space {

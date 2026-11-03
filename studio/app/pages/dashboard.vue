@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// Space-dashboard (Storyblok-mønstret, Allan 2026-07-28): overblik når man går
-// ind i et space — info-bar (miljø/region/profil), stat-fliser med ÆGTE tal fra
-// API'et og seneste aktivitet (senest opdaterede dokumenter på tværs af typer).
+// Space dashboard: the overview on entering a space. Info bar (environment, region,
+// profile), stat tiles with REAL numbers from the API, and recent activity (most
+// recently updated documents across types).
 import type { Document } from '~/composables/useResonans'
 
+const { t, locale } = useT()
 const { active } = useSpaces()
+const auth = useAuth()
 const { schema, listDocuments, getSettings } = useResonans()
 
 const { data, pending } = await useAsyncData('dashboard', async () => {
@@ -37,13 +39,13 @@ const tiles = computed(() => {
   if (!data.value) return []
   const d = data.value
   return [
-    { label: 'Dokumenter', value: d.total, sub: `${d.published} udgivet`, ic: '▤', bg: '#eef2ff' },
-    { label: 'Indholdstyper', value: `${d.enabledCount} / ${d.allCount}`, sub: 'aktive i profilen', ic: '☰', bg: '#ecfdf5' },
-    { label: 'Blok-bibliotek', value: d.blocks, sub: 'blokke til rådighed', ic: '▦', bg: '#fef3e2' },
+    { label: t('Documents'), value: d.total, sub: t('{n} published', { n: d.published }), ic: '▤', bg: '#eef2ff' },
+    { label: t('Content types'), value: `${d.enabledCount} / ${d.allCount}`, sub: t('active in the profile'), ic: '☰', bg: '#ecfdf5' },
+    { label: t('Block library'), value: d.blocks, sub: t('blocks available'), ic: '▦', bg: '#fef3e2' },
     ...d.perType.filter((p) => p.count > 0).slice(0, 5).map((p) => ({
       label: p.type.charAt(0).toUpperCase() + p.type.slice(1),
       value: p.count,
-      sub: 'dokumenter',
+      sub: t('documents'),
       ic: '▢',
       bg: '#fdf2f4',
     })),
@@ -51,7 +53,7 @@ const tiles = computed(() => {
 })
 
 function fmt(iso?: string | null) {
-  return iso ? new Date(iso).toLocaleString('da-DK', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+  return iso ? new Date(iso).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
 }
 </script>
 
@@ -59,25 +61,23 @@ function fmt(iso?: string | null) {
   <div class="db" style="max-width: 880px">
     <div class="db__head">
       <div>
-        <h1>{{ active?.name || 'Space' }}</h1>
+        <h1>{{ active?.name || t('Space') }}</h1>
         <p class="rz-field__hint" style="margin: 2px 0 0">
-          Senest opdateret {{ fmt(data?.lastUpdated) }}
+          {{ t('Last updated {date}', { date: fmt(data?.lastUpdated) }) }}
         </p>
       </div>
     </div>
 
-    <!-- Info-bar (Storybloks "Plan Details"-mønster) -->
+    <!-- Info bar -->
     <div class="db__plan">
-      <div class="db__planitem"><span>Miljø</span><strong>Staging</strong></div>
-      <div class="db__planitem"><span>Region</span><strong>EU</strong></div>
-      <div class="db__planitem"><span>Content-profil</span><strong>{{ data?.enabledCount }} / {{ data?.allCount }} typer</strong></div>
-      <div class="db__planitem"><span>Tenant</span><strong style="font-family: var(--rz-font-mono, monospace); font-size: 12px">{{ (active?.id || '').slice(0, 8) }}…</strong></div>
-      <NuxtLink to="/settings" class="db__upgrade">Indstillinger</NuxtLink>
+      <div class="db__planitem"><span>{{ t('Content profile') }}</span><strong>{{ t('{enabled} / {all} types', { enabled: data?.enabledCount ?? 0, all: data?.allCount ?? 0 }) }}</strong></div>
+      <div v-if="!auth.enabled.value" class="db__planitem"><span>{{ t('Tenant') }}</span><strong style="font-family: var(--rz-font-mono, monospace); font-size: 12px">{{ (active?.id || '').slice(0, 8) }}…</strong></div>
+      <NuxtLink to="/settings" class="db__upgrade">{{ t('Settings') }}</NuxtLink>
     </div>
 
-    <p v-if="pending" class="rz-field__hint">Henter overblik…</p>
+    <p v-if="pending" class="rz-field__hint">{{ t('Fetching overview…') }}</p>
 
-    <!-- Stat-fliser -->
+    <!-- Stat tiles -->
     <div class="db__tiles">
       <div v-for="t in tiles" :key="t.label" class="db__tile">
         <span class="db__tileic" :style="{ background: t.bg }">{{ t.ic }}</span>
@@ -89,10 +89,10 @@ function fmt(iso?: string | null) {
       </div>
     </div>
 
-    <!-- Aktivitet -->
+    <!-- Activity -->
     <div class="db__activity">
-      <h2>Aktivitet</h2>
-      <p v-if="!data?.recent.length" class="rz-field__hint">Ingen dokumenter endnu — opret dit første fra menuen til venstre.</p>
+      <h2>{{ t('Activity') }}</h2>
+      <p v-if="!data?.recent.length" class="rz-field__hint">{{ t('No documents yet. Create your first from the menu on the left.') }}</p>
       <NuxtLink v-for="d in data?.recent || []" :key="d.id" :to="`/${d.type}/${d.id}`" class="db__row">
         <span class="rz-chip">{{ d.type }}</span>
         <span class="db__rowtitle">{{ d.title }}</span>

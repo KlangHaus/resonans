@@ -85,7 +85,7 @@ export function useResonans() {
     // and the proxy forwards no tenant header. With no OIDC configured we are
     // in dev mode and the tenant header is the only way in.
     if (auth.enabled.value) return h
-    // Tenant = the ACTIVE SPACE (space ≡ tenant, Beslutning K), falling back to
+    // Tenant = the ACTIVE SPACE (space ≡ tenant), falling back to
     // the configured dev-tenant. Dev-mode only: in prod the session/JWT supplies
     // the tenant and this header is ignored server-side.
     const tenant = activeId.value || devTenant
@@ -117,9 +117,9 @@ export function useResonans() {
       // A 403 is not a login problem — it is the role answering — and
       // surfaces as the error it is.
       const status = (e as { statusCode?: number; status?: number })?.statusCode ?? (e as { status?: number })?.status
-      if (status === 401 && auth.enabled.value && window.location.pathname !== '/login') {
+      if (status === 401 && auth.enabled.value && globalThis.location.pathname !== '/login') {
         auth.user.value = null
-        await navigateTo({ path: '/login', query: { naeste: window.location.pathname + window.location.search } })
+        await navigateTo({ path: '/login', query: { next: globalThis.location.pathname + globalThis.location.search } })
       }
       throw e
     }

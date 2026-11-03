@@ -1,9 +1,11 @@
 // Unit tests for code that must behave like a browser (the editor's sanitizer).
 // jsdom parses HTML with parse5, which implements the same HTML-standard parsing
 // algorithm browsers do — the property a sanitizer test depends on.
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  resolve: { alias: { '~': fileURLToPath(new URL('./app', import.meta.url)) } },
   test: {
     environment: 'jsdom',
     include: ['app/**/*.test.ts', 'server/**/*.test.ts'],

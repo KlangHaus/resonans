@@ -8,6 +8,7 @@
 // the same limited HTML the blog renderer expects (§F rich_text format:"html").
 //
 // Client-only (contenteditable needs the DOM); SSR renders a static fallback.
+const { t } = useT()
 const props = defineProps<{ modelValue: string; placeholder?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
 
@@ -49,21 +50,21 @@ function block(tag: string) {
   cmd('formatBlock', tag)
 }
 function link() {
-  const url = window.prompt('Link-URL:')
+  const url = globalThis.prompt(t('Link URL:'))
   if (url) cmd('createLink', url)
 }
 
 const tools = [
-  { label: 'B', title: 'Fed', style: 'font-weight:700', act: () => cmd('bold') },
-  { label: 'I', title: 'Kursiv', style: 'font-style:italic', act: () => cmd('italic') },
-  { label: 'H2', title: 'Overskrift 2', style: '', act: () => block('h2') },
-  { label: 'H3', title: 'Overskrift 3', style: '', act: () => block('h3') },
-  { label: '¶', title: 'Afsnit', style: '', act: () => block('p') },
-  { label: '“ ”', title: 'Citat', style: '', act: () => block('blockquote') },
-  { label: '• Liste', title: 'Punktliste', style: '', act: () => cmd('insertUnorderedList') },
-  { label: '1. Liste', title: 'Nummereret', style: '', act: () => cmd('insertOrderedList') },
-  { label: '🔗', title: 'Link', style: '', act: link },
-  { label: '⌫', title: 'Ryd format', style: '', act: () => cmd('removeFormat') },
+  { label: 'B', title: t('Bold'), style: 'font-weight:700', act: () => cmd('bold') },
+  { label: 'I', title: t('Italic'), style: 'font-style:italic', act: () => cmd('italic') },
+  { label: 'H2', title: t('Heading 2'), style: '', act: () => block('h2') },
+  { label: 'H3', title: t('Heading 3'), style: '', act: () => block('h3') },
+  { label: '¶', title: t('Paragraph'), style: '', act: () => block('p') },
+  { label: '“ ”', title: t('Quote'), style: '', act: () => block('blockquote') },
+  { label: `• ${t('List')}`, title: t('Bulleted list'), style: '', act: () => cmd('insertUnorderedList') },
+  { label: `1. ${t('List')}`, title: t('Numbered list'), style: '', act: () => cmd('insertOrderedList') },
+  { label: '🔗', title: t('Link'), style: '', act: link },
+  { label: '⌫', title: t('Clear formatting'), style: '', act: () => cmd('removeFormat') },
 ]
 </script>
 
@@ -81,7 +82,7 @@ const tools = [
       >
         {{ t.label }}
       </button>
-      <span class="rz-rte__tag">interim · GTRichText swap pending</span>
+      <span class="rz-rte__tag">{{ t('interim · GTRichText swap pending') }}</span>
     </div>
     <!-- Studio is a SPA (ssr:false), so no ClientOnly needed — and using it here
          would defer the div past onMounted, leaving el null and the content
@@ -90,7 +91,7 @@ const tools = [
       ref="el"
       class="rz-rte__area"
       contenteditable="true"
-      :data-placeholder="placeholder || 'Skriv…'"
+      :data-placeholder="placeholder || t('Write…')"
       @input="emitHtml"
       @blur="emitHtml"
     />

@@ -57,7 +57,9 @@ export default defineNuxtConfig({
       resource: '',
     },
     public: {
-      // Sentry (SaaS EU) — DSN er publishable; tom = Sentry slået fra.
+      // The interface language: en or da. Set with NUXT_PUBLIC_EDITOR_LOCALE.
+      editorLocale: 'en',
+      // Sentry (SaaS, EU): the DSN is publishable; empty turns Sentry off.
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnv: process.env.NUXT_PUBLIC_SENTRY_ENV || 'staging',
       // Resonans backend base URL.

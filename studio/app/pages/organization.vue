@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// Min organisation (Storyblok-mønstret): org-overblik + spaces-administration —
-// inkl. space-oprettelse (Allan-krav: "i org skal man kunne kreere new spaces").
-// I prod-Studio kommer org-data fra auth (BetterAuth-org); dette er dev-formen.
+// My organization: org overview and space management, including creating spaces.
+// In a production Studio the org data comes from auth (a BetterAuth org); this is
+// the dev form.
+const { t } = useT()
 const { spaces, enter, create } = useSpaces()
 
 const newName = ref('')
@@ -13,7 +14,7 @@ async function createSpace() {
   const s = create(newName.value)
   newName.value = ''
   busy.value = false
-  // Bliv på org-siden — spacet dukker op i listen; klik åbner det.
+  // Stay on the org page: the space appears in the list, and a click opens it.
   return s
 }
 
@@ -25,39 +26,38 @@ async function open(id: string) {
 
 <template>
   <div style="max-width: 720px">
-    <h1 style="margin: 0 0 4px; font-size: 26px; font-weight: 800">Min organisation</h1>
+    <h1 style="margin: 0 0 4px; font-size: 26px; font-weight: 800">{{ t('My organization') }}</h1>
     <p class="rz-field__hint" style="margin: 0 0 22px">
-      KlangHaus · EU · {{ spaces.length }} space{{ spaces.length === 1 ? '' : 's' }}
+      {{ spaces.length === 1 ? t('{n} space', { n: spaces.length }) : t('{n} spaces', { n: spaces.length }) }}
     </p>
 
     <div class="org__create">
-      <strong style="display: block; margin-bottom: 8px">Opret nyt space</strong>
+      <strong style="display: block; margin-bottom: 8px">{{ t('Create a new space') }}</strong>
       <div style="display: flex; gap: 10px">
         <input
           v-model="newName"
           class="rz-input"
-          placeholder="Space-navn (fx Marketing, Explainers, Podcast…)"
+          :placeholder="t('Space name (for example Marketing, Explainers, Podcast…)')"
           style="flex: 1"
           @keydown.enter="createSpace"
         />
         <button class="rz-btn rz-btn--primary" :disabled="!newName.trim() || busy" @click="createSpace">
-          Opret
+          {{ t('Create') }}
         </button>
       </div>
       <p class="rz-field__hint" style="margin-top: 8px">
-        Hvert space er sin egen isolerede content-tenant. Vil du hellere have den guidede oprettelse:
-        <NuxtLink to="/spaces/new" style="color: var(--rz-primary)">Opret dit Space →</NuxtLink>
+        {{ t('Each space is its own isolated content tenant. If you would rather use the guided setup:') }}
+        <NuxtLink to="/spaces/new" style="color: var(--rz-primary)">{{ t('Create your Space') }} →</NuxtLink>
       </p>
     </div>
 
     <div class="org__list">
-      <div class="rz-field__label" style="margin-bottom: 8px">Organisationens spaces</div>
+      <div class="rz-field__label" style="margin-bottom: 8px">{{ t('Spaces in this organization') }}</div>
       <button v-for="s in spaces" :key="s.id" type="button" class="org__row" @click="open(s.id)">
         <span class="org__avatar">{{ s.name.slice(0, 1).toUpperCase() }}</span>
         <span class="org__name">{{ s.name }}</span>
         <span class="org__id">{{ s.id.slice(0, 8) }}…</span>
-        <span class="rz-chip">Staging</span>
-        <span class="org__go">Åbn →</span>
+        <span class="org__go">{{ t('Open') }} →</span>
       </button>
     </div>
   </div>

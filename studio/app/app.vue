@@ -1,16 +1,17 @@
 <script setup lang="ts">
-// Studio shell — Storyblok-pattern (Allan-direktiv 2026-07-28): a persistent
-// dark rail (My Spaces / My Organization on top; What's New, Help & Inspiration,
-// My account at the bottom) + a contextual light panel with the schema-driven
-// doc-type nav ONLY when inside a space. What's New is an overlay panel, not a
-// page. [designer] delivers the polished forlæg; this is the functional shell.
+// Studio shell: a persistent dark rail (My Spaces / My organization on top; Help
+// & inspiration and My account at the bottom) + a contextual light panel with the
+// doc-type nav ONLY when inside a space.
+const { t } = useT()
 const route = useRoute()
 const { active, leave } = useSpaces()
 const { schema } = useResonans()
 
 // The doc-type panel shows only inside a space (not on landing/org/create).
 const SHELL_ROUTES = ['/', '/organization', '/spaces/new']
-const inSpace = computed(() => !!active.value && !SHELL_ROUTES.includes(route.path))
+const inSpace = computed(
+  () => !!active.value && !SHELL_ROUTES.includes(route.path) && route.path !== '/login',
+)
 
 const { data: sch, error, refresh } = await useAsyncData('schema', () => schema())
 // Space-switch → the schema (and its content-profile filtering) must refetch.
@@ -34,20 +35,17 @@ async function logOut() {
   await navigateTo('/login')
 }
 
-// --- What's New (overlay, Storyblok-style) ---
-const showNews = ref(false)
-
-// Panel-nav (Allan 2026-07-29, Storyblok-mønstret): content-typerne er IKKE
-// nav-punkter — de er en kolonne i Content-listen og et VALG ved oprettelse.
+// Content types are not nav items: they are a column in the Content list and a
+// choice when creating a document.
 const panelNav = [
-  { to: '/dashboard', label: '⌂ Dashboard' },
-  { to: '/content', label: 'Content' },
-  { to: '/blocks', label: 'Block Library' },
-  { to: '/assets', label: 'Assets' },
-  { to: '/datasources', label: 'Datasources' },
+  { to: '/dashboard', label: `⌂ ${t('Dashboard')}` },
+  { to: '/content', label: t('Content') },
+  { to: '/blocks', label: t('Block Library') },
+  { to: '/assets', label: t('Assets') },
+  { to: '/datasources', label: t('Datasources') },
 ]
 
-// --- Hjælp & inspiration (drop-up) + Sentry-feedback ---
+// --- Help & inspiration (drop-up) + Sentry feedback ---
 const showHelp = ref(false)
 const { $reportProblem } = useNuxtApp()
 async function reportProblem() {
@@ -55,26 +53,6 @@ async function reportProblem() {
   if ($reportProblem) await $reportProblem()
   else window.open('https://github.com/KlangHaus/resonans/issues/new', '_blank')
 }
-const NEWS = [
-  {
-    date: '28. jul 2026',
-    tag: 'Produkt',
-    title: 'Content-profiler pr. space',
-    body: 'Til- og fravælg indholdstyper (Web / Undervisning) pr. space under Indstillinger — menuen følger automatisk.',
-  },
-  {
-    date: '28. jul 2026',
-    tag: 'Produkt',
-    title: 'Visuel blok-editor',
-    body: 'Blocks-felter redigeres nu visuelt: tilføj fra paletten, flyt op/ned, slet — plus rich-text med fed/kursiv/overskrifter/citater.',
-  },
-  {
-    date: '28. jul 2026',
-    tag: 'Milepæl',
-    title: 'KlangHaus Journal er live',
-    body: 'Bloggen renderer nu direkte fra Resonans delivery-API — første offentlige flade på CMS-motoren.',
-  },
-]
 </script>
 
 <template>
@@ -85,37 +63,33 @@ const NEWS = [
         <span class="sb-rail__mark">R</span> <span class="sb-rail__label">resonans</span>
       </NuxtLink>
 
-      <!-- Current-space-chip (kun slim/inde-i-space — [designer]s inner-rail-kontraktion) -->
-      <div v-if="inSpace" class="sb-rail__spacechip" :title="active?.name">
+      <!-- Current-space chip: only in the slim rail, inside a space -->
+      <div v-if="inSpace && !auth.enabled.value" class="sb-rail__spacechip" :title="active?.name">
         {{ (active?.name || '?').slice(0, 2).toUpperCase() }}
       </div>
-      <div v-if="inSpace" class="sb-rail__sep" />
+      <div v-if="inSpace && !auth.enabled.value" class="sb-rail__sep" />
 
-      <nav class="sb-rail__nav">
-        <NuxtLink to="/" class="sb-rail__item" :class="{ on: route.path === '/' || inSpace }" title="Mine Spaces" @click="leave()">
-          <span class="sb-rail__ic">▢</span> <span class="sb-rail__label">Mine Spaces</span>
+      <nav v-if="!auth.enabled.value" class="sb-rail__nav">
+        <NuxtLink to="/" class="sb-rail__item" :class="{ on: route.path === '/' || inSpace }" :title="t('My Spaces')" @click="leave()">
+          <span class="sb-rail__ic">▢</span> <span class="sb-rail__label">{{ t('My Spaces') }}</span>
         </NuxtLink>
-        <NuxtLink to="/organization" class="sb-rail__item" :class="{ on: route.path === '/organization' }" title="Min organisation">
-          <span class="sb-rail__ic">🏢</span> <span class="sb-rail__label">Min organisation</span>
+        <NuxtLink to="/organization" class="sb-rail__item" :class="{ on: route.path === '/organization' }" :title="t('My organization')">
+          <span class="sb-rail__ic">🏢</span> <span class="sb-rail__label">{{ t('My organization') }}</span>
         </NuxtLink>
       </nav>
 
       <div class="sb-rail__bottom">
-        <button type="button" class="sb-rail__item" title="Nyheder" @click="showNews = true">
-          <span class="sb-rail__ic">✦</span> <span class="sb-rail__label">Nyheder</span> <span class="sb-rail__badge">{{ NEWS.length }}</span>
-        </button>
-
-        <!-- Hjælp & inspiration: drop-up-menu (Storyblok-mønstret) -->
+        <!-- Help & inspiration: drop-up menu -->
         <div class="sb-help">
           <div v-if="showHelp" class="sb-help__menu">
-            <div class="sb-help__title">Hvordan kan vi hjælpe?</div>
-            <button type="button" class="sb-help__link" @click="reportProblem">Rapportér et problem</button>
-            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans#readme" target="_blank" rel="noopener">Dokumentation</a>
-            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
-            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/issues" target="_blank" rel="noopener">Community</a>
+            <div class="sb-help__title">{{ t('How can we help?') }}</div>
+            <button type="button" class="sb-help__link" @click="reportProblem">{{ t('Report a problem') }}</button>
+            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans#readme" target="_blank" rel="noopener">{{ t('Documentation') }}</a>
+            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/blob/main/CHANGELOG.md" target="_blank" rel="noopener">{{ t('Changelog') }}</a>
+            <a class="sb-help__link" href="https://github.com/KlangHaus/resonans/issues" target="_blank" rel="noopener">{{ t('Community') }}</a>
           </div>
-          <button type="button" class="sb-rail__item" :class="{ on: showHelp }" title="Hjælp & inspiration" @click="showHelp = !showHelp">
-            <span class="sb-rail__ic">◎</span> <span class="sb-rail__label">Hjælp & inspiration</span>
+          <button type="button" class="sb-rail__item" :class="{ on: showHelp }" :title="t('Help & inspiration')" @click="showHelp = !showHelp">
+            <span class="sb-rail__ic">◎</span> <span class="sb-rail__label">{{ t('Help & inspiration') }}</span>
           </button>
         </div>
 
@@ -125,27 +99,25 @@ const NEWS = [
           out; in dev mode (no auth service configured) it keeps the old static
           label rather than claiming an identity nobody proved.
         -->
-        <div
+        <button
           v-if="auth.enabled.value"
           class="sb-rail__item sb-rail__account"
-          :title="auth.user.value?.email || 'Ikke logget ind'"
-          role="button"
-          tabindex="0"
+          :title="auth.user.value?.email || t('Not logged in')"
+          type="button"
           @click="logOut"
-          @keydown.enter="logOut"
         >
           <span class="sb-rail__avatar">{{ initials }}</span>
-          <span class="sb-rail__label">{{ auth.user.value?.email || 'Log ind' }} · Log ud</span>
-        </div>
-        <div v-else class="sb-rail__item sb-rail__account" title="Min konto (udviklingstilstand — intet login)">
-          <span class="sb-rail__avatar">AC</span> <span class="sb-rail__label">Min konto</span>
+          <span class="sb-rail__label">{{ auth.user.value ? `${auth.user.value.email} · ${t('Log out')}` : t('Log in') }}</span>
+        </button>
+        <div v-else class="sb-rail__item sb-rail__account" :title="t('My account (development mode, no login)')">
+          <span class="sb-rail__avatar">?</span> <span class="sb-rail__label">{{ t('My account') }}</span>
         </div>
       </div>
     </aside>
 
     <!-- Contextual doc-type panel (inside a space) -->
     <aside v-if="inSpace" class="sb-panel">
-      <button type="button" class="sb-panel__back" @click="backToSpaces">← Spaces</button>
+      <button v-if="!auth.enabled.value" type="button" class="sb-panel__back" @click="backToSpaces">← {{ t('Spaces') }}</button>
       <div class="sb-panel__space">
         <span class="sb-panel__spaceavatar">{{ (active?.name || '?').slice(0, 1) }}</span>
         <strong>{{ active?.name }}</strong>
@@ -155,11 +127,11 @@ const NEWS = [
           {{ item.label }}
         </NuxtLink>
         <p v-if="error" class="rz-field__hint" style="padding: 0 12px">
-          Kan ikke hente schema — kører backend'en?
+          {{ t('Could not load the schema. Is the backend running?') }}
         </p>
       </nav>
       <div class="sb-panel__foot">
-        <NuxtLink to="/settings" class="sb-panel__item">⚙ Projekt settings</NuxtLink>
+        <NuxtLink to="/settings" class="sb-panel__item">⚙ {{ t('Project settings') }}</NuxtLink>
       </div>
     </aside>
 
@@ -167,18 +139,6 @@ const NEWS = [
       <NuxtPage />
     </main>
 
-    <!-- What's New overlay -->
-    <div v-if="showNews" class="sb-news" @click.self="showNews = false">
-      <div class="sb-news__panel">
-        <button type="button" class="sb-news__close" aria-label="Luk" @click="showNews = false">✕</button>
-        <h2>Nyheder</h2>
-        <div v-for="n in NEWS" :key="n.title" class="sb-news__item">
-          <div class="sb-news__meta">{{ n.date }} · <span class="sb-news__tag">{{ n.tag }}</span></div>
-          <h3>{{ n.title }}</h3>
-          <p>{{ n.body }}</p>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -191,14 +151,14 @@ const NEWS = [
 .sb-rail {
   width: 232px;
   flex: none;
-  background: var(--rz-rail-bg, #14161c); /* permanent mørk — --rz-rail-* er tema-uafhængige */
+  background: var(--rz-rail-bg, #14161c); /* permanently dark: --rz-rail-* are theme-independent */
   color: var(--rz-rail-text-muted, #8b8f9c);
   display: flex;
   flex-direction: column;
   padding: 14px 10px;
   transition: width 0.15s ease;
 }
-/* Slim ikon-rail inde i et space ([designer]s outer→inner-kontraktion) */
+/* Slim icon rail inside a space */
 .sb-rail--slim {
   width: 60px;
   padding: 14px 8px;
@@ -214,16 +174,6 @@ const NEWS = [
   justify-content: center;
   padding: 9px 0;
   width: 44px;
-}
-.sb-rail--slim .sb-rail__badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  padding: 0 5px;
-  font-size: 9px;
-}
-.sb-rail--slim .sb-rail__item {
-  position: relative;
 }
 .sb-rail__spacechip {
   width: 34px;
@@ -302,15 +252,6 @@ const NEWS = [
   width: 18px;
   text-align: center;
   opacity: 0.85;
-}
-.sb-rail__badge {
-  margin-left: auto;
-  background: #e94560;
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 1px 7px;
 }
 .sb-rail__bottom {
   margin-top: auto;
@@ -442,63 +383,5 @@ const NEWS = [
   flex: 1;
   overflow: auto;
   padding: 22px 28px;
-}
-/* What's New overlay */
-.sb-news {
-  position: fixed;
-  inset: 0;
-  background: rgba(26, 26, 46, 0.35);
-  display: flex;
-  justify-content: center;
-  z-index: 50;
-}
-.sb-news__panel {
-  background: var(--rz-raised, #fff);
-  color: var(--rz-text, #1a1a2e);
-  width: min(560px, 92vw);
-  margin: 4vh 0;
-  border-radius: 14px;
-  padding: 26px 30px;
-  overflow: auto;
-  position: relative;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
-}
-.sb-news__close {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  background: none;
-  border: 0;
-  font-size: 16px;
-  cursor: pointer;
-  color: var(--rz-text-muted, #6b6b78);
-}
-.sb-news__panel h2 {
-  margin: 0 0 18px;
-  font-size: 24px;
-  font-weight: 800;
-}
-.sb-news__item {
-  border-top: 1px solid var(--rz-border, #e6e2da);
-  padding: 14px 0;
-}
-.sb-news__meta {
-  font-size: 12px;
-  color: var(--rz-text-muted, #6b6b78);
-  font-family: var(--rz-font-mono, ui-monospace, monospace);
-}
-.sb-news__tag {
-  color: var(--rz-primary, #e94560);
-  font-weight: 600;
-}
-.sb-news__item h3 {
-  margin: 6px 0 4px;
-  font-size: 16px;
-}
-.sb-news__item p {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--rz-text-muted, #6b6b78);
 }
 </style>

@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   if (!verifier || !state || !nonce) {
     // No transaction: an expired login, a second tab, or a callback nobody
     // started here. Start over rather than guess.
-    return sendRedirect(event, '/login?grund=udloebet', 302)
+    return sendRedirect(event, '/login?reason=expired', 302)
   }
 
   // The URL the provider redirected to, rebuilt from configuration — never
@@ -31,11 +31,11 @@ export default defineEventHandler(async (event) => {
       idTokenExpected: true,
     })
   } catch {
-    return sendRedirect(event, '/login?grund=afvist', 302)
+    return sendRedirect(event, '/login?reason=refused', 302)
   }
 
   const claims = tokens.claims()
-  if (!claims?.sub) return sendRedirect(event, '/login?grund=afvist', 302)
+  if (!claims?.sub) return sendRedirect(event, '/login?reason=refused', 302)
   await saveTokens(event, s, tokens, {
     sub: claims.sub,
     email: typeof claims.email === 'string' ? claims.email : undefined,

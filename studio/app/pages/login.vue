@@ -3,15 +3,16 @@
 // identity provider (via the editor's own /auth/login); there is no password
 // field here, because Resonans keeps no passwords (ADR 0001). In dev mode the
 // guard never sends anyone here, and the page says so.
+const { t } = useT()
 const { enabled, ready, refresh, signIn } = useAuth()
 const route = useRoute()
 
 // The route guard and the server's callback each say WHY someone is here, and
 // each reason is its own message: an editor who cannot tell "the service is
 // down" from "your login expired" will just click again and again.
-const reason = computed(() => route.query.grund as string | undefined)
+const reason = computed(() => route.query.reason as string | undefined)
 const next = computed(() => {
-  const n = route.query.naeste
+  const n = route.query.next
   return typeof n === 'string' && n.startsWith('/') ? n : '/'
 })
 
@@ -29,25 +30,24 @@ onMounted(async () => {
 <template>
   <div class="lg">
     <div class="lg__card">
-      <h1 class="lg__h">Log ind i Resonans</h1>
+      <h1 class="lg__h">{{ t('Log in to Resonans') }}</h1>
 
       <p v-if="ready && !enabled" class="lg__note">
-        Der er ingen login-tjeneste konfigureret for dette miljø, så login er slået fra. Resonans kører i
-        udviklingstilstand.
+        {{ t('No login service is configured for this environment, so login is turned off. Resonans is running in development mode.') }}
       </p>
 
       <template v-else>
-        <p v-if="reason === 'utilgaengelig'" class="lg__warn">
-          Vi kunne ikke få fat i login-tjenesten. Du er ikke logget ud — vi ved bare ikke, om du er logget ind.
+        <p v-if="reason === 'unreachable'" class="lg__warn">
+          {{ t('We could not reach the login service. You have not been logged out; we just do not know whether you are logged in.') }}
         </p>
-        <p v-else-if="reason === 'udloebet'" class="lg__warn">
-          Login-forsøget udløb, eller blev startet i en anden fane. Prøv igen.
+        <p v-else-if="reason === 'expired'" class="lg__warn">
+          {{ t('The login attempt expired, or was started in another tab. Try again.') }}
         </p>
-        <p v-else-if="reason === 'afvist'" class="lg__warn">
-          Login-tjenesten sagde nej, eller svaret kunne ikke bekræftes. Prøv igen — og sig til, hvis det bliver ved.
+        <p v-else-if="reason === 'refused'" class="lg__warn">
+          {{ t('The login service said no, or its answer could not be verified. Try again, and let us know if it keeps happening.') }}
         </p>
 
-        <button type="button" class="lg__btn" @click="signIn(next)">Log ind</button>
+        <button type="button" class="lg__btn" @click="signIn(next)">{{ t('Log in') }}</button>
       </template>
     </div>
   </div>

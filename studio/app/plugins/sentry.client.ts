@@ -1,6 +1,5 @@
-// Sentry (SaaS EU — Beslutning: error-tracking = Sentry EU-region) for the
-// Studio SPA: error capture + the User Feedback widget behind "Rapportér et
-// problem" in the Help & Inspiration drop-up. The DSN is publishable (not a
+// Sentry (SaaS, EU region) for the Studio SPA: error capture + the User Feedback
+// widget behind "Report a problem" in the Help & Inspiration drop-up. The DSN is publishable (not a
 // secret); override per environment via NUXT_PUBLIC_SENTRY_DSN, empty = Sentry
 // disabled entirely (e.g. local dev without noise).
 //
@@ -14,6 +13,8 @@ export default defineNuxtPlugin((nuxtApp) => {
   const dsn = (cfg.public.sentryDsn as string) || ''
   if (!dsn) return
 
+  const { t } = useT()
+
   Sentry.init({
     app: nuxtApp.vueApp,
     dsn,
@@ -24,20 +25,20 @@ export default defineNuxtPlugin((nuxtApp) => {
         autoInject: false,
         showBranding: false,
         colorScheme: 'light',
-        triggerLabel: 'Rapportér et problem',
-        formTitle: 'Rapportér et problem',
-        submitButtonLabel: 'Send rapport',
-        cancelButtonLabel: 'Annullér',
-        messageLabel: 'Hvad skete der?',
-        messagePlaceholder: 'Beskriv problemet — hvad prøvede du, og hvad skete der i stedet?',
-        successMessageText: 'Tak! Rapporten er sendt.',
+        triggerLabel: t('Report a problem'),
+        formTitle: t('Report a problem'),
+        submitButtonLabel: t('Send report'),
+        cancelButtonLabel: t('Cancel'),
+        messageLabel: t('What happened?'),
+        messagePlaceholder: t('Describe the problem: what did you try, and what happened instead?'),
+        successMessageText: t('Thanks! The report has been sent.'),
       }),
     ],
   })
 
   return {
     provide: {
-      // Åbn Sentry-feedback-formen programmatisk (Help & Inspiration → Rapportér et problem).
+      // Opens the Sentry feedback form from code (Help & Inspiration → Report a problem).
       reportProblem: async () => {
         const feedback = Sentry.getFeedback()
         if (!feedback) return

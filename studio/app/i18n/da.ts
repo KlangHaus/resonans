@@ -1,0 +1,275 @@
+// Danish for the editor's interface. Keys are the English source text (useT.ts).
+export const da: Record<string, string> = {
+  // Shell
+  Dashboard: 'Dashboard',
+  Content: 'Content',
+  'Block Library': 'Block Library',
+  Assets: 'Assets',
+  Datasources: 'Datasources',
+  'My Spaces': 'Mine Spaces',
+  'My organization': 'Min organisation',
+  'How can we help?': 'Hvordan kan vi hjælpe?',
+  'Report a problem': 'Rapportér et problem',
+  Documentation: 'Dokumentation',
+  Changelog: 'Changelog',
+  Community: 'Community',
+  'Help & inspiration': 'Hjælp & inspiration',
+  'Not logged in': 'Ikke logget ind',
+  'Log in': 'Log ind',
+  'Log out': 'Log ud',
+  'My account (development mode, no login)': 'Min konto (udviklingstilstand — intet login)',
+  'My account': 'Min konto',
+  Spaces: 'Spaces',
+  'Could not load the schema. Is the backend running?': "Kan ikke hente schema — kører backend'en?",
+  'Project settings': 'Projekt settings',
+
+  // Login
+  'Log in to Resonans': 'Log ind i Resonans',
+  'No login service is configured for this environment, so login is turned off. Resonans is running in development mode.':
+    'Der er ingen login-tjeneste konfigureret for dette miljø, så login er slået fra. Resonans kører i udviklingstilstand.',
+  'We could not reach the login service. You have not been logged out; we just do not know whether you are logged in.':
+    'Vi kunne ikke få fat i login-tjenesten. Du er ikke logget ud — vi ved bare ikke, om du er logget ind.',
+  'The login attempt expired, or was started in another tab. Try again.':
+    'Login-forsøget udløb, eller blev startet i en anden fane. Prøv igen.',
+  'The login service said no, or its answer could not be verified. Try again, and let us know if it keeps happening.':
+    'Login-tjenesten sagde nej, eller svaret kunne ikke bekræftes. Prøv igen — og sig til, hvis det bliver ved.',
+
+  // Problem report (Sentry)
+  'Send report': 'Send rapport',
+  Cancel: 'Annullér',
+  'What happened?': 'Hvad skete der?',
+  'Describe the problem: what did you try, and what happened instead?':
+    'Beskriv problemet — hvad prøvede du, og hvad skete der i stedet?',
+  'Thanks! The report has been sent.': 'Tak! Rapporten er sendt.',
+
+  // Rich text
+  'Link URL:': 'Link-URL:',
+  Bold: 'Fed',
+  Italic: 'Kursiv',
+  'Heading 2': 'Overskrift 2',
+  'Heading 3': 'Overskrift 3',
+  Paragraph: 'Afsnit',
+  Quote: 'Citat',
+  List: 'Liste',
+  'Bulleted list': 'Punktliste',
+  'Numbered list': 'Nummereret',
+  Link: 'Link',
+  'Clear formatting': 'Ryd format',
+  'interim · GTRichText swap pending': 'interim · GTRichText swap pending',
+  'Write…': 'Skriv…',
+
+  // Fields and blocks
+  '{ref} id': '{ref} id',
+  'asset id': 'asset id',
+  'Array field. A repeater UI will follow in a later increment.':
+    'Array-felt — repeater-UI sekvenseres som følge-increment.',
+  'Unknown field type: {type}': 'Ukendt felt-type: {type}',
+  'No blocks yet.': 'Ingen blokke endnu.',
+  'unknown block, not in the schema': 'ukendt blok — ikke i schemaet',
+  Up: 'Op',
+  Down: 'Ned',
+  Delete: 'Slet',
+  'Add block': 'Tilføj blok',
+
+  // Visual preview
+  Desktop: 'Desktop',
+  Tablet: 'Tablet',
+  Mobile: 'Mobil',
+  'Selected block': 'Valgt blok',
+  document: 'dokument',
+  unknown: 'ukendt',
+  'Could not get the preview token: {message}': 'Kunne ikke hente preview-token: {message}',
+  Editor: 'Editor',
+  'Generic preview': 'Generisk preview',
+  'Draft preview': 'Draft-preview',
+  Connected: 'Forbundet',
+  'Waiting for preview…': 'Venter på preview…',
+  'Viewport width': 'Visningsbredde',
+  Language: 'Sprog',
+  'Back to split view (Esc)': 'Tilbage til split (Esc)',
+  Fullscreen: 'Fuldskærm',
+  'Reload preview': 'Genindlæs preview',
+  'Generic preview: you are seeing the structure, not your real site.':
+    'Generisk preview — I ser strukturen, ikke jeres rigtige site.',
+  'Add a preview bridge': 'Tilføj preview-bro',
+  'Generic draft preview': 'Generisk draft-preview',
+  'Live draft preview': 'Live draft-preview',
+  'Live draft render.': 'Live draft-render.',
+  'Click a block → highlight in preview · click in preview → select block in editor':
+    'Klik en blok → fremhæv i preview · klik i preview → vælg blok i editor',
+
+  // Spaces
+  'All content': 'Alt indhold',
+  Marketing: 'Marketing',
+  LMS: 'LMS',
+  'Updated today': 'Opdateret i dag',
+  'Updated yesterday': 'Opdateret i går',
+  'Updated {n} days ago': 'Opdateret for {n} dage siden',
+  'Add Space': 'Tilføj Space',
+  'Search spaces…': 'Søg i spaces…',
+  'Sort: Last updated': 'Sortér: Senest opdateret',
+  'Sort: Name': 'Sortér: Navn',
+  'No spaces match the search.': 'Ingen spaces matcher søgningen.',
+  'Back to Spaces': 'Tilbage til Spaces',
+  'Create your Space': 'Opret dit Space',
+  'A space is where you manage all content, components and configuration for one project, such as a blog, a course catalog or a website.':
+    'Et space er hvor du styrer alt indhold, komponenter og konfiguration for ét projekt — fx en blog, et kursus-katalog eller en hjemmeside.',
+  Space: 'Space',
+  'Space name': 'Space-navn',
+  'My new space': 'Mit nye space',
+  'Create Space': 'Opret Space',
+  'The space gets its own isolated content tenant (RLS) and starts with all content types active. Adjust the profile under ⚙ Settings.':
+    'Spacet får sin egen isolerede content-tenant (RLS) og starter med alle indholdstyper aktive — justér profilen under ⚙ Indstillinger.',
+
+  // Organization
+  '{n} space': '{n} space',
+  '{n} spaces': '{n} spaces',
+  'Create a new space': 'Opret nyt space',
+  'Space name (for example Marketing, Explainers, Podcast…)': 'Space-navn (fx Marketing, Explainers, Podcast…)',
+  Create: 'Opret',
+  'Each space is its own isolated content tenant. If you would rather use the guided setup:':
+    'Hvert space er sin egen isolerede content-tenant. Vil du hellere have den guidede oprettelse:',
+  'Spaces in this organization': 'Organisationens spaces',
+  Open: 'Åbn',
+
+  // Settings
+  'Web (blog + pages)': 'Web (blog + sider)',
+  'Teaching (LMS)': 'Undervisning (LMS)',
+  Other: 'Andet',
+  Saved: 'Gemt',
+  'Error: {message}': 'Fejl: {message}',
+  Settings: 'Indstillinger',
+  'Content profile: choose which content types this space uses. Types you turn off disappear from the menu and cannot be created; existing content is not deleted.':
+    'Content-profil: vælg hvilke indholdstyper dette space bruger. Fravalgte typer forsvinder fra menuen og kan ikke oprettes — eksisterende indhold slettes ikke.',
+  'All on': 'Alle til',
+  'All off': 'Alle fra',
+  'Save profile': 'Gem profil',
+  'Visual editing': 'Visuel redigering',
+  'The preview URL of the site. Studio shows it in the editor and updates it live as you type.':
+    'Sitets preview-URL. Studio viser den i editoren og opdaterer den live mens du skriver.',
+  'Placeholders:': 'Pladsholdere:',
+  and: 'og',
+  '(required). https only; http only for localhost.': '(påkrævet). Kun https — http kun for localhost.',
+  'Studio only talks to': 'Studio taler kun med',
+  'The server has no preview key (RESONANS_PREVIEW_SECRET), so the preview cannot open.':
+    'Serveren har ingen preview-nøgle (RESONANS_PREVIEW_SECRET), så preview kan ikke åbnes.',
+  'Save preview URL': 'Gem preview-URL',
+
+  // Block library
+  '{n} blocks': '{n} blokke',
+  'The block library is defined in code (schema in git). Each content type chooses its allowed blocks through its allow list.':
+    'Blok-biblioteket er kode-defineret (schema i git). Hver indholdstype vælger sine tilladte blokke via sin allow-liste.',
+  'Search blocks…': 'Søg blokke…',
+
+  // Dashboard
+  Documents: 'Dokumenter',
+  '{n} published': '{n} udgivet',
+  'Content types': 'Indholdstyper',
+  'active in the profile': 'aktive i profilen',
+  'Block library': 'Blok-bibliotek',
+  'blocks available': 'blokke til rådighed',
+  documents: 'dokumenter',
+  'Last updated {date}': 'Senest opdateret {date}',
+  'Content profile': 'Content-profil',
+  '{enabled} / {all} types': '{enabled} / {all} typer',
+  Tenant: 'Tenant',
+  'Fetching overview…': 'Henter overblik…',
+  Activity: 'Aktivitet',
+  'No documents yet. Create your first from the menu on the left.':
+    'Ingen dokumenter endnu — opret dit første fra menuen til venstre.',
+
+  // Datasources
+  'Shared key/value lists to reuse across content.': 'Delte nøgle/værdi-lister til genbrug på tværs af indhold.',
+  'On the roadmap': 'På roadmappet',
+  'Datasources (such as categories, author lists, glossaries) will come as part of the product hardening. Until then, fixed values live as fields on the documents.':
+    'Datasources (fx kategorier, forfatter-lister, gloser) kommer som del af produkt-hærdningen. Indtil da bor faste værdier som felter på dokumenterne.',
+
+  // Assets
+  'Uploaded: {name}': 'Uploadet: {name}',
+  'Asset id copied': 'Asset-id kopieret',
+  'Uploading…': 'Uploader…',
+  '+ Upload': '+ Upload',
+  'Images and files for this space, referenced from image and download blocks by asset id.':
+    'Billeder og filer til dette space — refereres fra image/download-blokke via asset-id.',
+  'Fetching…': 'Henter…',
+  'No assets yet. Upload the first one.': 'Ingen assets endnu — upload det første.',
+  'Copy id': 'Kopiér id',
+
+  // Document list and editor
+  'New {type}: slug?': 'Ny {type} — slug?',
+  'Title?': 'Titel?',
+  'Could not create: {message}': 'Kunne ikke oprette: {message}',
+  'New {type}': 'Ny {type}',
+  Title: 'Titel',
+  Slug: 'Slug',
+  Status: 'Status',
+  Updated: 'Opdateret',
+  'No {type} documents yet.': 'Ingen {type}-dokumenter endnu.',
+  'Move "{title}" to the bin?': 'Flyt "{title}" til papirkurven?',
+  'It disappears from the list and from your sites right away. You can restore it from the Bin filter in Content.':
+    'Den forsvinder fra listen og fra jeres sites med det samme. Du kan gendanne den fra Papirkurv-filteret i Content.',
+  'Could not delete: {message}': 'Kunne ikke slette: {message}',
+  'unknown error': 'ukendt fejl',
+  Published: 'Udgivet',
+  'The preview could not be updated: {message}': 'Preview kunne ikke opdateres: {message}',
+  View: 'Visning',
+  Form: 'Formular',
+  Visual: 'Visuel',
+  Save: 'Gem',
+  Publish: 'Udgiv',
+  'Move to the bin': 'Flyt til papirkurven',
+  'Deleting…': 'Sletter…',
+  'Unknown document type "{type}": not in the schema.': 'Ukendt doc-type «{type}» — ikke i schemaet.',
+  'Loading…': 'Indlæser…',
+
+  // Content list
+  '"{title}" cannot be restored, because another page already uses the address /{slug}. Rename or delete the other page first.':
+    '"{title}" kan ikke gendannes, fordi en anden side allerede bruger adressen /{slug}. Omdøb eller slet den anden først.',
+  'Could not restore: {message}': 'Kunne ikke gendanne: {message}',
+  'Create new': 'Opret ny',
+  'Search content…': 'Søg i indhold…',
+  'All types': 'Alle typer',
+  'Show active content': 'Vis aktivt indhold',
+  'Show deleted documents': 'Vis slettede dokumenter',
+  'Active content': 'Aktivt indhold',
+  Bin: 'Papirkurv',
+  'All statuses': 'Alle statusser',
+  Draft: 'Kladde',
+  Name: 'Navn',
+  Type: 'Type',
+  'Last updated': 'Senest opdateret',
+  'The bin is empty.': 'Papirkurven er tom.',
+  'No content matches the filters.': 'Intet indhold matcher filtrene.',
+  'No content yet. Create the first with "+ Create new".': 'Intet indhold endnu — opret det første med "+ Opret ny".',
+  'Deleted {date}': 'Slettet {date}',
+  'Restoring…': 'Gendanner…',
+  Restore: 'Gendan',
+  '{n} document': '{n} dokument',
+  '{n} documents': '{n} dokumenter',
+  Refresh: 'Opdatér',
+
+  // New document
+  Page: 'Page',
+  'A standalone page: marketing, about us, front page sections.': 'Fritstående side — marketing, om os, forside-sektioner.',
+  Post: 'Post',
+  'A blog post: author, category, date.': 'Blogindlæg — author, kategori, dato.',
+  Course: 'Course',
+  'A course: a container for modules.': 'Et kursus — beholder for moduler.',
+  Module: 'Module',
+  'A chapter or sequence inside a course.': 'Et kapitel/forløb inde i et kursus.',
+  Lesson: 'Lesson',
+  'One lesson: the teaching content itself.': 'Én lektion — selve undervisningsindholdet.',
+  Quiz: 'Quiz',
+  'Questions with answer options, referenced from lessons.': 'Spørgsmål m/ svarmuligheder — refereres fra lektioner.',
+  Resource: 'Resource',
+  'Download or file material for lessons.': 'Download/fil-materiale til lektioner.',
+  'Back to Content': 'Tilbage til Content',
+  'Choose which type of content you want to create.': 'Vælg hvilken type indhold du vil oprette.',
+  '{n} fields': '{n} felter',
+  New: 'Ny',
+  'change type': 'skift type',
+  'My new title': 'Min nye titel',
+  'The URL name, generated automatically from the title.': 'URL-navnet — genereres automatisk fra titlen.',
+  'Creating…': 'Opretter…',
+  'Create and open editor': 'Opret og åbn editor',
+}

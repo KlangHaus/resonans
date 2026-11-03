@@ -6,7 +6,7 @@
 // `<img onerror>` / `<svg><animate onbegin>` in the Studio's own origin
 // (measured). So every string goes through this allowlist first.
 //
-// 🔴 OUR OWN, NOT DOMPURIFY (Allan 2026-10-23). It is deliberately small:
+// 🔴 OUR OWN, NOT DOMPURIFY. It is deliberately small:
 //   · Parsing is the BROWSER's — an inert <template>, where scripts do not run
 //     and images are not fetched. Nothing here parses HTML with a regex.
 //   · Output is BUILT, never copied: for each allowed element a fresh element is

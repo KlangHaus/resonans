@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import type { BlockType, Field } from '~/composables/useResonans'
 
-// BlockEditor — the visual block editor (Fase 4 core). Renders a `blocks` field:
+// BlockEditor — the visual block editor. Renders a `blocks` field:
 // an ordered, editable list of blocks. Fully schema-driven — each block's fields
 // come from the schema block-registry (blockDefs), so NO block type is hardcoded
 // here; a new block in the YAML registry just works. Supports add (from the
 // doc-type's `allow`-list), reorder, delete, and nesting (a block whose field is
 // itself `blocks`, e.g. columns → SchemaField → BlockEditor recursively).
 type Block = Record<string, unknown> & { _type: string }
+
+const { t } = useT()
 
 const props = defineProps<{
   modelValue: unknown
@@ -92,7 +94,7 @@ function fieldsOf(block: Block): Field[] {
 
 <template>
   <div class="rz-be">
-    <div v-if="!blocks.length" class="rz-be__empty">Ingen blokke endnu.</div>
+    <div v-if="!blocks.length" class="rz-be__empty">{{ t('No blocks yet.') }}</div>
 
     <div
       v-for="(block, i) in blocks"
@@ -102,11 +104,11 @@ function fieldsOf(block: Block): Field[] {
     >
       <div class="rz-be__head">
         <span class="rz-be__type">{{ block._type }}</span>
-        <span v-if="!defFor(block._type)" class="rz-be__unknown">ukendt blok — ikke i schemaet</span>
+        <span v-if="!defFor(block._type)" class="rz-be__unknown">{{ t('unknown block, not in the schema') }}</span>
         <div class="rz-be__ctrls">
-          <button type="button" class="rz-be__ctrl" title="Op" :disabled="i === 0" @click="move(i, -1)">↑</button>
-          <button type="button" class="rz-be__ctrl" title="Ned" :disabled="i === blocks.length - 1" @click="move(i, 1)">↓</button>
-          <button type="button" class="rz-be__ctrl rz-be__ctrl--del" title="Slet" @click="removeAt(i)">✕</button>
+          <button type="button" class="rz-be__ctrl" :title="t('Up')" :disabled="i === 0" @click="move(i, -1)">↑</button>
+          <button type="button" class="rz-be__ctrl" :title="t('Down')" :disabled="i === blocks.length - 1" @click="move(i, 1)">↓</button>
+          <button type="button" class="rz-be__ctrl rz-be__ctrl--del" :title="t('Delete')" @click="removeAt(i)">✕</button>
         </div>
       </div>
       <div class="rz-be__body">
@@ -123,7 +125,7 @@ function fieldsOf(block: Block): Field[] {
     </div>
 
     <div class="rz-be__add">
-      <button type="button" class="rz-btn" @click="showPalette = !showPalette">+ Tilføj blok</button>
+      <button type="button" class="rz-btn" @click="showPalette = !showPalette">+ {{ t('Add block') }}</button>
       <div v-if="showPalette" class="rz-be__palette">
         <button v-for="name in palette" :key="name" type="button" class="rz-be__pill" @click="addBlock(name)">
           {{ name }}
