@@ -38,8 +38,9 @@ already run.
 
 ## Quickstart
 
-You need Docker with Compose. Both commands build the images from your checkout, so the
-first run takes a few minutes and no registry account is needed.
+You need Docker with Compose. Both commands below build the images from your checkout, so
+the first run takes a few minutes and no registry account is needed. On amd64 you can
+[use the published images](#use-the-published-images) instead.
 
 ### Try it
 
@@ -73,6 +74,21 @@ Editor at <http://localhost:8080>, content API at <http://localhost:3000>.
 `compose.yml` deliberately does **not** terminate TLS, and it publishes its ports on
 127.0.0.1 only (`BIND_ADDRESS`). Put your own reverse proxy in front. Publishing an editor
 to the internet is a decision only you can make, so it is not a default.
+
+### Use the published images
+
+The images are public, so no login is needed. They are built for **amd64 only**: on Apple
+Silicon or another arm64 machine, build from source as above.
+
+```bash
+export RESONANS_VERSION=3.1.0   # the tag has no "v"
+docker compose pull
+docker compose up -d --no-build
+```
+
+`docker compose up --pull always` does not do this: it skips a service that can also be
+built. Pin a version for anything you care about, and read [CHANGELOG.md](CHANGELOG.md) for
+every version you skip.
 
 ### Onto a Postgres you already run
 

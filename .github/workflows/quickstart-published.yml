@@ -1,0 +1,56 @@
+# The published images must boot, from an anonymous pull. quickstart.yml proves the
+# source on every pull request; this proves what a stranger downloads, which can
+# only be measured once it is published, so it runs on a schedule rather than on a
+# pull request, where a broken release would turn every unrelated change red.
+#
+# Nothing requires this job and no one is paged: a red run is seen in the Actions
+# tab and in GitHub's mail to whoever last edited this file.
+
+name: Quickstart (published images)
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quickstart:
+    name: Quickstart from published images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_ARGS: --env-file deploy/try/env -f compose.yml -f compose.try.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `up --pull always` skips a service that also has `build:`, so this pulls
+      # explicitly, and `--no-build` keeps compose from building anything instead.
+      - name: Pull anonymously and start
+        run: |
+          docker compose $COMPOSE_ARGS pull
+          docker compose $COMPOSE_ARGS up -d --no-build
+
+      # The opposite of the check in quickstart.yml: a local build would have no
+      # repo digest, and this job would be testing the wrong thing.
+      - name: Confirm the images came from the registry
+        run: |
+          set -euo pipefail
+          for image in ghcr.io/klanghaus/resonans:latest ghcr.io/klanghaus/resonans-studio:latest; do
+            digests="$(docker image inspect --format '{{len .RepoDigests}}' "$image")"
+            if [ "$digests" = "0" ]; then
+              echo "::error::$image was not pulled from the registry"
+              exit 1
+            fi
+          done
+
+      - name: Log in, write, publish, read back
+        run: bash scripts/quickstart_smoke.sh
+
+      - name: Logs on failure
+        if: ${{ failure() }}
+        run: docker compose $COMPOSE_ARGS logs --no-color --tail 80
