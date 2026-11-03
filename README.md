@@ -24,8 +24,8 @@ ready when all eight hold:
 
 | # | Capability | Today |
 | --- | --- | --- |
-| 1 | Clone it, run one command, and reach a working editor and API, with no registry account. | **Partly.** The published images are public but amd64 only, so this fails on Apple Silicon and other arm64 machines, and you need your own login provider. |
-| 2 | Editors log in through any standard OpenID Connect provider, with four roles and a single-tenant mode. | **Built, unproven.** Only run against the provider we use ourselves. |
+| 1 | Clone it, run one command, and reach a working editor and API, with no registry account. | **Yes.** It builds from source, and CI boots it from a clean clone. Published images also exist, for amd64 only. |
+| 2 | Editors log in through any standard OpenID Connect provider, with four roles and a single-tenant mode. | **Yes, for two providers.** CI logs in through Dex; ours runs BetterAuth. Others are untested. |
 | 3 | Write in an English editor: rich text, blocks and media, then draft, preview, publish, history, rollback and a bin. | **Partly.** All of it works, but the interface is in Danish, asset and reference fields ask for a raw id, and the rich text editor is an interim one. |
 | 4 | Define your own content types. | **Partly.** YAML, but compiled in, so it takes a rebuild. |
 | 5 | A site or app reads published content over a documented REST API, with locales, ETags and preview. | **Yes, with limits.** Lists stop at 200 documents with no cursor, and nested expansion only works for the `course` type. |
