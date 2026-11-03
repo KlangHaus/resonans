@@ -200,6 +200,9 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          # Both stages that run commands use --platform=$BUILDPLATFORM (see the
+          # Dockerfile), so this cross-builds: no QEMU and no arm64 runner.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -238,7 +241,9 @@ jobs:
       # 2.6.x is the fleet's separate, verifier-before-signer change.
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
       - name: cosign sign
-        run: cosign sign --yes "${{ steps.ref.outputs.image }}"
+        # --recursive signs each platform's manifest as well as the index, so an image
+        # pinned by its platform digest verifies too.
+        run: cosign sign --yes --recursive "${{ steps.ref.outputs.image }}"
 
       # J4 - Syft SBOM of EXACTLY the built digest (local file; cosign attest
       # carries the guarantee -> NO actions:write). The action is pinned to an
@@ -491,6 +496,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: studio
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -529,7 +535,9 @@ jobs:
       # 2.6.x is the fleet's separate, verifier-before-signer change.
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
       - name: cosign sign
-        run: cosign sign --yes "${{ steps.ref.outputs.image }}"
+        # --recursive signs each platform's manifest as well as the index, so an image
+        # pinned by its platform digest verifies too.
+        run: cosign sign --yes --recursive "${{ steps.ref.outputs.image }}"
 
       # J4 - Syft SBOM of EXACTLY the built digest (local file; cosign attest
       # carries the guarantee -> NO actions:write). The action is pinned to an
