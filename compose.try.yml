@@ -1,0 +1,36 @@
+# Try Resonans on your own machine, with no login provider of your own:
+#
+#   docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml up -d --build
+#
+# Then open http://localhost:8080 and press log in. You land as an administrator
+# without a password, because Dex's mock connector approves everyone. The passwords
+# in deploy/try/env are public. That is fine on 127.0.0.1 and nowhere else, so
+# NEVER set BIND_ADDRESS with this file. Remove it all with `... down -v`.
+#
+# Dex is a real, independent OpenID Connect provider, which also makes this the
+# stack that proves the editor's login is not tied to the provider we run ourselves
+# (scripts/quickstart_smoke.sh, run by CI).
+
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.46.1@sha256:65b72ca0f4b0bf6d4ada84ec21da8851782563404ac7b8f926923d27ceced9ab
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/try/dex.yaml:/etc/dex/config.yaml:ro
+    ports:
+      - "127.0.0.1:5556:5556"
+    # One issuer URL has to work from the browser and from the containers. A
+    # browser resolves *.localhost to this machine, where the port above is
+    # published; the containers resolve it through this alias.
+    networks:
+      default:
+        aliases: [dex.localhost]
+
+  api:
+    depends_on:
+      dex: { condition: service_started }
+
+  studio:
+    depends_on:
+      dex: { condition: service_started }
