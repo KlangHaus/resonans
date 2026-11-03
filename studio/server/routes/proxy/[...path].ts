@@ -30,6 +30,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const target = new URL(`${s.apiUrl}/${path}`)
+  // URL parsing resolves `%2e%2e` as `..`, which the check on the raw path above
+  // cannot see. The server normalises a request's path before routing today, but
+  // this guard should not rest on that, so it checks where the request would go.
+  if (!target.pathname.startsWith('/api/v1/')) throw createError({ statusCode: 404 })
   target.search = new URL(getRequestURL(event)).search
   const raw = event.method === 'GET' || event.method === 'HEAD' ? undefined : await readRawBody(event, false)
   const body = raw ? new Uint8Array(raw) : undefined

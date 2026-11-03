@@ -1,0 +1,18 @@
+# Dex for compose.try.yml. Local trial only: the mock connector logs anyone in.
+issuer: http://dex.localhost:5556/dex
+storage:
+  type: memory
+web:
+  http: 0.0.0.0:5556
+oauth2:
+  skipApprovalScreen: true
+connectors:
+  - type: mockCallback
+    id: mock
+    name: Try it (no password)
+staticClients:
+  - id: resonans-editor
+    name: Resonans editor
+    secret: try-local-only-client-secret
+    redirectURIs:
+      - http://localhost:8080/auth/callback
