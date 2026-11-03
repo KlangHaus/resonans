@@ -16,7 +16,7 @@
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@grundtone/design-system": "^2.23.0",
     "@grundtone/vue": "^2.23.3",
-    "nuxt": "^4.5.1",
+    "nuxt": "^4.6.3",
     "vue": "^3.5.13"
   },
   "devDependencies": {
@@ -24,5 +24,11 @@
     "sass": "^1.97.3",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.3.9"
+  },
+  "pnpm": {
+    "overrides": {
+      "node-forge": "^1.4.2",
+      "serialize-javascript": "^7.1.4"
+    }
   }
 }
