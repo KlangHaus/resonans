@@ -2,20 +2,36 @@
 
 A self-hosted, multi-tenant **headless CMS** written in Go. One content engine behind
 many surfaces: a learning platform, a blog, marketing pages, a knowledge base. Content
-types are declared in YAML rather than compiled in, so adding a type is an edit, not a
-release.
+types are declared in YAML, so adding one takes no Go code. The YAML is embedded in the
+binary, so today adding one means rebuilding your image.
 
 Built by [KlangHaus](https://klanghaus.dk) to replace hosted CMS-as-a-service for our own
 sites, and released so you can run the same thing yourself. It is the CMS behind our
-production content — the bugs get found by us first.
+production content, currently on an older 1.x release: the OpenID Connect editor login from
+2.0 onward has not run in our production yet.
 
-**Status: beta.** Resonans runs its authors' production content, but it is not stable yet:
-the API (`/api/v1`), the configuration and the content model can still change in ways
-that need you to act. The 1.x version number does not mean a stable API — it comes from
-the release tooling, which counts every published change and bumps the major only for
-changes marked as breaking. Pin an exact version, and read [CHANGELOG.md](CHANGELOG.md)
-for every version you skip; operator steps are listed there under **ACTION REQUIRED**.
-Questions and help: [SUPPORT.md](SUPPORT.md).
+**Status: beta.** It is not stable yet: the API (`/api/v1`), the configuration and the
+content model can still change in ways that need you to act. The major version number does
+not mean a stable API — it comes from the release tooling, which counts every published
+change and bumps the major only for changes marked as breaking. Pin an exact version, and
+read [CHANGELOG.md](CHANGELOG.md) for every version you skip; operator steps are listed
+there under **ACTION REQUIRED**. Questions and help: [SUPPORT.md](SUPPORT.md).
+
+## What "ready" means
+
+The version number cannot say when Resonans is ready to rely on, so this list does. It is
+ready when all eight hold:
+
+| # | Capability | Today |
+| --- | --- | --- |
+| 1 | Clone it, run one command, and reach a working editor and API, with no registry account. | **Yes.** It builds from source, and CI boots it from a clean clone. Published images also exist, for amd64 only. |
+| 2 | Editors log in through any standard OpenID Connect provider, with four roles and a single-tenant mode. | **Yes, for two providers.** CI logs in through Dex; ours runs BetterAuth. Others are untested. |
+| 3 | Write in an English editor: rich text, blocks and media, then draft, preview, publish, history, rollback and a bin. | **Partly.** All of it works, but the interface is in Danish, asset and reference fields ask for a raw id, and the rich text editor is an interim one. |
+| 4 | Define your own content types. | **Partly.** YAML, but compiled in, so it takes a rebuild. |
+| 5 | A site or app reads published content over a documented REST API, with locales, ETags and preview. | **Yes, with limits.** Lists stop at 200 documents with no cursor, and nested expansion only works for the `course` type. |
+| 6 | Tenants are isolated by the database, and CI proves it on every change. | **Yes.** See [Tenant isolation](#tenant-isolation). |
+| 7 | The authors run the same public release that you do. | **Not yet.** Our production is on 1.x. |
+| 8 | The basics for trusting a project: licence, security policy, contributor agreement, signed images with an SBOM, and docs that match the code. | **Mostly.** The contributor agreement is checked but not yet enforced. |
 
 ## Why this and not the others
 

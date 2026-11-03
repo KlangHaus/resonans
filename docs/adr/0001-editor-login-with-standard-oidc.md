@@ -1,6 +1,7 @@
 # ADR 0001 — The editor logs in with standard OpenID Connect
 
-- **Status:** Proposed — needs acceptance by [infra] (CTO) before implementation
+- **Status:** Implemented in v2.0.0. Not yet proven against a provider other than BetterAuth,
+  and not yet running in the authors' production.
 - **Date:** 2026-10-22
 - **Decided by:** Allan (direction, 2026-10-22); this record written by [resonans]
 - **Scope:** Resonans' editor UI (the code in `studio/`) and the editor API (`/api/v1`).
