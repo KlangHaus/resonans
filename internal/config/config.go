@@ -221,29 +221,8 @@ func Load() (*Config, error) {
 		OTelEnabled:          getbool("OTEL_ENABLED", false),
 	}
 
-	switch cfg.NodeEnv {
-	case "development", "test", "production":
-	default:
-		return nil, fmt.Errorf("NODE_ENV: must be one of development|test|production, got %q", cfg.NodeEnv)
-	}
-
-	if cfg.Port <= 0 {
-		return nil, fmt.Errorf("PORT: must be a positive integer, got %d", cfg.Port)
-	}
-
-	if _, err := url.ParseRequestURI(cfg.PublicURL); err != nil {
-		return nil, fmt.Errorf("PUBLIC_URL: must be a valid URL: %w", err)
-	}
-
-	if cfg.JWTIssuer != "" {
-		if _, err := url.ParseRequestURI(cfg.JWTIssuer); err != nil {
-			return nil, fmt.Errorf("RESONANS_JWT_ISSUER: must be a valid URL: %w", err)
-		}
-	}
-	if cfg.JWKSURL != "" {
-		if _, err := url.ParseRequestURI(cfg.JWKSURL); err != nil {
-			return nil, fmt.Errorf("RESONANS_JWKS_URL: must be a valid URL: %w", err)
-		}
+	if err := cfg.validateBasics(); err != nil {
+		return nil, err
 	}
 
 	roleMap, err := auth.ParseRoleMap(getenvOptional("RESONANS_ROLE_MAP"))
@@ -260,37 +239,8 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// The JWKS is the TRUST ANCHOR for every editor request. Fetched over plain
-	// http, anyone on the path can substitute the signing keys and mint tokens
-	// this server would accept — which is an authentication bypass, not a hygiene
-	// warning. The issuer is checked with it because a token is only as trustworthy
-	// as the pair.
-	//
-	// Production must therefore be https, or say out loud that it is not. Staging
-	// runs NODE_ENV=development and keeps its named http accept untouched; this
-	// only ever fires for production.
-	if cfg.IsProduction() && !cfg.AllowInsecureJWKS {
-		for _, f := range []struct{ name, raw string }{
-			{"RESONANS_JWKS_URL", cfg.JWKSURL},
-			{"RESONANS_JWT_ISSUER", cfg.JWTIssuer},
-		} {
-			if f.raw == "" {
-				continue
-			}
-			u, err := url.Parse(f.raw)
-			if err != nil || u.Scheme != "https" {
-				return nil, fmt.Errorf(
-					"%s: must be https in production, got %q — the JWKS is the trust anchor, so plain http lets anyone on the path substitute the signing keys. Set RESONANS_ALLOW_INSECURE_JWKS=1 to waive this deliberately",
-					f.name, f.raw)
-			}
-		}
-	}
-
-	// Without an audience, any valid token from the issuer is accepted —
-	// including one the provider minted for a different service. Measured on
-	// f2114a9: Audience existed in the verifier and nothing ever set it.
-	if cfg.AuthEnabled() && cfg.JWTAudience == "" {
-		return nil, ErrNoAudience
+	if err := cfg.validateLoginTrust(); err != nil {
+		return nil, err
 	}
 
 	// The source offer is published on /healthz. Today it is a JSON string read
@@ -312,6 +262,75 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validateBasics checks the settings every deployment has, in the order Load
+// reports them.
+func (c *Config) validateBasics() error {
+	switch c.NodeEnv {
+	case "development", "test", "production":
+	default:
+		return fmt.Errorf("NODE_ENV: must be one of development|test|production, got %q", c.NodeEnv)
+	}
+
+	if c.Port <= 0 {
+		return fmt.Errorf("PORT: must be a positive integer, got %d", c.Port)
+	}
+
+	if _, err := url.ParseRequestURI(c.PublicURL); err != nil {
+		return fmt.Errorf("PUBLIC_URL: must be a valid URL: %w", err)
+	}
+
+	if c.JWTIssuer != "" {
+		if _, err := url.ParseRequestURI(c.JWTIssuer); err != nil {
+			return fmt.Errorf("RESONANS_JWT_ISSUER: must be a valid URL: %w", err)
+		}
+	}
+	if c.JWKSURL != "" {
+		if _, err := url.ParseRequestURI(c.JWKSURL); err != nil {
+			return fmt.Errorf("RESONANS_JWKS_URL: must be a valid URL: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// validateLoginTrust checks what makes a token trustworthy.
+func (c *Config) validateLoginTrust() error {
+	// The JWKS is the TRUST ANCHOR for every editor request. Fetched over plain
+	// http, anyone on the path can substitute the signing keys and mint tokens
+	// this server would accept — which is an authentication bypass, not a hygiene
+	// warning. The issuer is checked with it because a token is only as trustworthy
+	// as the pair.
+	//
+	// Production must therefore be https, or say out loud that it is not. Staging
+	// runs NODE_ENV=development and keeps its named http accept untouched; this
+	// only ever fires for production.
+	if c.IsProduction() && !c.AllowInsecureJWKS {
+		for _, f := range []struct{ name, raw string }{
+			{"RESONANS_JWKS_URL", c.JWKSURL},
+			{"RESONANS_JWT_ISSUER", c.JWTIssuer},
+		} {
+			if f.raw == "" {
+				continue
+			}
+			u, err := url.Parse(f.raw)
+			if err != nil || u.Scheme != "https" {
+				return fmt.Errorf(
+					"%s: must be https in production, got %q — the JWKS is the trust anchor, so plain http lets anyone on the path substitute the signing keys. Set RESONANS_ALLOW_INSECURE_JWKS=1 to waive this deliberately",
+					f.name, f.raw)
+			}
+		}
+	}
+
+	// Without an audience, any valid token from the issuer is accepted —
+	// including one the provider minted for a different service. Measured on
+	// f2114a9: Audience existed in the verifier and nothing ever set it.
+	if c.AuthEnabled() && c.JWTAudience == "" {
+		return ErrNoAudience
+	}
+
+	return nil
 }
 
 // loadTenantMode reads RESONANS_TENANT_MODE and RESONANS_TENANT_ID. The two
