@@ -4,7 +4,8 @@
 # pull request, where a broken release would turn every unrelated change red.
 #
 # Nothing requires this job and no one is paged: a red run is seen in the Actions
-# tab and in GitHub's mail to whoever last edited this file.
+# tab and in GitHub's mail to whoever last edited this file. It runs on an amd64
+# runner, so it says nothing about the arm64 images.
 
 name: Quickstart (published images)
 
@@ -37,7 +38,10 @@ jobs:
 
       # The opposite of the check in quickstart.yml: a local build would have no
       # repo digest, and this job would be testing the wrong thing.
-      - name: Confirm the images came from the registry
+      #
+      # `latest` moves, so the log names the digests: a green run then says which
+      # images it measured, and a red one which images to look at.
+      - name: Confirm the images came from the registry, and name them
         run: |
           set -euo pipefail
           for image in ghcr.io/klanghaus/resonans:latest ghcr.io/klanghaus/resonans-studio:latest; do
@@ -46,6 +50,7 @@ jobs:
               echo "::error::$image was not pulled from the registry"
               exit 1
             fi
+            echo "$image -> $(docker image inspect --format '{{index .RepoDigests 0}} ({{.Architecture}})' "$image")"
           done
 
       - name: Log in, write, publish, read back
