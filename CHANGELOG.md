@@ -1,3 +1,25 @@
+# [3.2.0](https://github.com/KlangHaus/resonans/compare/v3.1.0...v3.2.0) (2026-11-03)
+
+
+### Bug Fixes
+
+* **compose:** wait for Postgres over TCP, and test the published images ([5a52e21](https://github.com/KlangHaus/resonans/commit/5a52e2120d8497fa489226e17a83386751902e9e))
+* **deps:** nuxt 4.6.4 and node-forge 1.4.2 close 32 of 42 Dependabot alerts ([024ea81](https://github.com/KlangHaus/resonans/commit/024ea812dce8ad5856742e465344c3dba2a3ffae))
+
+
+### Features
+
+* **delivery:** make the default locale configurable ([307b556](https://github.com/KlangHaus/resonans/commit/307b55611c18ba66b9f89558efd370d314c64de1))
+* **studio:** default the editor to English and drop KlangHaus' defaults ([9684669](https://github.com/KlangHaus/resonans/commit/968466914b77dec5dff23039a858a578afeef6fc))
+
+
+### ACTION REQUIRED
+
+* **studio:** the editor's interface is now English. To keep Danish, set
+EDITOR_LOCALE=da, or NUXT_PUBLIC_EDITOR_LOCALE=da outside compose.yml.
+* **delivery:** to keep existing dashboards and alerts on the old telemetry
+names, set OTEL_SERVICE_NAME=klanghaus-resonans and OTEL_SERVICE_NAMESPACE=klanghaus.
+
 # [3.1.0](https://github.com/KlangHaus/resonans/compare/v3.0.2...v3.1.0) (2026-11-03)
 
 
