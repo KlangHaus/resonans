@@ -38,8 +38,9 @@ Produkt-brief:
   notes generator drops bodies, so a body reaches 0 published surfaces (measured on
   v1.18.3). `scripts/release_notes_guard.mjs` fails the release if that breaks.
   Details: CONTRIBUTING.md.
-- **Merge-gate:** grøn CI + [review]-verdict + Allan merger. **Aldrig
-  `--no-verify` / `--admin`.** Sletter ALDRIG repos.
+- **Merge gate:** green CI, a [sikkerhed] verdict when the file list touches CI
+  configuration or secrets, and Allan merges. **Never `--no-verify` / `--admin`.**
+  Never delete repositories.
 
 ## Hvordan man kører
 
@@ -87,7 +88,6 @@ repository path and no secret store.
 
 ## Coverage-tier (Beslutning L2)
 
-Default = 70% branch (90% på tenant-isolations-kode — sikkerhedskritisk).
-`PostgresStore` + RLS kræver en kørende Postgres → integrations-tests er en
-follow-up (som permissions' `internal/assertions`-job); in-memory-store + config +
-httpapi + auth (JWT/middleware) er unit-dækket.
+Floors are enforced per package: `coverage-floors.json` in `Lint + Test`, and
+`coverage-floors-integration.json` in `Tenant isolation`, which runs the
+`integration`-tagged cells against a real Postgres.
