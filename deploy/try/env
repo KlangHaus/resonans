@@ -1,0 +1,21 @@
+# Throwaway values for compose.try.yml. They are public, and only safe because that
+# stack binds to 127.0.0.1. Do not copy them into a real deployment.
+POSTGRES_PASSWORD=try-local-only-migrator
+RESONANS_APP_PASSWORD=try-local-only-app
+RESONANS_DELIVERY_TOKEN=try-local-only-delivery
+EDITOR_SESSION_SECRET=try-local-only-session-secret-32-characters
+
+RESONANS_JWT_ISSUER=http://dex.localhost:5556/dex
+RESONANS_JWKS_URL=http://dex.localhost:5556/dex/keys
+RESONANS_ALLOW_INSECURE_JWKS=1
+# Dex sets the access token's audience to the client id.
+RESONANS_JWT_AUDIENCE=resonans-editor
+OIDC_CLIENT_ID=resonans-editor
+OIDC_CLIENT_SECRET=try-local-only-client-secret
+OIDC_SCOPES=openid profile email groups offline_access
+
+# The mock connector's one user is in the group `authors`.
+RESONANS_ROLE_CLAIM=groups
+RESONANS_ROLE_MAP=authors=admin
+RESONANS_TENANT_MODE=single
+RESONANS_TENANT_ID=00000000-0000-4000-8000-000000000001

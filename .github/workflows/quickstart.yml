@@ -1,0 +1,50 @@
+# Boots the README's "try it" stack from a clean clone and uses it: images built
+# from this checkout, a login through Dex (an OpenID Connect provider we do not
+# run ourselves), a document written, published and read back.
+#
+# Nothing else tests what a stranger actually does first, and the login's claim to
+# work with any provider rests on this job.
+
+name: Quickstart
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quickstart:
+    name: Quickstart from source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_ARGS: --env-file deploy/try/env -f compose.yml -f compose.try.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build from source and start
+        run: docker compose $COMPOSE_ARGS up -d --build
+
+      # A stack that pulled instead of built would not prove the quickstart, and
+      # would hide a Dockerfile that no longer builds.
+      - name: Confirm the images were built here
+        run: |
+          set -euo pipefail
+          for image in ghcr.io/klanghaus/resonans:latest ghcr.io/klanghaus/resonans-studio:latest; do
+            digests="$(docker image inspect --format '{{len .RepoDigests}}' "$image")"
+            if [ "$digests" != "0" ]; then
+              echo "::error::$image came from a registry ($digests repo digests), not from this checkout"
+              exit 1
+            fi
+          done
+
+      - name: Log in, write, publish, read back
+        run: bash scripts/quickstart_smoke.sh
+
+      - name: Logs on failure
+        if: ${{ failure() }}
+        run: docker compose $COMPOSE_ARGS logs --no-color --tail 80

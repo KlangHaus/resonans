@@ -1,15 +1,18 @@
 # Resonans — self-hosted headless CMS. One file, four services, no accounts.
 #
-#   cp .env.example .env    # then fill in the three passwords/secrets it names
-#   docker compose up -d
+#   cp .env.example .env    # then fill in the passwords and your login provider
+#   docker compose up -d --build
 #
 # Editor at http://localhost:8080, content API at http://localhost:3000.
+# `--build` builds both images from this checkout. No registry account is needed.
+# To try it with no login provider of your own, see compose.try.yml.
 #
 # What this stack does NOT do, on purpose: terminate TLS, and expose anything on
-# a public address. Put your own reverse proxy in front for that — Caddy, nginx,
-# Traefik, whatever you already run. A compose file that quietly published an
-# editor to the internet would be the wrong default for the only person who can
-# judge that: you.
+# a public address. Docker publishes a port on every interface unless told
+# otherwise, so both ports bind to BIND_ADDRESS, by default 127.0.0.1. Put your
+# own reverse proxy in front — Caddy, nginx, Traefik, whatever you already run. A
+# compose file that quietly published an editor to the internet would be the wrong
+# default for the only person who can judge that: you.
 
 name: resonans
 
@@ -40,6 +43,7 @@ services:
   # server connects as a role with no DDL privileges. This runs as the migrator.
   migrate:
     image: ghcr.io/klanghaus/resonans:${RESONANS_VERSION:-latest}
+    build: .
     command: ["migrate"]
     restart: "no"
     environment:
@@ -50,6 +54,7 @@ services:
 
   api:
     image: ghcr.io/klanghaus/resonans:${RESONANS_VERSION:-latest}
+    build: .
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -72,6 +77,8 @@ services:
       RESONANS_JWT_ISSUER: ${RESONANS_JWT_ISSUER:?set RESONANS_JWT_ISSUER in .env}
       RESONANS_JWKS_URL: ${RESONANS_JWKS_URL:?set RESONANS_JWKS_URL in .env}
       RESONANS_JWT_AUDIENCE: ${RESONANS_JWT_AUDIENCE:?set RESONANS_JWT_AUDIENCE in .env}
+      # Exactly 1 waives the https requirement above. See .env.example.
+      RESONANS_ALLOW_INSECURE_JWKS: ${RESONANS_ALLOW_INSECURE_JWKS:-}
       RESONANS_ROLE_CLAIM: ${RESONANS_ROLE_CLAIM:-resonans_role}
       RESONANS_ROLE_MAP: ${RESONANS_ROLE_MAP:-}
       RESONANS_TENANT_MODE: ${RESONANS_TENANT_MODE:-multi}
@@ -83,13 +90,14 @@ services:
     volumes:
       - assets_data:/var/lib/resonans/assets
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${API_PORT:-3000}:3000"
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
   studio:
     image: ghcr.io/klanghaus/resonans-studio:${RESONANS_VERSION:-latest}
+    build: ./studio
     restart: unless-stopped
     environment:
       # The editor's server is the OIDC client (ADR 0001): it talks to the
@@ -103,6 +111,10 @@ services:
       NUXT_OIDC_SESSION_SECRET: ${EDITOR_SESSION_SECRET:?set EDITOR_SESSION_SECRET in .env}
       # Only for providers that issue a JWT for a resource-bound grant alone.
       NUXT_OIDC_RESOURCE: ${OIDC_RESOURCE:-}
+      # Add the scope your provider needs for the role claim, e.g. `groups`.
+      NUXT_OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+      # Exactly 1 allows a provider over plain http. Same waiver as the API's.
+      NUXT_OIDC_ALLOW_INSECURE: ${RESONANS_ALLOW_INSECURE_JWKS:-}
       # As the editor's BROWSER reaches it — the redirect URI is built from it.
       NUXT_OIDC_EDITOR_URL: ${EDITOR_URL:-http://localhost:8080}
       # Inside this network: the editor's server calls the API directly.
@@ -110,7 +122,7 @@ services:
       # The interface language: en or da.
       NUXT_PUBLIC_EDITOR_LOCALE: ${EDITOR_LOCALE:-en}
     ports:
-      - "${STUDIO_PORT:-8080}:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${STUDIO_PORT:-8080}:3000"
     depends_on:
       api: { condition: service_started }
 
