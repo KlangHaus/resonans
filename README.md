@@ -38,7 +38,7 @@ already run.
 
 ## Quickstart
 
-You need Docker with Compose. Both commands below build the images from your checkout, so
+You need Docker with Compose 2.24 or newer. Both commands below build the images from your checkout, so
 the first run takes a few minutes and no registry account is needed. On amd64 you can
 [use the published images](#use-the-published-images) instead.
 

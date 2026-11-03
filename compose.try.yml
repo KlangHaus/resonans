@@ -5,7 +5,8 @@
 # Then open http://localhost:8080 and press log in. You land as an administrator
 # without a password, because Dex's mock connector approves everyone. The passwords
 # in deploy/try/env are public. That is fine on 127.0.0.1 and nowhere else, so
-# NEVER set BIND_ADDRESS with this file. Remove it all with `... down -v`.
+# every port below is pinned there, whatever BIND_ADDRESS says. Remove it all with
+# `... down -v`.
 #
 # Dex is a real, independent OpenID Connect provider, which also makes this the
 # stack that proves the editor's login is not tied to the provider we run ourselves
@@ -27,10 +28,15 @@ services:
       default:
         aliases: [dex.localhost]
 
+  # !override replaces the port list in compose.yml instead of adding to it.
   api:
+    ports: !override
+      - "127.0.0.1:${API_PORT:-3000}:3000"
     depends_on:
       dex: { condition: service_started }
 
   studio:
+    ports: !override
+      - "127.0.0.1:${STUDIO_PORT:-8080}:3000"
     depends_on:
       dex: { condition: service_started }
