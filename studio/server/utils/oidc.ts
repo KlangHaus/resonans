@@ -27,6 +27,9 @@ export interface OidcSettings {
   apiUrl: string
   sessionSecret: string
   allowInsecure: boolean
+  /** Logout must end the provider session: without an end_session_endpoint it
+   *  fails instead of ending only the editor's session. */
+  requireProviderLogout: boolean
   /** RFC 8707 resource indicator sent with the authorization request, or ''.
    *  Some providers (BetterAuth's oauthProvider among them) issue a JWT access
    *  token only when the grant is bound to a resource, and an opaque one
@@ -56,6 +59,7 @@ export function oidcSettings(): OidcSettings | null {
     sessionSecret: str('sessionSecret'),
     // Exactly "1", like the server's own waivers: "true" and "" stay closed.
     allowInsecure: str('allowInsecure') === '1',
+    requireProviderLogout: str('requireProviderLogout') === '1',
     resource: str('resource'),
   }
   const missing = (['clientId', 'clientSecret', 'editorUrl', 'apiUrl', 'sessionSecret'] as const).filter((k) => !s[k])

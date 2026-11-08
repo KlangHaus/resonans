@@ -168,7 +168,9 @@ BetterAuth's OIDC provider, which is what we run. The decision and the alternati
 1. Register the editor at your provider as a **confidential** client using the
    authorization code flow with PKCE, redirect URI `<EDITOR_URL>/auth/callback`. If the
    provider offers logout (`end_session_endpoint`), also register the post-logout
-   redirect URI `<EDITOR_URL>/login`.
+   redirect URI `<EDITOR_URL>/login`, and set `OIDC_REQUIRE_PROVIDER_LOGOUT=1` so that
+   logout fails rather than ending only the editor's session if the provider ever
+   stops advertising it.
 2. Make the provider put an audience (`RESONANS_JWT_AUDIENCE`, e.g. `resonans`) and a
    **role** into the access token — and, in multi-tenant mode, the tenant id.
 3. Fill in the login block of [.env.example](.env.example).
