@@ -73,7 +73,11 @@ login form remains in Resonans.
   server calls it with the ID token as `id_token_hint`, and ends the local session only
   when the provider confirms (a redirect to, or JSON naming, the registered
   `<EDITOR_URL>/login`). Otherwise the editor stays logged in and says so. Without an
-  `end_session_endpoint` only the local session ends.
+  `end_session_endpoint` only the local session ends, unless
+  `NUXT_OIDC_REQUIRE_PROVIDER_LOGOUT=1` (`OIDC_REQUIRE_PROVIDER_LOGOUT` in compose): then
+  that is an error too and the editor stays logged in. A deployment whose provider offers
+  logout sets it, so a discovery document that loses the endpoint cannot turn logout into
+  a local one unnoticed.
 
 ### 2. The API checks audience, and tenant and role come from configurable claims
 
