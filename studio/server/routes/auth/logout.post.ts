@@ -1,21 +1,69 @@
-import * as client from 'openid-client'
-
-// Ends the editor session, and tells the browser where to end the provider's
-// session too when the provider advertises an end_session_endpoint
-// (RP-initiated logout). client_id identifies us there; no ID token is kept
-// in the session, so none is sent as a hint.
+// Ends the session at the provider and then here (OIDC RP-Initiated Logout). A
+// POST with the same-origin check, so a foreign page cannot log someone out.
+//
+// This server makes the call to the provider's end_session_endpoint, with the ID
+// token as id_token_hint, so the answer can be read. Two answers count as
+// success, and both must name exactly the registered post-logout URI:
+//   - a 302 with that Location;
+//   - a 200 with {"redirect": true, "url": <that URI>}, which some providers
+//     (KlangHaus auth among them) send to a request they read as a fetch.
+//
+// 🔴 ANYTHING ELSE IS AN ERROR, AND THE LOCAL SESSION STAYS. A provider that did
+// not end its session would sign the editor straight back in on the next login,
+// so clearing ours anyway would show "logged out" when it is not true.
+//
+// A provider that advertises no end_session_endpoint offers no logout to call:
+// then only the editor session ends, as before.
+// Ported from KlangHaus/backstage web/server/routes/auth/logout.post.ts.
 export default defineEventHandler(async (event) => {
   const s = oidcSettings()
   if (!s) throw createError({ statusCode: 404 })
   assertSameOrigin(event, s)
 
-  await (await editorSession(event, s)).clear()
+  const session = await editorSession(event, s)
+  const endpoint = (await oidcConfig(s)).serverMetadata().end_session_endpoint
+  if (!endpoint || !session.data.accessToken) {
+    await session.clear()
+    return { redirect: '/login' }
+  }
 
-  const config = await oidcConfig(s)
-  if (!config.serverMetadata().end_session_endpoint) return { redirect: '/login' }
-  const url = client.buildEndSessionUrl(config, {
-    client_id: s.clientId,
-    post_logout_redirect_uri: `${s.editorUrl}/login`,
-  })
-  return { redirect: url.href }
+  const idToken = session.data.idToken
+  if (!idToken) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'this session has no ID token, so the provider cannot be asked to end it; you are still logged in',
+    })
+  }
+
+  const after = postLogoutRedirectUri(s)
+  let res: Response
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: '*/*' },
+      body: new URLSearchParams({ id_token_hint: idToken, client_id: s.clientId, post_logout_redirect_uri: after }),
+      redirect: 'manual',
+    })
+  } catch {
+    throw createError({ statusCode: 502, statusMessage: 'the provider could not be reached; you are still logged in' })
+  }
+
+  if (!(await endedAt(res, after))) {
+    const detail = await res.text().then((t) => t.slice(0, 200)).catch(() => '')
+    throw createError({
+      statusCode: 502,
+      statusMessage: `the provider did not end the session (${res.status}${detail ? `: ${detail}` : ''}); you are still logged in`,
+    })
+  }
+
+  await session.clear()
+  return { redirect: '/login' }
 })
+
+/** Whether the provider's answer says it ended the session and sends the editor to `after`. */
+async function endedAt(res: Response, after: string): Promise<boolean> {
+  if (res.status === 302) return res.headers.get('location') === after
+  if (res.status !== 200 || !res.headers.get('content-type')?.includes('application/json')) return false
+  const body = (await res.clone().json().catch(() => null)) as { redirect?: unknown; url?: unknown } | null
+  return body?.redirect === true && body.url === after
+}

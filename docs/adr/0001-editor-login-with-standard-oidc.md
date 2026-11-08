@@ -69,8 +69,11 @@ login form remains in Resonans.
     tokens and a small user object, never the ID token. Its sealed size is measured on every
     write and refused above 3 800 bytes with a message naming the cause, instead of the
     browser silently dropping a cookie over its ~4 kB limit.
-- **Logout:** local session ends; RP-initiated logout (`end_session_endpoint`) is called
-  when the provider advertises it.
+- **Logout:** when the provider advertises an `end_session_endpoint`, the editor's
+  server calls it with the ID token as `id_token_hint`, and ends the local session only
+  when the provider confirms (a redirect to, or JSON naming, the registered
+  `<EDITOR_URL>/login`). Otherwise the editor stays logged in and says so. Without an
+  `end_session_endpoint` only the local session ends.
 
 ### 2. The API checks audience, and tenant and role come from configurable claims
 

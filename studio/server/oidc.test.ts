@@ -5,7 +5,7 @@
 //
 // Nitro's auto-imports do not exist under vitest, so each one is a global here,
 // backed by a small fake event. The modules under test are the real ones.
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const client = vi.hoisted(() => ({
   discovery: vi.fn(),
@@ -15,7 +15,6 @@ const client = vi.hoisted(() => ({
   randomNonce: vi.fn(() => 'the-nonce'),
   calculatePKCECodeChallenge: vi.fn(async () => 'the-challenge'),
   buildAuthorizationUrl: vi.fn(() => new URL('https://idp.example/authorize')),
-  buildEndSessionUrl: vi.fn(() => new URL('https://idp.example/logout')),
   authorizationCodeGrant: vi.fn(),
   refreshTokenGrant: vi.fn(),
 }))
@@ -104,6 +103,7 @@ function tokens(over: Record<string, unknown> = {}) {
   return {
     access_token: 'the-access-token',
     refresh_token: 'the-refresh-token',
+    id_token: 'the-id-token',
     expiresIn: () => 3600,
     claims: () => ({ sub: 'user-1', email: 'a@example.org', name: 'A' }),
     ...over,
@@ -248,6 +248,14 @@ describe('saveTokens', () => {
     await oidc.saveTokens(event as never, s(), tokens({ refresh_token: undefined }) as never)
     expect(event.sessions.resonans_session.refreshToken).toBe('old')
   })
+
+  // The ID token is the hint for logout. A refresh response may carry none, and
+  // logout after the first refresh must still work.
+  it('keeps the ID token when a refresh response omits it', async () => {
+    const event = fakeEvent({ sessions: { resonans_session: { idToken: 'from-login' } } })
+    await oidc.saveTokens(event as never, s(), tokens({ id_token: undefined }) as never)
+    expect(event.sessions.resonans_session.idToken).toBe('from-login')
+  })
 })
 
 describe('accessToken', () => {
@@ -346,6 +354,7 @@ describe('GET /auth/callback', () => {
     expect(redirects(await callback(event))).toBe('/content')
     expect(event.sessions.resonans_session).toMatchObject({
       accessToken: 'the-access-token',
+      idToken: 'the-id-token',
       user: { sub: 'user-1', email: 'a@example.org', name: 'A' },
     })
   })
@@ -419,29 +428,90 @@ describe('GET /auth/me', () => {
 })
 
 describe('POST /auth/logout', () => {
+  const after = 'https://cms.example/login'
+  const loggedIn = { accessToken: 'at', idToken: 'the-id-token' }
   const post = (sessions = {}) =>
     fakeEvent({ method: 'POST', headers: { origin: 'https://cms.example' }, sessions })
 
+  // The provider's end_session_endpoint, answered per test. The proxy's tests
+  // below stub fetch as well, so the stub is put back after each one.
+  const endSession = vi.fn()
+  let fetchBefore: typeof fetch
+  beforeEach(() => {
+    fetchBefore = globalThis.fetch
+    vi.stubGlobal('fetch', endSession)
+    client.discovery.mockResolvedValue({ serverMetadata: () => ({ end_session_endpoint: 'https://idp.example/logout' }) })
+  })
+  afterEach(() => {
+    vi.stubGlobal('fetch', fetchBefore)
+  })
+  const sent = () => new URLSearchParams(String(endSession.mock.calls[0][1].body))
+  const answer = (status: number, body = '', headers: Record<string, string> = {}) =>
+    endSession.mockResolvedValue(new Response(body, { status, headers }))
+
   it('refuses a cross-origin logout and keeps the session', async () => {
-    const event = post({ resonans_session: { accessToken: 'at' } })
+    const event = post({ resonans_session: { ...loggedIn } })
     event.headers.origin = 'https://evil.example'
     await expect(logout(event)).rejects.toMatchObject({ statusCode: 403 })
     expect(event.sessions.resonans_session.accessToken).toBe('at')
+    expect(endSession).not.toHaveBeenCalled()
   })
 
   it('clears the session and goes to /login when the provider has no logout', async () => {
-    const event = post({ resonans_session: { accessToken: 'at' } })
+    client.discovery.mockResolvedValue({ serverMetadata: () => ({}) })
+    const event = post({ resonans_session: { ...loggedIn } })
     expect(await logout(event)).toEqual({ redirect: '/login' })
+    expect(event.sessions.resonans_session).toEqual({})
+    expect(endSession).not.toHaveBeenCalled()
+  })
+
+  it('asks the provider nothing when nobody is logged in', async () => {
+    expect(await logout(post())).toEqual({ redirect: '/login' })
+    expect(endSession).not.toHaveBeenCalled()
+  })
+
+  // The success path: the provider ends its session for the hint, and only then
+  // is the local one cleared.
+  it.each([
+    ['a 302 to the registered URI', () => answer(302, '', { location: after })],
+    ['a 200 JSON naming the registered URI', () => answer(200, JSON.stringify({ redirect: true, url: after }), { 'content-type': 'application/json' })],
+  ])('ends the session at the provider with the ID token as hint, then here (%s)', async (_, provider) => {
+    provider()
+    const event = post({ resonans_session: { ...loggedIn } })
+    expect(await logout(event)).toEqual({ redirect: '/login' })
+    expect(String(endSession.mock.calls[0][0])).toBe('https://idp.example/logout')
+    expect(endSession.mock.calls[0][1]).toMatchObject({ method: 'POST', redirect: 'manual' })
+    expect(Object.fromEntries(sent())).toEqual({
+      id_token_hint: 'the-id-token',
+      client_id: 'resonans-editor',
+      post_logout_redirect_uri: after,
+    })
     expect(event.sessions.resonans_session).toEqual({})
   })
 
-  it("goes to the provider's logout when it advertises one", async () => {
-    client.discovery.mockResolvedValue({ serverMetadata: () => ({ end_session_endpoint: 'https://idp.example/logout' }) })
-    expect(await logout(post())).toEqual({ redirect: 'https://idp.example/logout' })
-    expect(client.buildEndSessionUrl.mock.calls[0][1]).toEqual({
-      client_id: 'resonans-editor',
-      post_logout_redirect_uri: 'https://cms.example/login',
-    })
+  // Every other answer is a failure, and then nothing pretends: the provider's
+  // session is alive, so the local one stays and the editor is told.
+  it.each([
+    ['the provider asks for confirmation', () => answer(400, 'User confirmation is required')],
+    ['the provider cannot verify the hint', () => answer(400, '{"error":"invalid_token"}', { 'content-type': 'application/json' })],
+    ['the provider answers with an HTML page', () => answer(200, '<html>Log out?</html>', { 'content-type': 'text/html' })],
+    ['the provider redirects somewhere unregistered', () => answer(302, '', { location: 'https://evil.example/' })],
+    ['the provider answers JSON naming somewhere unregistered', () => answer(200, JSON.stringify({ redirect: true, url: 'https://evil.example/' }), { 'content-type': 'application/json' })],
+    ['the provider answers JSON without redirect: true', () => answer(200, JSON.stringify({ url: after }), { 'content-type': 'application/json' })],
+    ['the connection drops', () => endSession.mockRejectedValue(new TypeError('fetch failed'))],
+  ])('%s: error, and still logged in', async (_, provider) => {
+    provider()
+    const event = post({ resonans_session: { ...loggedIn } })
+    await expect(logout(event)).rejects.toMatchObject({ statusCode: 502, message: expect.stringContaining('still logged in') })
+    expect(event.sessions.resonans_session).toEqual(loggedIn)
+  })
+
+  it('refuses when the session holds no ID token, and keeps it', async () => {
+    // A session from before the ID token was kept.
+    const event = post({ resonans_session: { accessToken: 'at' } })
+    await expect(logout(event)).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('still logged in') })
+    expect(endSession).not.toHaveBeenCalled()
+    expect(event.sessions.resonans_session).toEqual({ accessToken: 'at' })
   })
 })
 

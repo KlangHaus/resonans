@@ -90,6 +90,12 @@ export function redirectUri(s: OidcSettings): string {
   return `${s.editorUrl}/auth/callback`
 }
 
+/** Where the provider is told to send the editor after logout. It must be
+ *  registered at the provider for this client exactly as written. */
+export function postLogoutRedirectUri(s: OidcSettings): string {
+  return `${s.editorUrl}/login`
+}
+
 // --- Sessions --------------------------------------------------------------
 
 export interface EditorUser {
@@ -104,6 +110,8 @@ export interface EditorSession {
   refreshToken?: string
   /** Epoch seconds. */
   expiresAt?: number
+  /** Kept only to end the session at the provider: the id_token_hint on logout. */
+  idToken?: string
 }
 
 interface LoginTransaction {
@@ -161,6 +169,8 @@ export async function saveTokens(event: H3Event, s: OidcSettings, tokens: client
     accessToken: tokens.access_token,
     // A refresh response may omit the refresh token, meaning "keep the old one".
     refreshToken: tokens.refresh_token ?? session.data.refreshToken,
+    // A refresh response may carry no ID token; the hint from login stays usable.
+    idToken: tokens.id_token ?? session.data.idToken,
     expiresAt: expiresIn ? Math.floor(Date.now() / 1000) + expiresIn : undefined,
   })
   const sealed = await sealSession(event, sessionConfig(s))
