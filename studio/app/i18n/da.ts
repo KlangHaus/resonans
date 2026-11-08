@@ -17,6 +17,7 @@ export const da: Record<string, string> = {
   'Not logged in': 'Ikke logget ind',
   'Log in': 'Log ind',
   'Log out': 'Log ud',
+  'Logout failed. You are still logged in.': 'Log ud mislykkedes. Du er stadig logget ind.',
   'My account (development mode, no login)': 'Min konto (udviklingstilstand — intet login)',
   'My account': 'Min konto',
   Spaces: 'Spaces',

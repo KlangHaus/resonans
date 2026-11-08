@@ -50,12 +50,17 @@ export function useAuth() {
     window.location.assign(`/auth/login?next=${encodeURIComponent(next)}`)
   }
 
-  /** Ends the session. Resolves to true when the browser is being sent away
-   *  (to the provider's logout), so the caller should not navigate itself. */
+  /** Ends the session, at the provider too. Resolves to true when the browser
+   *  is being sent away, so the caller should not navigate itself. Throws when
+   *  the server could not end it: then the editor is still logged in, and the
+   *  user stays shown as such. */
   async function signOut(): Promise<boolean> {
-    user.value = null
-    if (mode.value !== 'oidc') return false
+    if (mode.value !== 'oidc') {
+      user.value = null
+      return false
+    }
     const r = await $fetch<{ redirect: string }>('/auth/logout', { method: 'POST' })
+    user.value = null
     window.location.assign(r.redirect)
     return true
   }
