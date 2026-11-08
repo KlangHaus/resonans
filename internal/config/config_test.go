@@ -89,6 +89,7 @@ func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
 		name                     string
 		nodeEnv, devAuth         string
 		jwt, deliveryToken       bool
+		rawDeliveryToken         string // set as is, when not ""
 		wantEditor, wantDelivery bool
 		wantErr                  error
 	}{
@@ -103,6 +104,10 @@ func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
 		{name: "opt-in in production", nodeEnv: "production", devAuth: "1", jwt: true, deliveryToken: true, wantErr: ErrDevAuthInProd},
 		{name: "production, no JWT", nodeEnv: "production", wantErr: ErrNoEditorAuth},
 		{name: "production, fully configured", nodeEnv: "production", jwt: true, deliveryToken: true},
+		{name: "production, JWT set, no delivery token", nodeEnv: "production", jwt: true, wantErr: ErrNoDeliveryAuth},
+		// A blank value is not a token: it is read as unset, so it refuses.
+		{name: "delivery token of spaces is no token", nodeEnv: "production", jwt: true, rawDeliveryToken: "   ", wantErr: ErrNoDeliveryAuth},
+		{name: "delivery token of a tab is no token", nodeEnv: "development", jwt: true, rawDeliveryToken: "\t", wantErr: ErrNoDeliveryAuth},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -119,6 +124,9 @@ func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
 			}
 			if c.deliveryToken {
 				t.Setenv("RESONANS_DELIVERY_TOKEN", "svc")
+			}
+			if c.rawDeliveryToken != "" {
+				t.Setenv("RESONANS_DELIVERY_TOKEN", c.rawDeliveryToken)
 			}
 			cfg, err := Load()
 			if err != nil {

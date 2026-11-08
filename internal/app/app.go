@@ -248,13 +248,15 @@ func Run(ctx context.Context) error {
 
 	// --- Delivery read router (published-only, service-auth'd) ---
 	deliveryRouter := delivery.NewRouter(delivery.Deps{
-		Store:         store,
-		Registry:      registry,
-		Assets:        &mediaAssetResolver{media: mediaSvc},
-		ServiceToken:  cfg.DeliveryToken,
-		PreviewSecret: cfg.PreviewSecret,
-		DefaultLocale: cfg.DefaultLocale,
-		Logger:        logger,
+		Store:        store,
+		Registry:     registry,
+		Assets:       &mediaAssetResolver{media: mediaSvc},
+		ServiceToken: cfg.DeliveryToken,
+		// Only the dev opt-in, decided before any I/O above, opens the header.
+		TrustHeaderWithoutToken: deliveryDevAuth,
+		PreviewSecret:           cfg.PreviewSecret,
+		DefaultLocale:           cfg.DefaultLocale,
+		Logger:                  logger,
 	})
 
 	mux := http.NewServeMux()

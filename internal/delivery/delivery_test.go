@@ -53,7 +53,7 @@ func seeded(t *testing.T, serviceToken string) http.Handler {
 	}
 	pub(tenantB, "course", "intro")
 
-	return NewRouter(Deps{Store: s, Registry: reg(t), ServiceToken: serviceToken})
+	return NewRouter(Deps{Store: s, Registry: reg(t), ServiceToken: serviceToken, TrustHeaderWithoutToken: serviceToken == ""})
 }
 
 func get(h http.Handler, path, token, scope string) *httptest.ResponseRecorder {
@@ -142,7 +142,7 @@ func TestDeliveryCatalogPublishedAtDesc(t *testing.T) {
 		t.Fatalf("publish early: %v", err)
 	}
 
-	h := NewRouter(Deps{Store: s, Registry: reg(t), ServiceToken: ""})
+	h := NewRouter(Deps{Store: s, Registry: reg(t), TrustHeaderWithoutToken: true})
 	rec := get(h, "/delivery/v1/post", "", tenantA.String())
 	if rec.Code != http.StatusOK {
 		t.Fatalf("catalog = %d", rec.Code)
@@ -179,7 +179,7 @@ func TestDeliveryExpandCourseTree(t *testing.T) {
 	module := mk("module", "m1", "Modul 1", `{"lessons":[{"lesson":"`+lesson.ID.String()+`"}]}`)
 	mk("course", "c1", "Kursus 1", `{"modules":[{"module":"`+module.ID.String()+`"}]}`)
 
-	h := NewRouter(Deps{Store: s, Registry: reg(t)})
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: s, Registry: reg(t)})
 	rec := get(h, "/delivery/v1/course/c1?expand=modules.lessons", "", tenantA.String())
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expand = %d", rec.Code)
@@ -211,7 +211,7 @@ func TestDeliveryPreviewDraft(t *testing.T) {
 		t.Fatalf("create draft: %v", err)
 	}
 	secret := "preview-secret"
-	h := NewRouter(Deps{Store: s, Registry: reg(t), PreviewSecret: secret})
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: s, Registry: reg(t), PreviewSecret: secret})
 
 	// Draft is NOT on the published path.
 	if rec := get(h, "/delivery/v1/page/draft-page", "", tenantA.String()); rec.Code != http.StatusNotFound {
@@ -296,7 +296,7 @@ func TestDefaultLocaleIsConfigurable(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			h := NewRouter(Deps{Store: s, Registry: reg(t), DefaultLocale: c.configured})
+			h := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: s, Registry: reg(t), DefaultLocale: c.configured})
 			rec := get(h, "/delivery/v1/post/p1"+c.query, "", tenantA.String())
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d: %s", rec.Code, rec.Body)
@@ -327,7 +327,7 @@ func TestDefaultLocaleReachesListAndPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	const secret = "preview-secret"
-	h := NewRouter(Deps{Store: s, Registry: reg(t), DefaultLocale: "en", PreviewSecret: secret})
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: s, Registry: reg(t), DefaultLocale: "en", PreviewSecret: secret})
 
 	t.Run("list", func(t *testing.T) {
 		rec := get(h, "/delivery/v1/post?locale=de", "", tenantA.String())

@@ -25,23 +25,32 @@ func TestServiceMiddleware(t *testing.T) {
 	const org = "11111111-1111-1111-1111-111111111111"
 	for _, c := range []struct {
 		name       string
-		token      string // "" = dev mode
+		token      string
+		trust      bool // trustHeaderWithoutToken
 		authz      string
 		scope      string
 		wantStatus int
 		wantActor  *Actor
 	}{
-		{"no credential", token, "", org, http.StatusUnauthorized, nil},
-		{"wrong token", token, "Bearer nope", org, http.StatusUnauthorized, nil},
-		{"a prefix of the token", token, "Bearer s3cret", org, http.StatusUnauthorized, nil},
-		{"the token plus a suffix", token, "Bearer " + token + "x", org, http.StatusUnauthorized, nil},
-		{"not a bearer", token, "Basic " + token, org, http.StatusUnauthorized, nil},
-		{"valid", token, "Bearer " + token, org, http.StatusOK, &Actor{Sub: "service", Tenant: org}},
+		{"no credential", token, false, "", org, http.StatusUnauthorized, nil},
+		{"wrong token", token, false, "Bearer nope", org, http.StatusUnauthorized, nil},
+		{"a prefix of the token", token, false, "Bearer s3cret", org, http.StatusUnauthorized, nil},
+		{"the token plus a suffix", token, false, "Bearer " + token + "x", org, http.StatusUnauthorized, nil},
+		{"not a bearer", token, false, "Basic " + token, org, http.StatusUnauthorized, nil},
+		{"valid", token, false, "Bearer " + token, org, http.StatusOK, &Actor{Sub: "service", Tenant: org}},
 		// A valid service with no scope header is let through WITHOUT a tenant;
 		// the delivery handlers refuse a tenantless actor themselves (403).
-		{"valid, no scope", token, "Bearer " + token, "", http.StatusOK, &Actor{Sub: "service"}},
-		{"dev, scope", "", "", org, http.StatusOK, &Actor{Sub: "service-dev", Tenant: org}},
-		{"dev, no scope", "", "", "", http.StatusOK, nil},
+		{"valid, no scope", token, false, "Bearer " + token, "", http.StatusOK, &Actor{Sub: "service"}},
+		{"dev, scope", "", true, "", org, http.StatusOK, &Actor{Sub: "service-dev", Tenant: org}},
+		{"dev, no scope", "", true, "", "", http.StatusOK, nil},
+		// No token and no dev opt-in: closed, whatever the request carries. The
+		// middleware does not depend on the boot gate to refuse.
+		{"no token, no opt-in, scope", "", false, "", org, http.StatusUnauthorized, nil},
+		{"no token, no opt-in, no scope", "", false, "", "", http.StatusUnauthorized, nil},
+		{"no token, no opt-in, an empty bearer", "", false, "Bearer ", org, http.StatusUnauthorized, nil},
+		// With a token the flag changes nothing: it cannot stand in for the token.
+		{"token and opt-in, no credential", token, true, "", org, http.StatusUnauthorized, nil},
+		{"token and opt-in, valid", token, true, "Bearer " + token, org, http.StatusOK, &Actor{Sub: "service", Tenant: org}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var logBuf bytes.Buffer
@@ -52,7 +61,7 @@ func TestServiceMiddleware(t *testing.T) {
 				seen, hasActor = ActorFromContext(r.Context())
 				w.WriteHeader(http.StatusOK)
 			})
-			h := ServiceMiddleware(c.token, slog.New(slog.NewTextHandler(&logBuf, nil)))(next)
+			h := ServiceMiddleware(c.token, c.trust, slog.New(slog.NewTextHandler(&logBuf, nil)))(next)
 			r := httptest.NewRequest(http.MethodGet, "/delivery/v1/page", nil)
 			if c.authz != "" {
 				r.Header.Set("Authorization", c.authz)
