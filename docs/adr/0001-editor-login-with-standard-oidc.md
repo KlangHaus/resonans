@@ -134,6 +134,12 @@ and a role to the tokens it issues for that client. The role can come from the e
 BetterAuth organization membership (`owner`, `admin`, `member`) through
 `RESONANS_ROLE_MAP`, so no new role store is needed.
 
+The post-logout redirect URI is registered there through the `auth` service's
+`RESONANS_OIDC_POST_LOGOUT_REDIRECT_URIS`, which for production must be exactly
+`https://cms.klanghaus.dk/login`. The service's development default is
+`http://localhost:3000/`, a different path, so for a local editor that variable has to
+name `<EDITOR_URL>/login` as well.
+
 ## Consequences
 
 **Good**
