@@ -118,12 +118,14 @@ async function reportProblem() {
           <span class="sb-rail__avatar">{{ initials }}</span>
           <span class="sb-rail__label">{{ auth.user.value ? `${auth.user.value.email} · ${t('Log out')}` : t('Log in') }}</span>
         </button>
-        <p v-if="logoutFailed" class="rz-field__hint" role="alert" style="padding: 0 12px">
-          {{ t('Logout failed. You are still logged in.') }}
-        </p>
         <div v-else class="sb-rail__item sb-rail__account" :title="t('My account (development mode, no login)')">
           <span class="sb-rail__avatar">?</span> <span class="sb-rail__label">{{ t('My account') }}</span>
         </div>
+        <!-- After the v-if/v-else pair, never between: a v-else pairs with the
+             nearest v-if before it. -->
+        <p v-if="logoutFailed" class="rz-field__hint" role="alert" style="padding: 0 12px">
+          {{ t('Logout failed. You are still logged in.') }}
+        </p>
       </div>
     </aside>
 
