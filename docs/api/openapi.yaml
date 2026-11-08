@@ -100,6 +100,142 @@ components:
       description: Document version number. Parsed with strconv.Atoi.
       schema:
         type: integer
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    Envelope:
+      description: One document as delivered. `data` holds the document's fields with i18n values
+        resolved to the requested locale and asset ids expanded to URLs; `components` is the doc type's
+        block field. The property list is checked against the server's type by a test.
+      type: object
+      required: [id, type, slug, locale, version, data]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        slug:
+          type: string
+        locale:
+          type: string
+        version:
+          type: integer
+        publishedAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+        components:
+          type: array
+          items:
+            type: object
+        localeFallback:
+          type: boolean
+          description: Present and true when a field fell back to the default locale.
+    CatalogItem:
+      description: A published document in a list. Optional properties appear only when the doc type
+        has the matching field.
+      type: object
+      required: [id, slug, type, title, updatedAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        type:
+          type: string
+        title:
+          description: The document's title, resolved to the requested locale.
+        updatedAt:
+          type: string
+          format: date-time
+        summary:
+          description: From the document's `summary`, `description` or `excerpt` field, in that order.
+        author: {}
+        category: {}
+        thumbnail:
+          type: object
+          required: [url]
+          additionalProperties: false
+          properties:
+            url: {}
+            alt: {}
+        moduleCount:
+          type: integer
+    Catalog:
+      type: object
+      required: [items, truncated]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogItem'
+        truncated:
+          type: boolean
+          description: True when there were more published documents than one response holds (200).
+    DeliverySchema:
+      type: object
+      required: [docTypes, blocks]
+      additionalProperties: false
+      properties:
+        docTypes:
+          type: object
+          additionalProperties:
+            type: object
+            required: [allowedBlocks]
+            additionalProperties: false
+            properties:
+              allowedBlocks:
+                type: [array, 'null']
+                items:
+                  type: string
+              serverSideOnly:
+                type: boolean
+              note:
+                type: string
+        blocks:
+          type: object
+          additionalProperties:
+            type: object
+            required: [fields]
+            additionalProperties: false
+            properties:
+              fields:
+                type: array
+  responses:
+    DeliveryUnauthorized:
+      description: No or invalid service token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DeliveryForbidden:
+      description: The X-Scope-OrgID header is missing or is not a UUID
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DeliveryNotFound:
+      description: Not found for this tenant
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DeliveryServerError:
+      description: The store failed. The cause is logged, not returned.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
 paths:
   /_assets/{key}:
     get:
@@ -474,10 +610,30 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
         '401':
-          description: No or invalid credentials
+          description: No or invalid service token, or an invalid or expired preview token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The preview token is for another document, or names no valid tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
-          description: Not found for this tenant
+          description: Preview is not enabled, or the draft is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/DeliveryServerError'
     parameters:
     - $ref: '#/components/parameters/DocType'
     - $ref: '#/components/parameters/Slug'
@@ -491,10 +647,14 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliverySchema'
         '401':
-          description: No or invalid credentials
+          $ref: '#/components/responses/DeliveryUnauthorized'
         '404':
-          description: Not found for this tenant
+          $ref: '#/components/responses/DeliveryNotFound'
   /delivery/v1/{type}:
     get:
       summary: Published documents of a type
@@ -505,10 +665,18 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
         '401':
-          description: No or invalid credentials
+          $ref: '#/components/responses/DeliveryUnauthorized'
+        '403':
+          $ref: '#/components/responses/DeliveryForbidden'
         '404':
-          description: Not found for this tenant
+          $ref: '#/components/responses/DeliveryNotFound'
+        '500':
+          $ref: '#/components/responses/DeliveryServerError'
     parameters:
     - $ref: '#/components/parameters/DocType'
   /delivery/v1/{type}/{slug}:
@@ -521,10 +689,25 @@ paths:
       responses:
         '200':
           description: OK
+          headers:
+            ETag:
+              description: Changes with the locale, the document's version and its last write.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '304':
+          description: Not modified. The request's If-None-Match equals the current ETag.
         '401':
-          description: No or invalid credentials
+          $ref: '#/components/responses/DeliveryUnauthorized'
+        '403':
+          $ref: '#/components/responses/DeliveryForbidden'
         '404':
-          description: Not found for this tenant
+          $ref: '#/components/responses/DeliveryNotFound'
+        '500':
+          $ref: '#/components/responses/DeliveryServerError'
     parameters:
     - $ref: '#/components/parameters/DocType'
     - $ref: '#/components/parameters/Slug'
