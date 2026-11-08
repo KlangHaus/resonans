@@ -85,14 +85,7 @@ func TestLoadProductionFlag(t *testing.T) {
 // of NODE_ENV=production (riff KH-1012). An empty NODE_ENV loads as
 // "development", which is exactly the deploy mistake this guards against.
 func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
-	cases := []struct {
-		name                     string
-		nodeEnv, devAuth         string
-		jwt, deliveryToken       bool
-		rawDeliveryToken         string // set as is, when not ""
-		wantEditor, wantDelivery bool
-		wantErr                  error
-	}{
+	cases := []devAuthCase{
 		{name: "(a) empty NODE_ENV, no JWT, no opt-in", nodeEnv: "", wantErr: ErrNoEditorAuth},
 		{name: "(a) development, no JWT, no opt-in", nodeEnv: "development", wantErr: ErrNoEditorAuth},
 		{name: "(a) opt-in 'yes' is not an opt-in", nodeEnv: "", devAuth: "yes", wantErr: ErrNoEditorAuth},
@@ -111,40 +104,59 @@ func TestDevAuthRequiresPositiveOptIn(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			t.Setenv("NODE_ENV", c.nodeEnv)
-			t.Setenv("RESONANS_DEV_AUTH", c.devAuth)
-			t.Setenv("PUBLIC_URL", "")
-			t.Setenv("RESONANS_JWT_ISSUER", "")
-			t.Setenv("RESONANS_JWKS_URL", "")
-			t.Setenv("RESONANS_DELIVERY_TOKEN", "")
-			if c.jwt {
-				t.Setenv("RESONANS_JWT_ISSUER", "https://auth.example")
-				t.Setenv("RESONANS_JWKS_URL", "https://auth.example/jwks.json")
-				t.Setenv("RESONANS_JWT_AUDIENCE", "resonans")
-			}
-			if c.deliveryToken {
-				t.Setenv("RESONANS_DELIVERY_TOKEN", "svc")
-			}
-			if c.rawDeliveryToken != "" {
-				t.Setenv("RESONANS_DELIVERY_TOKEN", c.rawDeliveryToken)
-			}
+			setDevAuthEnv(t, c)
 			cfg, err := Load()
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
-			editor, eErr := cfg.EditorDevAuth()
-			delivery, dErr := cfg.DeliveryDevAuth()
-			gotErr := eErr
-			if gotErr == nil {
-				gotErr = dErr
-			}
-			if !errors.Is(gotErr, c.wantErr) {
-				t.Fatalf("err = %v, want %v", gotErr, c.wantErr)
-			}
-			if c.wantErr == nil && (editor != c.wantEditor || delivery != c.wantDelivery) {
-				t.Errorf("editor=%v delivery=%v, want %v/%v", editor, delivery, c.wantEditor, c.wantDelivery)
-			}
+			checkDevAuth(t, c, cfg)
 		})
+	}
+}
+
+type devAuthCase struct {
+	name                     string
+	nodeEnv, devAuth         string
+	jwt, deliveryToken       bool
+	rawDeliveryToken         string // set as is, when not ""
+	wantEditor, wantDelivery bool
+	wantErr                  error
+}
+
+func setDevAuthEnv(t *testing.T, c devAuthCase) {
+	t.Helper()
+	t.Setenv("NODE_ENV", c.nodeEnv)
+	t.Setenv("RESONANS_DEV_AUTH", c.devAuth)
+	t.Setenv("PUBLIC_URL", "")
+	t.Setenv("RESONANS_JWT_ISSUER", "")
+	t.Setenv("RESONANS_JWKS_URL", "")
+	t.Setenv("RESONANS_DELIVERY_TOKEN", "")
+	if c.jwt {
+		t.Setenv("RESONANS_JWT_ISSUER", "https://auth.example")
+		t.Setenv("RESONANS_JWKS_URL", "https://auth.example/jwks.json")
+		t.Setenv("RESONANS_JWT_AUDIENCE", "resonans")
+	}
+	if c.deliveryToken {
+		t.Setenv("RESONANS_DELIVERY_TOKEN", "svc")
+	}
+	if c.rawDeliveryToken != "" {
+		t.Setenv("RESONANS_DELIVERY_TOKEN", c.rawDeliveryToken)
+	}
+}
+
+func checkDevAuth(t *testing.T, c devAuthCase, cfg *Config) {
+	t.Helper()
+	editor, eErr := cfg.EditorDevAuth()
+	delivery, dErr := cfg.DeliveryDevAuth()
+	gotErr := eErr
+	if gotErr == nil {
+		gotErr = dErr
+	}
+	if !errors.Is(gotErr, c.wantErr) {
+		t.Fatalf("err = %v, want %v", gotErr, c.wantErr)
+	}
+	if c.wantErr == nil && (editor != c.wantEditor || delivery != c.wantDelivery) {
+		t.Errorf("editor=%v delivery=%v, want %v/%v", editor, delivery, c.wantEditor, c.wantDelivery)
 	}
 }
 

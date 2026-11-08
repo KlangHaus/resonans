@@ -37,28 +37,38 @@ func ServiceMiddleware(serviceToken string, trustHeaderWithoutToken bool, logger
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if serviceToken == "" && trustHeaderWithoutToken {
 				if org := r.Header.Get(ScopeOrgHeader); org != "" {
-					actor := Actor{Sub: "service-dev", Tenant: org}
-					ctx := WithActor(r.Context(), actor)
-					setSpanActor(ctx, actor)
-					next.ServeHTTP(w, r.WithContext(ctx))
+					serveAs(next, w, r, Actor{Sub: "service-dev", Tenant: org})
 					return
 				}
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			m := bearerRe.FindStringSubmatch(r.Header.Get("Authorization"))
-			if serviceToken == "" || m == nil || subtle.ConstantTimeCompare([]byte(m[1]), []byte(serviceToken)) != 1 {
+			if !validServiceToken(r.Header.Get("Authorization"), serviceToken) {
 				if logger != nil {
 					logger.Warn("delivery_service_auth_failed")
 				}
 				unauthorized(w, "invalid service credential")
 				return
 			}
-			actor := Actor{Sub: "service", Tenant: r.Header.Get(ScopeOrgHeader)}
-			ctx := WithActor(r.Context(), actor)
-			setSpanActor(ctx, actor)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			serveAs(next, w, r, Actor{Sub: "service", Tenant: r.Header.Get(ScopeOrgHeader)})
 		})
 	}
+}
+
+// validServiceToken reports whether authorization is "Bearer <want>". An empty
+// want is never valid, whatever the header holds, so an unset token cannot be
+// matched by an empty bearer.
+func validServiceToken(authorization, want string) bool {
+	if want == "" {
+		return false
+	}
+	m := bearerRe.FindStringSubmatch(authorization)
+	return m != nil && subtle.ConstantTimeCompare([]byte(m[1]), []byte(want)) == 1
+}
+
+// serveAs runs next with actor on the request context and the span.
+func serveAs(next http.Handler, w http.ResponseWriter, r *http.Request, actor Actor) {
+	ctx := WithActor(r.Context(), actor)
+	setSpanActor(ctx, actor)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
