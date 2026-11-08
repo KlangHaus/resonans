@@ -3,8 +3,9 @@ name: Gitleaks
 # Kun pull_request — pre-merge secret-scan fanger secrets før de når main
 # (ingen duplicate push-scan; [review] systemic fund 06-18).
 on:
+  # No `branches:` filter, on purpose (KlangHaus/platform#125): with one, a PR
+  # against a feature branch never runs this job and passes without the gate.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
@@ -13,20 +14,24 @@ jobs:
   scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    # The shared template's value: long enough for a normal run, short enough
+    # that a hang is caught. The default is 360 minutes.
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Install gitleaks
+      # gitleaks CLI, pinned version, and the download is verified against its
+      # sha256 BEFORE it is unpacked. As in the shared template
+      # (KlangHaus/platform packages/quality-config/templates), plus retries. The
+      # tarball and binary go to $RUNNER_TEMP so the checkout stays untouched;
+      # .gitleaks.toml is still auto-loaded from the repository being scanned.
+      - name: Run gitleaks (CLI v8.30.1)
         run: |
-          # pipefail: curl -f exits non-zero on 404, but in a pipeline the shell
-          # reports tar's status. Today the step still fails because tar chokes
-          # on empty input — fail-closed by accident, not by design.
-          set -o pipefail
-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
-            | tar -xz -C /usr/local/bin gitleaks
-          gitleaks version
-
-      - name: Scan repo history
-        run: gitleaks detect --redact --verbose --exit-code 1
+          curl -sSfL --retry 3 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose --exit-code 1 .
