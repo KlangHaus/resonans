@@ -120,6 +120,9 @@ services:
       NUXT_OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
       # Exactly 1 allows a provider over plain http. Same waiver as the API's.
       NUXT_OIDC_ALLOW_INSECURE: ${RESONANS_ALLOW_INSECURE_JWKS:-}
+      # Exactly 1: logout fails, and you stay logged in, if the provider stops
+      # advertising an end_session_endpoint.
+      NUXT_OIDC_REQUIRE_PROVIDER_LOGOUT: ${OIDC_REQUIRE_PROVIDER_LOGOUT:-}
       # As the editor's BROWSER reaches it — the redirect URI is built from it.
       NUXT_OIDC_EDITOR_URL: ${EDITOR_URL:-http://localhost:8080}
       # Inside this network: the editor's server calls the API directly.
