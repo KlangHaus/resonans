@@ -13,7 +13,10 @@
 // so clearing ours anyway would show "logged out" when it is not true.
 //
 // A provider that advertises no end_session_endpoint offers no logout to call:
-// then only the editor session ends, as before.
+// then only the editor session ends, as before, unless
+// NUXT_OIDC_REQUIRE_PROVIDER_LOGOUT=1 says the provider must end it. Then a
+// missing endpoint is an error too: a discovery document that lost it would
+// otherwise turn every logout into a local one without anyone noticing.
 // Ported from KlangHaus/backstage web/server/routes/auth/logout.post.ts.
 export default defineEventHandler(async (event) => {
   const s = oidcSettings()
@@ -22,7 +25,14 @@ export default defineEventHandler(async (event) => {
 
   const session = await editorSession(event, s)
   const endpoint = (await oidcConfig(s)).serverMetadata().end_session_endpoint
-  if (!endpoint || !session.data.accessToken) {
+  if (!session.data.accessToken) {
+    await session.clear()
+    return { redirect: '/login' }
+  }
+  if (!endpoint) {
+    if (s.requireProviderLogout) {
+      throw createError({ statusCode: 502, statusMessage: 'the provider offers no logout; you are still logged in' })
+    }
     await session.clear()
     return { redirect: '/login' }
   }

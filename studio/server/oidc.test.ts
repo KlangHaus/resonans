@@ -49,6 +49,7 @@ const settings = {
   apiUrl: 'http://api:3000/',
   sessionSecret: 'x'.repeat(32),
   allowInsecure: '',
+  requireProviderLogout: '',
   resource: '',
 }
 let runtime: Record<string, unknown>
@@ -153,6 +154,14 @@ describe('oidcSettings', () => {
     runtime.allowInsecure = v
     expect(s().allowInsecure).toBe(false)
   })
+
+  it.each([[1, true], ['1', true], ['true', false], ['', false], [0, false]])(
+    'reads requireProviderLogout %s as %s',
+    (v, want) => {
+      runtime.requireProviderLogout = v
+      expect(s().requireProviderLogout).toBe(want)
+    },
+  )
 
   it('strips a trailing slash, so the redirect URI has one form', () => {
     expect(oidc.redirectUri(s())).toBe('https://cms.example/auth/callback')
@@ -509,6 +518,36 @@ describe('POST /auth/logout', () => {
   })
 
   it('asks the provider nothing when nobody is logged in', async () => {
+    expect(await logout(post())).toEqual({ redirect: '/login' })
+    expect(endSession).not.toHaveBeenCalled()
+  })
+
+  // NUXT_OIDC_REQUIRE_PROVIDER_LOGOUT=1: a provider that must end the session
+  // and advertises no way to do it is an error, not a local logout.
+  it('with provider logout required and no end_session_endpoint: error, and still logged in', async () => {
+    runtime.requireProviderLogout = '1'
+    client.discovery.mockResolvedValue({ serverMetadata: () => ({}) })
+    const event = post({ resonans_session: { ...loggedIn } })
+    await expect(logout(event)).rejects.toMatchObject({
+      statusCode: 502,
+      message: 'the provider offers no logout; you are still logged in',
+    })
+    expect(event.sessions.resonans_session).toEqual(loggedIn)
+    expect(endSession).not.toHaveBeenCalled()
+  })
+
+  it('with provider logout required and an end_session_endpoint: ends both, as without it', async () => {
+    runtime.requireProviderLogout = '1'
+    answer(302, '', { location: after })
+    const event = post({ resonans_session: { ...loggedIn } })
+    expect(await logout(event)).toEqual({ redirect: '/login' })
+    expect(endSession).toHaveBeenCalledTimes(1)
+    expect(event.sessions.resonans_session).toEqual({})
+  })
+
+  it('with provider logout required, still asks the provider nothing when nobody is logged in', async () => {
+    runtime.requireProviderLogout = '1'
+    client.discovery.mockResolvedValue({ serverMetadata: () => ({}) })
     expect(await logout(post())).toEqual({ redirect: '/login' })
     expect(endSession).not.toHaveBeenCalled()
   })

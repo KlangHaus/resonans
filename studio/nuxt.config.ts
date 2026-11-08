@@ -50,6 +50,10 @@ export default defineNuxtConfig({
       sessionSecret: '',
       // "1" allows plain-http discovery and token calls. Local provider only.
       allowInsecure: '',
+      // "1" makes logout fail, keeping the session, when the provider advertises
+      // no end_session_endpoint. For a provider that does offer logout, so a
+      // changed discovery document cannot quietly make logout local-only.
+      requireProviderLogout: '',
       // RFC 8707 resource indicator for the authorization request, usually the
       // API's audience (RESONANS_JWT_AUDIENCE). Needed where the provider issues
       // a verifiable JWT only for a resource-bound grant (BetterAuth's
