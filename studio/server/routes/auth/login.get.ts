@@ -10,11 +10,9 @@ export default defineEventHandler(async (event) => {
   const state = client.randomState()
   const nonce = client.randomNonce()
 
-  // Only a path on this site may be the destination after login. Anything
-  // else — another host, a protocol-relative `//evil`, a backslash trick — is
-  // replaced by the start page instead of becoming an open redirect.
-  const raw = String(getQuery(event).next ?? '/')
-  const next = /^\/(?![/\\])/.test(raw) ? raw : '/'
+  // Only a path on this editor may be the destination after login; anything
+  // else is replaced by the start page (see safeNext).
+  const next = safeNext(getQuery(event).next, s.editorUrl)
 
   const tx = await loginTransaction(event, s)
   await tx.update({ verifier, state, nonce, next })
