@@ -75,9 +75,11 @@ jobs:
             is_main_head=false
           fi
 
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-          echo "short=${short}" >> "$GITHUB_OUTPUT"
-          echo "is_main_head=${is_main_head}" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha=${sha}"
+            echo "short=${short}"
+            echo "is_main_head=${is_main_head}"
+          } >> "$GITHUB_OUTPUT"
           echo "::notice::building revision ${sha} · main-HEAD=${main_head:-<lookup failed>} · latest/main: ${is_main_head}"
 
       - uses: docker/setup-buildx-action@v4
@@ -371,9 +373,11 @@ jobs:
             is_main_head=false
           fi
 
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-          echo "short=${short}" >> "$GITHUB_OUTPUT"
-          echo "is_main_head=${is_main_head}" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha=${sha}"
+            echo "short=${short}"
+            echo "is_main_head=${is_main_head}"
+          } >> "$GITHUB_OUTPUT"
           echo "::notice::building revision ${sha} · main-HEAD=${main_head:-<lookup failed>} · latest/main: ${is_main_head}"
 
       - uses: docker/setup-buildx-action@v4

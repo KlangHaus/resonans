@@ -22,8 +22,6 @@ jobs:
     name: Quickstart from published images
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      COMPOSE_ARGS: --env-file deploy/try/env -f compose.yml -f compose.try.yml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,8 +31,8 @@ jobs:
       # explicitly, and `--no-build` keeps compose from building anything instead.
       - name: Pull anonymously and start
         run: |
-          docker compose $COMPOSE_ARGS pull
-          docker compose $COMPOSE_ARGS up -d --no-build
+          docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml pull
+          docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml up -d --no-build
 
       # The opposite of the check in quickstart.yml: a local build would have no
       # repo digest, and this job would be testing the wrong thing.
@@ -61,4 +59,4 @@ jobs:
 
       - name: Logs on failure
         if: ${{ failure() }}
-        run: docker compose $COMPOSE_ARGS logs --no-color --tail 80
+        run: docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml logs --no-color --tail 80

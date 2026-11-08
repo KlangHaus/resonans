@@ -24,8 +24,6 @@ jobs:
     name: Quickstart from source
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      COMPOSE_ARGS: --env-file deploy/try/env -f compose.yml -f compose.try.yml
     # The clean clone lives under $RUNNER_TEMP/stranger. Not a job-level env value:
     # the `runner` context does not exist there, and GitHub rejects the whole file.
     steps:
@@ -65,7 +63,7 @@ jobs:
       - name: Logs on failure
         if: ${{ failure() }}
         working-directory: ${{ runner.temp }}/stranger/resonans
-        run: docker compose $COMPOSE_ARGS logs --no-color --tail 80
+        run: docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml logs --no-color --tail 80
 
   # The runner above has to be able to fail. Each control breaks one thing in a
   # scratch copy of the README and checks the exact exit code and the step it

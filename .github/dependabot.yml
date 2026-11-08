@@ -39,6 +39,19 @@ updates:
       prefix: chore(deps)
     open-pull-requests-limit: 3
 
+  # compose.yml's postgres, pinned by tag and digest. GitHub documents Docker
+  # Compose as an ecosystem of its own, so the `docker` entries above are not
+  # relied on for it: without this entry the database every compose user runs
+  # could stay on the build it was pinned to. compose.try.yml's Dex, also pinned
+  # by digest, is in the same directory.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    open-pull-requests-limit: 3
+
   # Actions in .github/workflows/. 🔴 They are NOT pinned by commit yet: the
   # gosec pin was split out of this change after sikkerhed REJECTED it — the
   # pinned container ships go1.26.5 while go.mod requires >= 1.26.9, and under

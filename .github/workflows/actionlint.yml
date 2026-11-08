@@ -1,0 +1,95 @@
+name: actionlint
+
+# Checks every workflow the way GitHub will read it: expression contexts, job and
+# step keys, and the shell in each `run:` through shellcheck. A YAML parser is
+# not enough. A workflow that uses the `runner` context at job level parses, and
+# GitHub then rejects the whole file, so its jobs never run and leave no check
+# behind to fail (measured on resonans#180, 2026-11-08).
+on:
+  # No `branches:` filter, on purpose (KlangHaus/platform#125): with one, a PR
+  # against a feature branch never runs this job and passes without the gate.
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # actionlint CLI, pinned version, and the download is verified against its
+      # sha256 BEFORE it is unpacked, as gitleaks.yml does. The sum is the release
+      # asset's digest on GitHub, which matched the project's checksums file and a
+      # local download on 2026-11-08.
+      - name: Install actionlint (v1.7.12)
+        run: |
+          curl -sSfL --retry 3 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" --version
+
+      # actionlint checks `run:` scripts only when shellcheck is on the PATH, and
+      # says nothing when it is not. So its absence fails here.
+      - name: Require shellcheck
+        run: shellcheck --version
+
+      - name: Lint the workflows
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
+      # The lint above has to be able to fail. Each control lints one broken
+      # workflow in a scratch directory and checks the exact message. The file is
+      # named, because outside a git repository actionlint finds no project (exit 3).
+      - name: "Control: a context used where it does not exist is reported"
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          mkdir -p "$scratch/.github/workflows"
+          cat > "$scratch/.github/workflows/broken.yml" <<'EOF'
+          on: pull_request
+          jobs:
+            j:
+              runs-on: ubuntu-latest
+              env:
+                DIR: @{{ runner.temp }}/x
+              steps:
+                - run: echo "$DIR"
+          EOF
+          # GitHub expands an expression written here before the script runs, so
+          # the file gets a placeholder and the dollar sign afterwards.
+          tr '@' '$' < "$scratch/.github/workflows/broken.yml" > "$scratch/broken.yml"
+          mv "$scratch/broken.yml" "$scratch/.github/workflows/broken.yml"
+          grep -q 'DIR: [$]{{ runner.temp }}/x' "$scratch/.github/workflows/broken.yml" \
+            || { echo "::error::the scratch workflow does not hold the expression"; exit 1; }
+          rc=0
+          (cd "$scratch" && "$RUNNER_TEMP/actionlint" -oneline .github/workflows/broken.yml) > "$scratch/out" 2>&1 || rc=$?
+          cat "$scratch/out"
+          [ "$rc" = 1 ] || { echo "::error::expected exit 1, got $rc"; exit 1; }
+          grep -q 'context "runner" is not allowed here' "$scratch/out" \
+            || { echo "::error::the runner context at job level was not reported"; exit 1; }
+
+      - name: "Control: shellcheck runs on run: scripts"
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          mkdir -p "$scratch/.github/workflows"
+          cat > "$scratch/.github/workflows/broken.yml" <<'EOF'
+          on: pull_request
+          jobs:
+            j:
+              runs-on: ubuntu-latest
+              steps:
+                - run: ls $HOME
+          EOF
+          rc=0
+          (cd "$scratch" && "$RUNNER_TEMP/actionlint" -oneline .github/workflows/broken.yml) > "$scratch/out" 2>&1 || rc=$?
+          cat "$scratch/out"
+          [ "$rc" = 1 ] || { echo "::error::expected exit 1, got $rc"; exit 1; }
+          grep -q 'SC2086' "$scratch/out" \
+            || { echo "::error::shellcheck did not report the unquoted variable"; exit 1; }
