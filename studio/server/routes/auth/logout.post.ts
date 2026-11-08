@@ -50,9 +50,10 @@ export default defineEventHandler(async (event) => {
 
   if (!(await endedAt(res, after))) {
     const detail = await res.text().then((t) => t.slice(0, 200)).catch(() => '')
+    const answer = detail ? `${res.status}: ${detail}` : String(res.status)
     throw createError({
       statusCode: 502,
-      statusMessage: `the provider did not end the session (${res.status}${detail ? `: ${detail}` : ''}); you are still logged in`,
+      statusMessage: `the provider did not end the session (${answer}); you are still logged in`,
     })
   }
 

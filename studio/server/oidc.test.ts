@@ -549,6 +549,15 @@ describe('POST /auth/logout', () => {
     expect(event.sessions.resonans_session).toEqual(loggedIn)
   })
 
+  // The exact text of the 502, with and without a response body to quote.
+  it.each([
+    ['with a body', () => answer(400, 'User confirmation is required'), 'the provider did not end the session (400: User confirmation is required); you are still logged in'],
+    ['without a body', () => answer(302, '', { location: 'https://evil.example/' }), 'the provider did not end the session (302); you are still logged in'],
+  ])('names the provider\'s answer in the error (%s)', async (_, provider, message) => {
+    provider()
+    await expect(logout(post({ resonans_session: { ...loggedIn } }))).rejects.toMatchObject({ statusCode: 502, message })
+  })
+
   it('refuses when the session holds no ID token, and keeps it', async () => {
     // A session from before the ID token was kept.
     const event = post({ resonans_session: { accessToken: 'at' } })
