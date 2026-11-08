@@ -18,7 +18,7 @@ name: resonans
 
 services:
   postgres:
-    image: postgres:16.15-alpine3.24@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+    image: postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     restart: unless-stopped
     environment:
       POSTGRES_DB: resonans
