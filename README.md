@@ -97,7 +97,7 @@ The images are public, so no login is needed. They are built for **amd64 only**:
 Silicon or another arm64 machine, build from source as above.
 
 ```bash
-export RESONANS_VERSION=3.2.0   # the tag has no "v"
+export RESONANS_VERSION=3.2.2   # the tag has no "v"
 docker compose pull
 docker compose up -d --no-build
 ```
@@ -189,6 +189,28 @@ Every request needs a role, and there is no default — a token without one gets
 The role claim (`RESONANS_ROLE_CLAIM`, default `resonans_role`) may be a string or an
 array; the highest role wins. To use groups your provider already issues, map them:
 `RESONANS_ROLE_MAP=cms-admins=admin,cms-writers=editor`.
+
+### Logging in and out
+
+- **After login** the editor takes you back to the page you started from. Only a page
+  of the editor itself counts: a login link that names any other address takes you to
+  the editor's start page instead.
+- **Logging out ends your session at the provider too**, when the provider advertises an
+  `end_session_endpoint`. The editor's server tells the provider which login to end, so
+  the next login asks for your credentials again instead of signing you straight back
+  in. The editor ends its own session only once the provider confirms. If it does not,
+  you stay logged in and the editor says so, rather than showing a logout that did not
+  happen.
+- **A provider without an `end_session_endpoint`** (Dex, which the quickstart uses, is
+  one) ends only the editor's session. Your session at the provider lasts until the
+  provider ends it.
+- **The post-logout redirect URI must be exactly `<EDITOR_URL>/login`**, registered at the
+  provider alongside the login redirect URI. Providers compare it character for
+  character, so `<EDITOR_URL>/` or `<EDITOR_URL>/login/` is a different URI.
+
+Upgrading from before 3.2.2 to a provider with an `end_session_endpoint`: register the
+post-logout redirect URI first. Until it is registered, a provider that checks it refuses
+the logout, and editors stay logged in with a message saying so.
 
 ## Tenant isolation
 
