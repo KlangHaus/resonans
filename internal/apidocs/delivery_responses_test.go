@@ -67,23 +67,8 @@ func statusCodes(t *testing.T) map[string]int {
 	}
 	out := map[string]int{}
 	for _, d := range af.Decls {
-		gd, ok := d.(*ast.GenDecl)
-		if !ok || gd.Tok != token.CONST {
-			continue
-		}
-		for _, spec := range gd.Specs {
-			vs := spec.(*ast.ValueSpec)
-			for i, name := range vs.Names {
-				if i >= len(vs.Values) {
-					continue
-				}
-				lit, ok := vs.Values[i].(*ast.BasicLit)
-				if !ok || lit.Kind != token.INT {
-					continue
-				}
-				c, _ := strconv.Atoi(lit.Value)
-				out[name.Name] = c
-			}
+		if gd, ok := d.(*ast.GenDecl); ok && gd.Tok == token.CONST {
+			addIntConsts(gd, out)
 		}
 	}
 	// Control: the declarations were read, not an empty file.
@@ -93,6 +78,118 @@ func statusCodes(t *testing.T) map[string]int {
 	return out
 }
 
+// addIntConsts records every `Name = <integer literal>` in a const block.
+func addIntConsts(gd *ast.GenDecl, out map[string]int) {
+	for _, spec := range gd.Specs {
+		vs := spec.(*ast.ValueSpec)
+		for i, name := range vs.Names {
+			if i >= len(vs.Values) {
+				continue
+			}
+			if lit, ok := vs.Values[i].(*ast.BasicLit); ok && lit.Kind == token.INT {
+				c, _ := strconv.Atoi(lit.Value)
+				out[name.Name] = c
+			}
+		}
+	}
+}
+
+// deliverySource is the delivery package as parsed source: its functions by
+// name and its routes, pattern to handler name.
+type deliverySource struct {
+	fset   *token.FileSet
+	funcs  map[string]*ast.FuncDecl
+	routes map[string]string
+}
+
+func parseDelivery(t *testing.T) deliverySource {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join("..", "delivery", "*.go"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no delivery sources found (%v)", err)
+	}
+	src := deliverySource{fset: token.NewFileSet(), funcs: map[string]*ast.FuncDecl{}, routes: map[string]string{}}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		af, err := parser.ParseFile(src.fset, f, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		for _, d := range af.Decls {
+			if fd, ok := d.(*ast.FuncDecl); ok {
+				src.funcs[fd.Name.Name] = fd
+			}
+		}
+		ast.Inspect(af, func(n ast.Node) bool {
+			src.addRoute(t, n)
+			return true
+		})
+	}
+	return src
+}
+
+// addRoute records n when it is a `mux.HandleFunc("<pattern>", h.<handler>)`.
+func (src deliverySource) addRoute(t *testing.T, n ast.Node) {
+	call, ok := n.(*ast.CallExpr)
+	if !ok || len(call.Args) != 2 {
+		return
+	}
+	if sel, ok := call.Fun.(*ast.SelectorExpr); !ok || sel.Sel.Name != "HandleFunc" {
+		return
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	h, ok2 := call.Args[1].(*ast.SelectorExpr)
+	if !ok || !ok2 {
+		t.Fatalf("%s: a HandleFunc this cell cannot read; it would be a route without a check", src.fset.Position(call.Pos()))
+	}
+	pattern, _ := strconv.Unquote(lit.Value)
+	src.routes[pattern] = h.Sel.Name
+}
+
+// statusWalker collects the http.Status constants reachable from a function,
+// following calls to other functions of the same package.
+type statusWalker struct {
+	t     *testing.T
+	src   deliverySource
+	codes map[string]int
+	seen  map[string]bool
+	out   map[int]bool
+}
+
+func (w *statusWalker) walk(name string) {
+	if w.seen[name] {
+		return
+	}
+	w.seen[name] = true
+	if fd := w.src.funcs[name]; fd != nil && fd.Body != nil {
+		ast.Inspect(fd.Body, w.visit)
+	}
+}
+
+func (w *statusWalker) visit(n ast.Node) bool {
+	switch v := n.(type) {
+	case *ast.SelectorExpr:
+		if id, ok := v.X.(*ast.Ident); ok && id.Name == "http" && strings.HasPrefix(v.Sel.Name, "Status") {
+			w.record(v)
+			return true
+		}
+		w.walk(v.Sel.Name)
+	case *ast.Ident:
+		w.walk(v.Name)
+	}
+	return true
+}
+
+func (w *statusWalker) record(v *ast.SelectorExpr) {
+	c, known := w.codes[v.Sel.Name]
+	if !known {
+		w.t.Fatalf("%s: http.%s is not a status this cell knows", w.src.fset.Position(v.Pos()), v.Sel.Name)
+	}
+	w.out[c] = true
+}
+
 // deliveryHandlerStatuses returns, per registered delivery route, the status
 // codes its handler can write: every http.Status constant in the handler and in
 // the package functions it calls, transitively. It over-counts a status in a
@@ -100,84 +197,14 @@ func statusCodes(t *testing.T) map[string]int {
 func deliveryHandlerStatuses(t *testing.T) map[string]map[int]bool {
 	t.Helper()
 	codes := statusCodes(t)
-	fset := token.NewFileSet()
-	files, err := filepath.Glob(filepath.Join("..", "delivery", "*.go"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no delivery sources found (%v)", err)
-	}
-	funcs := map[string]*ast.FuncDecl{}
-	routes := map[string]string{} // pattern -> handler name
-	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
-		}
-		af, err := parser.ParseFile(fset, f, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", f, err)
-		}
-		for _, d := range af.Decls {
-			if fd, ok := d.(*ast.FuncDecl); ok {
-				funcs[fd.Name.Name] = fd
-			}
-		}
-		ast.Inspect(af, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) != 2 {
-				return true
-			}
-			if sel, ok := call.Fun.(*ast.SelectorExpr); !ok || sel.Sel.Name != "HandleFunc" {
-				return true
-			}
-			lit, ok := call.Args[0].(*ast.BasicLit)
-			h, ok2 := call.Args[1].(*ast.SelectorExpr)
-			if !ok || !ok2 {
-				t.Fatalf("%s: a HandleFunc this cell cannot read; it would be a route without a check", fset.Position(call.Pos()))
-			}
-			pattern, _ := strconv.Unquote(lit.Value)
-			routes[pattern] = h.Sel.Name
-			return true
-		})
-	}
-	reach := func(handler string) map[int]bool {
-		out := map[int]bool{}
-		seen := map[string]bool{}
-		var walk func(string)
-		walk = func(name string) {
-			if seen[name] {
-				return
-			}
-			seen[name] = true
-			fd := funcs[name]
-			if fd == nil || fd.Body == nil {
-				return
-			}
-			ast.Inspect(fd.Body, func(n ast.Node) bool {
-				switch v := n.(type) {
-				case *ast.SelectorExpr:
-					if id, ok := v.X.(*ast.Ident); ok && id.Name == "http" && strings.HasPrefix(v.Sel.Name, "Status") {
-						c, known := codes[v.Sel.Name]
-						if !known {
-							t.Fatalf("%s: http.%s is not a status this cell knows", fset.Position(v.Pos()), v.Sel.Name)
-						}
-						out[c] = true
-						return true
-					}
-					walk(v.Sel.Name)
-				case *ast.Ident:
-					walk(v.Name)
-				}
-				return true
-			})
-		}
-		walk(handler)
-		return out
-	}
+	src := parseDelivery(t)
 	out := map[string]map[int]bool{}
-	for pattern, handler := range routes {
-		s := reach(handler)
+	for pattern, handler := range src.routes {
+		w := &statusWalker{t: t, src: src, codes: codes, seen: map[string]bool{}, out: map[int]bool{}}
+		w.walk(handler)
 		// The service-token middleware wraps every route: 401.
-		s[http.StatusUnauthorized] = true
-		out[pattern] = s
+		w.out[http.StatusUnauthorized] = true
+		out[pattern] = w.out
 	}
 	return out
 }
@@ -199,33 +226,44 @@ func TestEveryDeliveryStatusIsDocumented(t *testing.T) {
 	}
 	sort.Strings(patterns)
 	for _, pattern := range patterns {
-		method, path, _ := strings.Cut(pattern, " ")
-		t.Run(pattern, func(t *testing.T) {
-			item := doc.Paths.Find(path)
-			if item == nil {
-				t.Fatalf("%s is not in the spec", path)
-			}
-			op := item.GetOperation(method)
-			if op == nil {
-				t.Fatalf("%s %s is not in the spec", method, path)
-			}
-			var codes []int
-			for c := range statuses[pattern] {
-				codes = append(codes, c)
-			}
-			sort.Ints(codes)
-			for _, c := range codes {
-				if op.Responses.Status(c) == nil {
-					t.Errorf("the handler can answer %d, and the spec does not document it", c)
-				}
-			}
-			ok := op.Responses.Status(http.StatusOK)
-			if ok == nil || ok.Value == nil || ok.Value.Content.Get("application/json") == nil ||
-				ok.Value.Content.Get("application/json").Schema == nil {
-				t.Errorf("200 has no application/json schema")
-			}
-		})
+		t.Run(pattern, func(t *testing.T) { checkDocumented(t, doc, pattern, statuses[pattern]) })
 	}
+}
+
+// checkDocumented fails for each status in codes that the spec's operation for
+// pattern does not document, and when its 200 has no JSON schema.
+func checkDocumented(t *testing.T, doc *openapi3.T, pattern string, codes map[int]bool) {
+	t.Helper()
+	method, path, _ := strings.Cut(pattern, " ")
+	item := doc.Paths.Find(path)
+	if item == nil {
+		t.Fatalf("%s is not in the spec", path)
+	}
+	op := item.GetOperation(method)
+	if op == nil {
+		t.Fatalf("%s %s is not in the spec", method, path)
+	}
+	sorted := make([]int, 0, len(codes))
+	for c := range codes {
+		sorted = append(sorted, c)
+	}
+	sort.Ints(sorted)
+	for _, c := range sorted {
+		if op.Responses.Status(c) == nil {
+			t.Errorf("the handler can answer %d, and the spec does not document it", c)
+		}
+	}
+	if !hasJSONSchema(op.Responses.Status(http.StatusOK)) {
+		t.Errorf("200 has no application/json schema")
+	}
+}
+
+func hasJSONSchema(r *openapi3.ResponseRef) bool {
+	if r == nil || r.Value == nil {
+		return false
+	}
+	mt := r.Value.Content.Get("application/json")
+	return mt != nil && mt.Schema != nil
 }
 
 func TestEnvelopeSchemaMatchesTheType(t *testing.T) {
@@ -286,108 +324,126 @@ func checkAgainstSpec(t *testing.T, doc *openapi3.T, routePath string, req *http
 	return openapi3filter.ValidateResponse(context.Background(), in)
 }
 
-func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
-	doc := loadedSpec(t)
+var responsesTenant = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+// responsesRouter is the real delivery router over a memory store holding one
+// published and one draft course for responsesTenant, with preview enabled.
+func responsesRouter(t *testing.T, secret []byte) http.Handler {
+	t.Helper()
 	reg, err := schema.DefaultRegistry()
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
-	tenant := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	store := content.NewMemoryStore()
 	ctx := context.Background()
-	d, err := store.Create(ctx, tenant, content.CreateInput{Type: "course", Slug: "intro", Title: "Intro"})
+	d, err := store.Create(ctx, responsesTenant, content.CreateInput{Type: "course", Slug: "intro", Title: "Intro"})
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if _, err := store.Publish(ctx, tenant, d.ID); err != nil {
+	if _, err := store.Publish(ctx, responsesTenant, d.ID); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	if _, err := store.Create(ctx, tenant, content.CreateInput{Type: "course", Slug: "draft", Title: "Draft"}); err != nil {
+	if _, err := store.Create(ctx, responsesTenant, content.CreateInput{Type: "course", Slug: "draft", Title: "Draft"}); err != nil {
 		t.Fatalf("seed draft: %v", err)
 	}
-	secret := []byte("preview-secret-not-a-secret-0123456789")
-	h := delivery.NewRouter(delivery.Deps{Store: store, Registry: reg, ServiceToken: responsesToken, PreviewSecret: string(secret)})
+	return delivery.NewRouter(delivery.Deps{Store: store, Registry: reg, ServiceToken: responsesToken, PreviewSecret: string(secret)})
+}
 
-	type call struct {
-		name, routePath, url string
-		token, scope         bool
-		header               map[string]string
-		want                 int
+type deliveryCall struct {
+	name, routePath, url string
+	token, scope         bool
+	header               map[string]string
+	want                 int
+}
+
+// send makes c's request against h and returns the request and its response.
+func send(h http.Handler, c deliveryCall) (*http.Request, *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(http.MethodGet, c.url, nil)
+	if c.token {
+		req.Header.Set("Authorization", "Bearer "+responsesToken)
 	}
-	good := preview.Sign(secret, preview.Claims{Tenant: tenant.String(), Type: "course", Slug: "draft", Exp: time.Now().Add(time.Minute).Unix()})
-	other := preview.Sign(secret, preview.Claims{Tenant: tenant.String(), Type: "course", Slug: "intro", Exp: time.Now().Add(time.Minute).Unix()})
-	calls := []call{
+	if c.scope {
+		req.Header.Set("X-Scope-OrgID", responsesTenant.String())
+	}
+	for k, v := range c.header {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return req, rec
+}
+
+// expectDocumented sends c and fails unless it gets c.want and a response the
+// spec accepts. It returns the response for callers that need its headers.
+func expectDocumented(t *testing.T, doc *openapi3.T, h http.Handler, c deliveryCall) *httptest.ResponseRecorder {
+	t.Helper()
+	req, rec := send(h, c)
+	if rec.Code != c.want {
+		t.Fatalf("status = %d, want %d (body %s)", rec.Code, c.want, bytes.TrimSpace(rec.Body.Bytes()))
+	}
+	if err := checkAgainstSpec(t, doc, c.routePath, req, rec); err != nil {
+		t.Errorf("the response does not match the spec: %v\nbody: %s", err, rec.Body.String())
+	}
+	return rec
+}
+
+const (
+	documentRoute = "/delivery/v1/{type}/{slug}"
+	documentURL   = "/delivery/v1/course/intro"
+)
+
+func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
+	doc := loadedSpec(t)
+	secret := []byte("preview-secret-not-a-secret-0123456789")
+	h := responsesRouter(t, secret)
+	exp := time.Now().Add(time.Minute).Unix()
+	good := preview.Sign(secret, preview.Claims{Tenant: responsesTenant.String(), Type: "course", Slug: "draft", Exp: exp})
+	other := preview.Sign(secret, preview.Claims{Tenant: responsesTenant.String(), Type: "course", Slug: "intro", Exp: exp})
+	calls := []deliveryCall{
 		{"schema", "/delivery/v1/schema", "/delivery/v1/schema", true, true, nil, 200},
 		{"catalog", "/delivery/v1/{type}", "/delivery/v1/course", true, true, nil, 200},
-		{"one document", "/delivery/v1/{type}/{slug}", "/delivery/v1/course/intro", true, true, nil, 200},
-		{"no service token", "/delivery/v1/{type}/{slug}", "/delivery/v1/course/intro", false, true, nil, 401},
+		{"one document", documentRoute, documentURL, true, true, nil, 200},
+		{"no service token", documentRoute, documentURL, false, true, nil, 401},
 		{"no tenant", "/delivery/v1/{type}", "/delivery/v1/course", true, false, nil, 403},
-		{"no tenant, one document", "/delivery/v1/{type}/{slug}", "/delivery/v1/course/intro", true, false, nil, 403},
-		{"a draft is not delivered", "/delivery/v1/{type}/{slug}", "/delivery/v1/course/draft", true, true, nil, 404},
+		{"no tenant, one document", documentRoute, documentURL, true, false, nil, 403},
+		{"a draft is not delivered", documentRoute, "/delivery/v1/course/draft", true, true, nil, 404},
 		{"preview", "/delivery/v1/preview/{type}/{slug}", "/delivery/v1/preview/course/draft?token=" + good, true, true, nil, 200},
 		{"preview, bad token", "/delivery/v1/preview/{type}/{slug}", "/delivery/v1/preview/course/draft?token=x.y", true, true, nil, 401},
 		{"preview, token for another document", "/delivery/v1/preview/{type}/{slug}", "/delivery/v1/preview/course/draft?token=" + other, true, true, nil, 403},
 	}
-	do := func(c call) (*http.Request, *httptest.ResponseRecorder) {
-		req := httptest.NewRequest(http.MethodGet, c.url, nil)
-		if c.token {
-			req.Header.Set("Authorization", "Bearer "+responsesToken)
-		}
-		if c.scope {
-			req.Header.Set("X-Scope-OrgID", tenant.String())
-		}
-		for k, v := range c.header {
-			req.Header.Set(k, v)
-		}
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-		return req, rec
-	}
-	var etag string
 	for _, c := range calls {
-		t.Run(c.name, func(t *testing.T) {
-			req, rec := do(c)
-			if rec.Code != c.want {
-				t.Fatalf("status = %d, want %d (body %s)", rec.Code, c.want, bytes.TrimSpace(rec.Body.Bytes()))
-			}
-			if err := checkAgainstSpec(t, doc, c.routePath, req, rec); err != nil {
-				t.Errorf("the response does not match the spec: %v\nbody: %s", err, rec.Body.String())
-			}
-			if c.name == "one document" {
-				etag = rec.Header().Get("ETag")
-			}
-		})
+		t.Run(c.name, func(t *testing.T) { expectDocumented(t, doc, h, c) })
 	}
 	t.Run("not modified", func(t *testing.T) {
+		_, rec := send(h, calls[2])
+		etag := rec.Header().Get("ETag")
 		if etag == "" {
 			t.Fatal("no ETag from the document request, so the 304 cannot be requested")
 		}
-		c := call{"not modified", "/delivery/v1/{type}/{slug}", "/delivery/v1/course/intro", true, true, map[string]string{"If-None-Match": etag}, 304}
-		req, rec := do(c)
-		if rec.Code != http.StatusNotModified {
-			t.Fatalf("status = %d, want 304", rec.Code)
-		}
-		if err := checkAgainstSpec(t, doc, c.routePath, req, rec); err != nil {
-			t.Errorf("the response does not match the spec: %v", err)
-		}
+		expectDocumented(t, doc, h, deliveryCall{"not modified", documentRoute, documentURL, true, true, map[string]string{"If-None-Match": etag}, 304})
 	})
-
-	// The validator has to be able to fail, or the cells above prove nothing: a
-	// document response with a field the schema does not list must be refused.
 	t.Run("CONTROL: an envelope with an extra field is refused", func(t *testing.T) {
-		req, rec := do(calls[2])
-		body := bytes.Replace(rec.Body.Bytes(), []byte(`{"id"`), []byte(`{"notInTheSchema":1,"id"`), 1)
-		if bytes.Equal(body, rec.Body.Bytes()) {
-			t.Fatal("the mutation changed nothing")
-		}
-		bad := httptest.NewRecorder()
-		for k, v := range rec.Header() {
-			bad.Header()[k] = v
-		}
-		bad.WriteHeader(rec.Code)
-		_, _ = bad.Write(body)
-		if err := checkAgainstSpec(t, doc, "/delivery/v1/{type}/{slug}", req, bad); err == nil {
-			t.Error("the validator accepted a field the Envelope schema does not have")
-		}
+		validatorRefusesAnExtraField(t, doc, h, calls[2])
 	})
+}
+
+// validatorRefusesAnExtraField shows the validator can fail, or the cells above
+// prove nothing: a document response with a field the schema does not list must
+// be refused.
+func validatorRefusesAnExtraField(t *testing.T, doc *openapi3.T, h http.Handler, c deliveryCall) {
+	t.Helper()
+	req, rec := send(h, c)
+	body := bytes.Replace(rec.Body.Bytes(), []byte(`{"id"`), []byte(`{"notInTheSchema":1,"id"`), 1)
+	if bytes.Equal(body, rec.Body.Bytes()) {
+		t.Fatal("the mutation changed nothing")
+	}
+	bad := httptest.NewRecorder()
+	for k, v := range rec.Header() {
+		bad.Header()[k] = v
+	}
+	bad.WriteHeader(rec.Code)
+	_, _ = bad.Write(body)
+	if err := checkAgainstSpec(t, doc, c.routePath, req, bad); err == nil {
+		t.Error("the validator accepted a field the Envelope schema does not have")
+	}
 }
