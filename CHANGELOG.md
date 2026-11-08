@@ -1,3 +1,10 @@
+## [3.2.1](https://github.com/KlangHaus/resonans/compare/v3.2.0...v3.2.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **studio:** resolve the post-login redirect target against the editor origin ([#176](https://github.com/KlangHaus/resonans/issues/176)) ([ed5d82e](https://github.com/KlangHaus/resonans/commit/ed5d82e8f554e936fafe5ac0d50b1e6958152878))
+
 # [3.2.0](https://github.com/KlangHaus/resonans/compare/v3.1.0...v3.2.0) (2026-11-03)
 
 
