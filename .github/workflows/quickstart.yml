@@ -4,6 +4,11 @@
 #
 # Nothing else tests what a stranger actually does first, and the login's claim to
 # work with any provider rests on this job.
+#
+# The commands come from the README itself (scripts/quickstart_readme.sh), not from
+# a copy in this file, so a README that drifts from what works fails here. The
+# clone is made with --no-local from the checkout, so only committed files reach
+# the stack.
 
 name: Quickstart
 
@@ -21,13 +26,23 @@ jobs:
     timeout-minutes: 20
     env:
       COMPOSE_ARGS: --env-file deploy/try/env -f compose.yml -f compose.try.yml
+      RUN_DIR: ${{ runner.temp }}/stranger
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Build from source and start
-        run: docker compose $COMPOSE_ARGS up -d --build
+      - name: Run the README's Try it commands in a clean clone
+        run: bash scripts/quickstart_readme.sh README.md "$GITHUB_WORKSPACE" "$RUN_DIR"
+
+      # The clone must be the commit under test, or the run proved some other tree.
+      - name: Confirm the clone is this commit
+        run: |
+          set -euo pipefail
+          want="$(git rev-parse HEAD)"
+          got="$(git -C "$RUN_DIR/resonans" rev-parse HEAD)"
+          echo "checkout $want, clone $got"
+          [ "$want" = "$got" ] || { echo "::error::the clone is $got, not the commit under test $want"; exit 1; }
 
       # A stack that pulled instead of built would not prove the quickstart, and
       # would hide a Dockerfile that no longer builds.
@@ -43,8 +58,54 @@ jobs:
           done
 
       - name: Log in, write, publish, read back
+        working-directory: ${{ env.RUN_DIR }}/resonans
         run: bash scripts/quickstart_smoke.sh
 
       - name: Logs on failure
         if: ${{ failure() }}
+        working-directory: ${{ env.RUN_DIR }}/resonans
         run: docker compose $COMPOSE_ARGS logs --no-color --tail 80
+
+  # The runner above has to be able to fail. Each control breaks one thing in a
+  # scratch copy of the README and checks the exact exit code and the step it
+  # names. The passing run on a known-good tree is the job above, on the same commit.
+  controls:
+    name: Quickstart runner controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: A documented step that needs a file the repository does not have fails
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          sed 's#--env-file deploy/try/env #--env-file deploy/try/env.missing #' README.md > "$scratch/README.md"
+          if cmp -s README.md "$scratch/README.md"; then
+            echo "::error::the mutation changed nothing: the README's compose command has a new form"
+            exit 1
+          fi
+          rc=0
+          bash scripts/quickstart_readme.sh "$scratch/README.md" "$GITHUB_WORKSPACE" "$scratch/run" 2> "$scratch/err" || rc=$?
+          cat "$scratch/err"
+          [ "$rc" = 3 ] || { echo "::error::expected exit 3, got $rc"; exit 1; }
+          grep -q '^::error::README step 3 failed .*deploy/try/env\.missing' "$scratch/err" \
+            || { echo "::error::the failure does not name the broken step"; exit 1; }
+
+      - name: A Try it block that no longer clones the repository is refused
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          grep -v '^git clone https://github.com/KlangHaus/resonans.git$' README.md > "$scratch/README.md"
+          if cmp -s README.md "$scratch/README.md"; then
+            echo "::error::the mutation changed nothing: the README's clone line has a new form"
+            exit 1
+          fi
+          rc=0
+          bash scripts/quickstart_readme.sh "$scratch/README.md" "$GITHUB_WORKSPACE" "$scratch/run" 2> "$scratch/err" || rc=$?
+          cat "$scratch/err"
+          [ "$rc" = 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          grep -q 'no longer starts with' "$scratch/err" \
+            || { echo "::error::the refusal does not say what changed"; exit 1; }
