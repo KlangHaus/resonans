@@ -41,5 +41,7 @@ export default defineEventHandler(async (event) => {
     email: typeof claims.email === 'string' ? claims.email : undefined,
     name: typeof claims.name === 'string' ? claims.name : undefined,
   })
-  return sendRedirect(event, next || '/', 302)
+  // Checked again here: a transaction stored before this rule existed was
+  // checked by an older one.
+  return sendRedirect(event, safeNext(next, s.editorUrl), 302)
 })

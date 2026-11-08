@@ -324,16 +324,54 @@ describe('GET /auth/login', () => {
     expect(client.buildAuthorizationUrl.mock.calls[1][1]).toHaveProperty('resource', 'https://cms.example/api')
   })
 
-  it.each(['/content/post', '/', '/a?b=c'])('keeps the local destination %s', async (next) => {
-    expect(await nextAfter(next)).toBe(next)
+  // What matters is where a browser lands, so every cell resolves the stored
+  // destination as a browser resolves a Location header (WHATWG URL, which Node
+  // shares) and asserts the origin.
+  const lands = (location: string) => new URL(location, 'https://cms.example')
+
+  it.each([
+    ['protocol-relative', '//evil.example'],
+    ['absolute, other host', 'https://evil.example/x'],
+    ['absolute, same host other port', 'https://cms.example:8443/x'],
+    ['backslash', '/\\evil.example'],
+    ['slash backslash', '/\\/evil.example'],
+    ['tab', '/\t/evil.example'],
+    ['leading tab', '\t//evil.example'],
+    ['newline', '/\n/evil.example'],
+    ['carriage return', '/\r/evil.example'],
+    ['javascript:', 'javascript:alert(1)'],
+    // Same origin after resolving, but the path is //evil.example, which a
+    // browser reads as a host. Only the `//` rule stops it.
+    ['dot segment to a double slash', '/.//evil.example'],
+    ['empty', ''],
+  ])('%s: replaced by the start page', async (_, next) => {
+    const stored = await nextAfter(next)
+    expect(stored).toBe('/')
+    expect(lands(stored).origin).toBe('https://cms.example')
   })
 
-  it.each(['https://evil.example', '//evil.example', '/\\evil.example', 'evil.example', 'javascript:alert(1)', ''])(
-    'replaces the destination %s with the start page',
-    async (next) => {
-      expect(await nextAfter(next)).toBe('/')
-    },
-  )
+  // Encoded forms stay encoded: they are paths on this editor, not hosts.
+  it.each([
+    ['encoded tab', '/%09/evil.example'],
+    ['encoded slashes', '/%2F%2Fevil.example'],
+    ['encoded backslash', '/%5Cevil.example'],
+    ['no leading slash', 'evil.example'],
+  ])('%s: stays on this editor', async (_, next) => {
+    const stored = await nextAfter(next)
+    expect(stored.startsWith('//')).toBe(false)
+    expect(lands(stored).origin).toBe('https://cms.example')
+  })
+
+  // The control that shows the cells above can see a difference: a real path
+  // comes back, so they do not pass because everything becomes '/'.
+  it.each([
+    ['the start page', '/', '/'],
+    ['a path', '/content/post', '/content/post'],
+    ['a path with query and fragment', '/content?type=post#latest', '/content?type=post#latest'],
+    ['this editor as an absolute URL', 'https://cms.example/content', '/content'],
+  ])('POSITIVE CONTROL: %s is kept', async (_, next, want) => {
+    expect(await nextAfter(next)).toBe(want)
+  })
 
   it('is a 404 in dev mode', async () => {
     runtime.issuer = ''
@@ -357,6 +395,11 @@ describe('GET /auth/callback', () => {
       idToken: 'the-id-token',
       user: { sub: 'user-1', email: 'a@example.org', name: 'A' },
     })
+  })
+
+  it('checks a stored destination again before redirecting to it', async () => {
+    client.authorizationCodeGrant.mockResolvedValue(tokens())
+    expect(redirects(await callback(started({ next: '/\t/evil.example' })))).toBe('/')
   })
 
   it('checks state, PKCE and nonce, and requires an ID token', async () => {

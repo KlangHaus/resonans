@@ -96,6 +96,25 @@ export function postLogoutRedirectUri(s: OidcSettings): string {
   return `${s.editorUrl}/login`
 }
 
+/** Where to send the editor after login: a path on this editor, or the start
+ *  page. A pattern on the raw string is not enough, because the browser's URL
+ *  parser rewrites what it reads. So the value is resolved with the same WHATWG
+ *  parser, and the result must have this editor's origin and a path that does
+ *  not start with `//` (which a browser reads as a host in a Location header).
+ *  Ported from KlangHaus/backstage web/server/utils/oidc.ts. */
+export function safeNext(raw: unknown, editorUrl: string): string {
+  if (typeof raw !== 'string' || raw === '') return '/'
+  const origin = new URL(editorUrl).origin
+  let u: URL
+  try {
+    u = new URL(raw, origin)
+  } catch {
+    return '/'
+  }
+  if (u.origin !== origin || u.pathname.startsWith('//')) return '/'
+  return u.pathname + u.search + u.hash
+}
+
 // --- Sessions --------------------------------------------------------------
 
 export interface EditorUser {
