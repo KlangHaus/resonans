@@ -1,3 +1,10 @@
+## [3.2.2](https://github.com/KlangHaus/resonans/compare/v3.2.1...v3.2.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* **studio:** end the provider session on logout, and say so when it does not ([#178](https://github.com/KlangHaus/resonans/issues/178)) ([7edc032](https://github.com/KlangHaus/resonans/commit/7edc032eb676b96a9a0592117d0c98b184c80daf))
+
 ## [3.2.1](https://github.com/KlangHaus/resonans/compare/v3.2.0...v3.2.1) (2026-11-08)
 
 
