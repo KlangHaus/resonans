@@ -1,3 +1,10 @@
+# [3.3.0](https://github.com/KlangHaus/resonans/compare/v3.2.2...v3.3.0) (2026-11-08)
+
+
+### Features
+
+* **studio:** add a setting that makes logout fail when the provider offers no logout ([e9e6cdf](https://github.com/KlangHaus/resonans/commit/e9e6cdf4045857f436ce0f67f9597c454fc462f6))
+
 ## [3.2.2](https://github.com/KlangHaus/resonans/compare/v3.2.1...v3.2.2) (2026-11-08)
 
 
