@@ -63,7 +63,7 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestDeliverySchemaFlagsTheQuizAsServerSideOnly(t *testing.T) {
-	h := NewRouter(Deps{Store: content.NewMemoryStore(), Registry: reg(t)})
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: content.NewMemoryStore(), Registry: reg(t)})
 	rec := get(h, "/delivery/v1/schema", "", tenantA.String())
 	if rec.Code != http.StatusOK {
 		t.Fatalf("schema = %d, body=%s", rec.Code, rec.Body)
@@ -131,7 +131,7 @@ func TestDeliveryStoreFailureIsLoggedNotLeaked(t *testing.T) {
 		failGet:     true,
 	}
 	secret := "preview-secret"
-	h := NewRouter(Deps{Store: stub, Registry: reg(t), PreviewSecret: secret, Logger: logger})
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: stub, Registry: reg(t), PreviewSecret: secret, Logger: logger})
 	tok := preview.Sign([]byte(secret), preview.Claims{
 		Tenant: tenantA.String(), Type: "page", Slug: "x", Exp: time.Now().Add(time.Minute).Unix(),
 	})
@@ -172,12 +172,12 @@ func TestDeliveryPreviewRefusals(t *testing.T) {
 
 	// No secret configured: preview does not exist, even for a token that
 	// would verify under some secret.
-	off := NewRouter(Deps{Store: s, Registry: reg(t)})
+	off := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: s, Registry: reg(t)})
 	if rec := get(off, "/delivery/v1/preview/page/d?token="+preview.Sign([]byte(secret), valid), "", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("preview with no secret = %d, want 404", rec.Code)
 	}
 
-	on := NewRouter(Deps{Store: s, Registry: reg(t), PreviewSecret: secret})
+	on := NewRouter(Deps{TrustHeaderWithoutToken: true, Store: s, Registry: reg(t), PreviewSecret: secret})
 	if rec := get(on, "/delivery/v1/preview/page/d?token="+preview.Sign([]byte(secret), valid), "", ""); rec.Code != http.StatusOK {
 		t.Fatalf("control: a valid token = %d, want 200", rec.Code)
 	}
@@ -214,7 +214,7 @@ func TestDeliveryCatalogOrderAndTruncation(t *testing.T) {
 		doc("same-pub-newer", uuid.New(), at(time.Hour), time.Minute),
 		doc("newest", uuid.New(), at(2*time.Hour), 0),
 	}
-	h := NewRouter(Deps{Registry: reg(t), Store: storeStub{
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: storeStub{
 		MemoryStore: content.NewMemoryStore(),
 		list:        func() ([]content.Document, error) { return append([]content.Document(nil), docs...), nil },
 	}})
@@ -244,7 +244,7 @@ func TestDeliveryCatalogOrderAndTruncation(t *testing.T) {
 		for i := range many {
 			many[i] = doc(fmt.Sprintf("p%d", i), uuid.New(), at(time.Duration(i)*time.Second), 0)
 		}
-		h := NewRouter(Deps{Registry: reg(t), Store: storeStub{
+		h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: storeStub{
 			MemoryStore: content.NewMemoryStore(),
 			list:        func() ([]content.Document, error) { return many, nil },
 		}})

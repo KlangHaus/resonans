@@ -21,39 +21,54 @@ const ScopeOrgHeader = "X-Scope-OrgID"
 //     (constant-time compared). On success the tenant is taken from
 //     X-Scope-OrgID and put on the context as the Actor. A missing/invalid
 //     token → 401. This is the production shape.
-//   - serviceToken == "" (dev/test only): the request passes through; if an
-//     X-Scope-OrgID header is present a dev service Actor is set from it. app.Run
-//     makes production boot-fail unless a token is configured, so the header is
-//     never trusted unauthenticated in production (anti-spoof).
+//   - serviceToken == "" and trustHeaderWithoutToken (dev/test only): the
+//     request passes through; if an X-Scope-OrgID header is present a dev service
+//     Actor is set from it. app.Run sets the flag only from DeliveryDevAuth(),
+//     which requires RESONANS_DEV_AUTH=1 and is never true in production.
+//   - serviceToken == "" without the flag: every request is refused with 401.
+//     The middleware does not rely on the boot gate to stay closed: a caller
+//     that passes an empty token by mistake gets a closed surface, not an open one.
+//
+// With a token configured the flag changes nothing.
 //
 // The delivery path serves ONLY published content (enforced by the handlers).
-func ServiceMiddleware(serviceToken string, logger *slog.Logger) func(http.Handler) http.Handler {
+func ServiceMiddleware(serviceToken string, trustHeaderWithoutToken bool, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if serviceToken == "" {
+			if serviceToken == "" && trustHeaderWithoutToken {
 				if org := r.Header.Get(ScopeOrgHeader); org != "" {
-					actor := Actor{Sub: "service-dev", Tenant: org}
-					ctx := WithActor(r.Context(), actor)
-					setSpanActor(ctx, actor)
-					next.ServeHTTP(w, r.WithContext(ctx))
+					serveAs(next, w, r, Actor{Sub: "service-dev", Tenant: org})
 					return
 				}
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			m := bearerRe.FindStringSubmatch(r.Header.Get("Authorization"))
-			if m == nil || subtle.ConstantTimeCompare([]byte(m[1]), []byte(serviceToken)) != 1 {
+			if !validServiceToken(r.Header.Get("Authorization"), serviceToken) {
 				if logger != nil {
 					logger.Warn("delivery_service_auth_failed")
 				}
 				unauthorized(w, "invalid service credential")
 				return
 			}
-			actor := Actor{Sub: "service", Tenant: r.Header.Get(ScopeOrgHeader)}
-			ctx := WithActor(r.Context(), actor)
-			setSpanActor(ctx, actor)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			serveAs(next, w, r, Actor{Sub: "service", Tenant: r.Header.Get(ScopeOrgHeader)})
 		})
 	}
+}
+
+// validServiceToken reports whether authorization is "Bearer <want>". An empty
+// want is never valid, whatever the header holds, so an unset token cannot be
+// matched by an empty bearer.
+func validServiceToken(authorization, want string) bool {
+	if want == "" {
+		return false
+	}
+	m := bearerRe.FindStringSubmatch(authorization)
+	return m != nil && subtle.ConstantTimeCompare([]byte(m[1]), []byte(want)) == 1
+}
+
+// serveAs runs next with actor on the request context and the span.
+func serveAs(next http.Handler, w http.ResponseWriter, r *http.Request, actor Actor) {
+	ctx := WithActor(r.Context(), actor)
+	setSpanActor(ctx, actor)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }

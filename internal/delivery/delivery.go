@@ -38,13 +38,17 @@ const DefaultLocale = "da"
 
 // Deps are the collaborators the delivery API needs.
 type Deps struct {
-	Store         content.Store
-	Registry      *schema.Registry
-	Assets        AssetResolver // may be nil (asset ids then pass through unresolved)
-	ServiceToken  string        // "" in dev/test (X-Scope-OrgID trusted directly)
-	PreviewSecret string        // verifies preview tokens; empty disables preview
-	DefaultLocale string        // "" means DefaultLocale
-	Logger        *slog.Logger
+	Store        content.Store
+	Registry     *schema.Registry
+	Assets       AssetResolver // may be nil (asset ids then pass through unresolved)
+	ServiceToken string        // "" in dev/test, together with TrustHeaderWithoutToken
+	// TrustHeaderWithoutToken lets X-Scope-OrgID through with no service token.
+	// Dev/test only: app.Run sets it from config.DeliveryDevAuth(). Without it an
+	// empty ServiceToken refuses every request.
+	TrustHeaderWithoutToken bool
+	PreviewSecret           string // verifies preview tokens; empty disables preview
+	DefaultLocale           string // "" means DefaultLocale
+	Logger                  *slog.Logger
 }
 
 // Handlers holds the wired dependencies.
@@ -78,7 +82,7 @@ func NewRouter(d Deps) http.Handler {
 	// A single published document by type + slug (e.g. a lesson/page).
 	mux.HandleFunc("GET /delivery/v1/{type}/{slug}", h.getPublished)
 
-	return auth.ServiceMiddleware(d.ServiceToken, d.Logger)(mux)
+	return auth.ServiceMiddleware(d.ServiceToken, d.TrustHeaderWithoutToken, d.Logger)(mux)
 }
 
 // deliverySchema exposes the block library + per-doc-type allowlists so
