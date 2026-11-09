@@ -77,8 +77,33 @@ func (s *PostgresStore) List(ctx context.Context, tenantID uuid.UUID, f ListFilt
 		conds = append(conds, "deleted_at is not null")
 	case DeletedInclude:
 	}
+	key, order := "created_at", "created_at desc, id asc"
+	if f.Order == OrderPublished {
+		key, order = "published_at", "published_at desc nulls last, id asc"
+	}
+	if c := f.After; c != nil {
+		args = append(args, c.ID)
+		idArg := len(args)
+		if f.Order == OrderPublished && c.At.IsZero() {
+			// The cursor sits among the documents without a publish date, which
+			// sort last: only those with a greater id remain.
+			conds = append(conds, fmt.Sprintf("(published_at is null and id > $%d)", idArg))
+		} else {
+			args = append(args, c.At)
+			atArg := len(args)
+			cond := fmt.Sprintf("(%[1]s < $%[2]d or (%[1]s = $%[2]d and id > $%[3]d)", key, atArg, idArg)
+			if f.Order == OrderPublished {
+				cond += " or published_at is null"
+			}
+			conds = append(conds, cond+")")
+		}
+	}
 	q := "select " + documentColumns + " from resonans_app.documents where " +
-		strings.Join(conds, " and ") + " order by created_at desc, id asc"
+		strings.Join(conds, " and ") + " order by " + order
+	if f.Limit > 0 {
+		args = append(args, f.Limit)
+		q += fmt.Sprintf(" limit $%d", len(args))
+	}
 
 	out := make([]Document, 0)
 	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {

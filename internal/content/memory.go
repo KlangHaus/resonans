@@ -62,12 +62,14 @@ func (s *MemoryStore) List(_ context.Context, tenantID uuid.UUID, f ListFilter) 
 		}
 		out = append(out, cloneDoc(d))
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return out[i].ID.String() < out[j].ID.String()
-		}
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
+	sort.Slice(out, func(i, j int) bool { return before(out[i], out[j], f.Order) })
+	if f.After != nil {
+		start := sort.Search(len(out), func(i int) bool { return startsAfter(out[i], *f.After, f.Order) })
+		out = out[start:]
+	}
+	if f.Limit > 0 && len(out) > f.Limit {
+		out = out[:f.Limit]
+	}
 	return out, nil
 }
 

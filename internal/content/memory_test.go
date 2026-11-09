@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -222,4 +225,60 @@ func TestMemoryReturnsCopies(t *testing.T) {
 	if string(got.Body) == string(d.Body) {
 		t.Error("store returned a shared Body slice — mutation leaked")
 	}
+}
+
+// OrderPublished is the catalog order: newest publish date first, a document
+// without one last, ties on id. A page that starts After a cursor continues that
+// order exactly, so walking the pages yields every document once.
+func TestMemoryListOrderPublishedPages(t *testing.T) {
+	t0 := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) *time.Time { v := t0.Add(d); return &v }
+	id := func(n int) uuid.UUID { return uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", n)) }
+	s := NewMemoryStore()
+	for _, d := range []Document{
+		{ID: id(9), Slug: "no-date-b", CreatedAt: t0.Add(9 * time.Hour)},
+		{ID: id(8), Slug: "no-date-a", CreatedAt: t0.Add(8 * time.Hour)},
+		{ID: id(2), Slug: "tie-b", PublishedAt: at(time.Hour), CreatedAt: t0},
+		{ID: id(5), Slug: "old", PublishedAt: at(0), CreatedAt: t0},
+		{ID: id(1), Slug: "tie-a", PublishedAt: at(time.Hour), CreatedAt: t0.Add(time.Minute)},
+		{ID: id(3), Slug: "newest", PublishedAt: at(2 * time.Hour), CreatedAt: t0},
+	} {
+		d.TenantID, d.Type, d.Status = tenantA, "post", StatusPublished
+		s.byID[d.ID] = d
+	}
+	f := ListFilter{Type: "post", Status: StatusPublished, Order: OrderPublished}
+	want := "newest,tie-a,tie-b,old,no-date-a,no-date-b"
+	all, err := s.List(context.Background(), tenantA, f)
+	if err != nil || slugs(all) != want {
+		t.Fatalf("List = %s, %v; want %s", slugs(all), err, want)
+	}
+	// Every page size, including ones whose cut falls among the undated.
+	for limit := 1; limit <= len(all)+1; limit++ {
+		var walked []Document
+		page := f
+		page.Limit = limit
+		for i := 0; i < len(all)+2; i++ {
+			got, err := s.List(context.Background(), tenantA, page)
+			if err != nil {
+				t.Fatalf("limit %d: %v", limit, err)
+			}
+			walked = append(walked, got...)
+			if len(got) < limit {
+				break
+			}
+			last := got[len(got)-1]
+			page.After = &ListCursor{At: last.SortKey(OrderPublished), ID: last.ID}
+		}
+		if slugs(walked) != want {
+			t.Errorf("limit %d: pages walk %s, want %s", limit, slugs(walked), want)
+		}
+	}
+}
+
+func slugs(docs []Document) string {
+	out := make([]string, len(docs))
+	for i, d := range docs {
+		out[i] = d.Slug
+	}
+	return strings.Join(out, ",")
 }

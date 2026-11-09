@@ -3,6 +3,7 @@ package apidocs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -346,6 +347,14 @@ func responsesRouter(t *testing.T, secret []byte) http.Handler {
 	if _, err := store.Create(ctx, responsesTenant, content.CreateInput{Type: "course", Slug: "draft", Title: "Draft"}); err != nil {
 		t.Fatalf("seed draft: %v", err)
 	}
+	// A second published course, so a one-document page has a next page.
+	more, err := store.Create(ctx, responsesTenant, content.CreateInput{Type: "course", Slug: "more", Title: "More"})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := store.Publish(ctx, responsesTenant, more.ID); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
 	return delivery.NewRouter(delivery.Deps{Store: store, Registry: reg, ServiceToken: responsesToken, PreviewSecret: string(secret)})
 }
 
@@ -402,6 +411,8 @@ func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
 	calls := []deliveryCall{
 		{"schema", "/delivery/v1/schema", "/delivery/v1/schema", true, true, nil, 200},
 		{"catalog", "/delivery/v1/{type}", "/delivery/v1/course", true, true, nil, 200},
+		{"catalog, a page with a next page", "/delivery/v1/{type}", "/delivery/v1/course?limit=1", true, true, nil, 200},
+		{"catalog, a limit out of range", "/delivery/v1/{type}", "/delivery/v1/course?limit=0", true, true, nil, 400},
 		{"one document", documentRoute, documentURL, true, true, nil, 200},
 		{"no service token", documentRoute, documentURL, false, true, nil, 401},
 		{"no tenant", "/delivery/v1/{type}", "/delivery/v1/course", true, false, nil, 403},
@@ -414,8 +425,18 @@ func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
 	for _, c := range calls {
 		t.Run(c.name, func(t *testing.T) { expectDocumented(t, doc, h, c) })
 	}
-	t.Run("not modified", func(t *testing.T) {
+	t.Run("catalog, the next page", func(t *testing.T) {
 		_, rec := send(h, calls[2])
+		var page struct {
+			NextCursor string `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil || page.NextCursor == "" {
+			t.Fatalf("no nextCursor on a one-document page of two (%v): %s", err, rec.Body.String())
+		}
+		expectDocumented(t, doc, h, deliveryCall{"next page", "/delivery/v1/{type}", "/delivery/v1/course?limit=1&cursor=" + page.NextCursor, true, true, nil, 200})
+	})
+	t.Run("not modified", func(t *testing.T) {
+		_, rec := send(h, calls[4])
 		etag := rec.Header().Get("ETag")
 		if etag == "" {
 			t.Fatal("no ETag from the document request, so the 304 cannot be requested")
@@ -423,7 +444,7 @@ func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
 		expectDocumented(t, doc, h, deliveryCall{"not modified", documentRoute, documentURL, true, true, map[string]string{"If-None-Match": etag}, 304})
 	})
 	t.Run("CONTROL: an envelope with an extra field is refused", func(t *testing.T) {
-		validatorRefusesAnExtraField(t, doc, h, calls[2])
+		validatorRefusesAnExtraField(t, doc, h, calls[4])
 	})
 }
 
