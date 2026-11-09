@@ -309,8 +309,14 @@ from a browser.
 | `GET` | `/delivery/v1/{type}` · `/delivery/v1/{type}/{slug}` |
 | `GET` | `/delivery/v1/preview/{type}/{slug}` |
 
-**Unauthenticated** — `/healthz`, `/readyz`, and `/_assets/{key}` when Resonans serves
-asset bytes itself.
+**API reference** — `/docs/v1/` renders the OpenAPI document, which is served at
+`/docs/v1/openapi.yaml` and kept in [docs/api/openapi.yaml](docs/api/openapi.yaml). It lists
+every route above. The delivery API's responses carry schemas, and a test checks the
+handlers' responses against them; the editor API's response bodies are not described yet.
+
+**Unauthenticated** — `/healthz`, `/readyz`, the API reference under `/docs/v1/`, the
+visual-editing script at `/bridge/v1/resonans-bridge.js`, and `/_assets/{key}` when
+Resonans serves asset bytes itself.
 
 ## Deleting content
 
