@@ -97,7 +97,7 @@ The images are public, so no login is needed. They are built for **amd64 only**:
 Silicon or another arm64 machine, build from source as above.
 
 ```bash
-export RESONANS_VERSION=3.3.0   # the tag has no "v"
+export RESONANS_VERSION=3.3.1   # the tag has no "v"
 docker compose pull
 docker compose up -d --no-build
 ```
