@@ -9,6 +9,10 @@
 #
 # Production runs the published image behind a reverse proxy, against the shared
 # ops-Postgres — this file is dev-only and does NOT model that topology.
+#
+# Both ports bind to 127.0.0.1, not to every interface as Docker would by default:
+# the API trusts a tenant header from anyone here, and Postgres has a fixed
+# password. Neither may be reachable from another machine.
 services:
   postgres:
     image: postgres:17-alpine
@@ -17,7 +21,7 @@ services:
       POSTGRES_PASSWORD: resonans
       POSTGRES_DB: resonans
     ports:
-      - "${RESONANS_PG_PORT:-5433}:5432"
+      - "127.0.0.1:${RESONANS_PG_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U resonans"]
       interval: 5s
@@ -43,7 +47,7 @@ services:
       # explicit opt-in: without it the server refuses to start.
       RESONANS_DEV_AUTH: "1"
     ports:
-      - "${RESONANS_API_PORT:-3000}:3000"
+      - "127.0.0.1:${RESONANS_API_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
