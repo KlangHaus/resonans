@@ -1,4 +1,4 @@
-// Conventional Commits — matches the KlangHaus org convention.
+// Conventional Commits.
 export default {
   extends: ['@commitlint/config-conventional'],
   ignores: [(message) => /Signed-off-by: dependabot\[bot\]/i.test(message)],

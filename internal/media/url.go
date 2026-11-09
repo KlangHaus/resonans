@@ -10,7 +10,7 @@ import (
 // Optimizer transform parameters (resizing happens at the edge — Resonans just
 // stores the original + emits transform URLs).
 type URLBuilder struct {
-	cdnBase string // Bunny pull-zone base, e.g. https://cdn.klanghaus.dk
+	cdnBase string // Bunny pull-zone base, e.g. https://cdn.example.com
 }
 
 // NewURLBuilder constructs a URL builder for the given CDN base.

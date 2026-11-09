@@ -19,7 +19,7 @@ type AssetResolver interface {
 	ResolveAsset(ctx context.Context, tenantID uuid.UUID, assetID string) (map[string]any, bool)
 }
 
-// Envelope is the [etude]-locked delivery shape (§D): metadata + resolved
+// Envelope is the delivery shape consumers depend on: metadata + resolved
 // `data` (non-block fields) + `components` (the doc-type's block field). i18n
 // fields are resolved to the requested locale (LocaleFallback flags any fallback
 // to the default locale); asset ids are expanded to CDN URLs.
@@ -69,7 +69,7 @@ func BuildEnvelope(ctx context.Context, tenantID uuid.UUID, doc content.Document
 		env.Data[f.Name] = rc.resolveValue(f, v)
 	}
 	// The document title is a metadata column (not a body field); surface it in
-	// data so consumers (Etude course/lesson/summary) have it.
+	// data so consumers rendering only `data` have it.
 	if _, exists := env.Data["title"]; !exists {
 		env.Data["title"] = doc.Title
 	}
@@ -204,7 +204,7 @@ func (rc *resolveCtx) resolveBlocks(v any) []map[string]any {
 		bt, _ := blk["_type"].(string)
 		def, ok := rc.reg.Block(bt)
 		if !ok {
-			out = append(out, blk) // unknown block → raw passthrough (Etude renders a graceful fallback)
+			out = append(out, blk) // unknown block → raw passthrough (the consumer renders a fallback)
 			continue
 		}
 		resolved := rc.resolveFields(def.Fields, blk)

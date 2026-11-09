@@ -27,7 +27,7 @@ type VideoMeta struct {
 //
 // Metadata uses the provider's PUBLIC oEmbed endpoint (no auth) — sufficient for
 // public/unlisted videos. Private/tenant-restricted videos need the per-tenant
-// token (owned by Etude's tenant_registry.video_account_ref) — a follow-up that
+// token, held by the consumer rather than by Resonans — a follow-up that
 // respects that boundary.
 type VideoProvider interface {
 	Name() string

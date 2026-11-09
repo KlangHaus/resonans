@@ -3,7 +3,7 @@
 The Resonans editor — a **schema-driven**, **theme-agnostic** Nuxt 4 SPA. It has
 **no hardcoded content types**: the nav, document lists and forms are all
 rendered from the backend registry (`GET /api/v1/schema`), so the same editor
-serves Etude course/lesson content, blog posts, marketing pages and email — one
+serves course and lesson content, blog posts, marketing pages and email — one
 editor, many domains.
 
 ## Design principles

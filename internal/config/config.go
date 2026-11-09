@@ -1,6 +1,5 @@
 // Package config loads the Resonans CMS configuration from the process
-// environment. It mirrors the hand-rolled pattern used across the KlangHaus Go
-// services (permissions/notifications): "empty string means unset" coercion,
+// environment with a hand-rolled pattern: "empty string means unset" coercion,
 // return-error-not-os.Exit so tests decide behavior.
 //
 // Deploy contract: DATABASE_URL + PUBLIC_URL come from the environment, a
@@ -50,7 +49,7 @@ type Config struct {
 	LogLevel         string
 
 	// PublicURL is the canonical externally-reachable base URL of this CMS
-	// (https://cms.klanghaus.dk in prod). Deploy contract: PUBLIC_URL.
+	// (e.g. https://cms.example.com). Deploy contract: PUBLIC_URL.
 	PublicURL string
 
 	// DatabaseURL is the Postgres DSN for the content-DB (Beslutning K,

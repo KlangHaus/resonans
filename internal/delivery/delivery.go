@@ -1,7 +1,6 @@
-// Package delivery is the tenant-scoped, read-only content delivery API
-// consumed server-side by our Nuxt sites (Etude's Nitro + klanghaus.dk) — the
-// Fase 2 surface that lets a tenant's site render its real, published content
-// (Etude M5). It serves ONLY published documents.
+// Package delivery is the tenant-scoped, read-only content delivery API that a
+// tenant's site calls server-side to render its published content. It serves
+// ONLY published documents.
 //
 // It is a trusted service-to-service path: the caller authenticates as a
 // service (auth.ServiceMiddleware) and conveys the tenant via X-Scope-OrgID.
@@ -204,7 +203,8 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 // The counter alone was not enough: a body rewritten without a version bump
 // (the sanitize-backfill, resonans#53) kept its ETag, so a revalidating cache
 // got 304 and kept the dirty copy. Every write sets updated_at, so any change
-// to the stored body changes the ETag. Etude caches per tenant/doc/locale/ETag.
+// to the stored body changes the ETag. A consumer caches per tenant, document,
+// locale and ETag.
 func etagFor(locale string, d content.Document) string {
 	return fmt.Sprintf(`"%s.v%d.%d"`, locale, d.Version, d.UpdatedAt.UnixMicro())
 }
