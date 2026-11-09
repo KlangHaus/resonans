@@ -254,25 +254,33 @@ func TestMemoryListOrderPublishedPages(t *testing.T) {
 	}
 	// Every page size, including ones whose cut falls among the undated.
 	for limit := 1; limit <= len(all)+1; limit++ {
-		var walked []Document
-		page := f
-		page.Limit = limit
-		for i := 0; i < len(all)+2; i++ {
-			got, err := s.List(context.Background(), tenantA, page)
-			if err != nil {
-				t.Fatalf("limit %d: %v", limit, err)
-			}
-			walked = append(walked, got...)
-			if len(got) < limit {
-				break
-			}
-			last := got[len(got)-1]
-			page.After = &ListCursor{At: last.SortKey(OrderPublished), ID: last.ID}
-		}
-		if slugs(walked) != want {
-			t.Errorf("limit %d: pages walk %s, want %s", limit, slugs(walked), want)
+		list := func(f ListFilter) ([]Document, error) { return s.List(context.Background(), tenantA, f) }
+		if got := walkPages(t, list, f, limit, len(all)); got != want {
+			t.Errorf("limit %d: pages walk %s, want %s", limit, got, want)
 		}
 	}
+}
+
+// walkPages lists f in pages of limit, each starting after the last document
+// of the one before, and returns the slugs of every page in order. It stops
+// after n+2 pages, so a cursor that never advances fails instead of hanging.
+func walkPages(t *testing.T, list func(ListFilter) ([]Document, error), f ListFilter, limit, n int) string {
+	t.Helper()
+	var walked []Document
+	f.Limit = limit
+	for i := 0; i < n+2; i++ {
+		got, err := list(f)
+		if err != nil || len(got) > limit {
+			t.Fatalf("limit %d: a page of %d, %v", limit, len(got), err)
+		}
+		walked = append(walked, got...)
+		if len(got) < limit {
+			break
+		}
+		last := got[len(got)-1]
+		f.After = &ListCursor{At: last.SortKey(f.Order), ID: last.ID}
+	}
+	return slugs(walked)
 }
 
 func slugs(docs []Document) string {

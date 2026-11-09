@@ -294,23 +294,9 @@ func TestPostgresListOrderPublishedPages(t *testing.T) {
 		t.Fatalf("List = %s, %v; want %s", slugs(all), err, want)
 	}
 	for limit := 1; limit <= len(all)+1; limit++ {
-		var walked []Document
-		page := f
-		page.Limit = limit
-		for i := 0; i < len(all)+2; i++ {
-			got, err := app.List(ctx, tenant, page)
-			if err != nil {
-				t.Fatalf("limit %d: %v", limit, err)
-			}
-			walked = append(walked, got...)
-			if len(got) < limit {
-				break
-			}
-			last := got[len(got)-1]
-			page.After = &ListCursor{At: last.SortKey(OrderPublished), ID: last.ID}
-		}
-		if slugs(walked) != want {
-			t.Errorf("limit %d: pages walk %s, want %s", limit, slugs(walked), want)
+		list := func(f ListFilter) ([]Document, error) { return app.List(ctx, tenant, f) }
+		if got := walkPages(t, list, f, limit, len(all)); got != want {
+			t.Errorf("limit %d: pages walk %s, want %s", limit, got, want)
 		}
 	}
 }
