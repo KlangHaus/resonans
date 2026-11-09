@@ -904,9 +904,11 @@ body {
   }
 
   // Text links only: a grundtone button inside the block keeps its own colour.
-  // Both rules have the same specificity, so without `:not` the winner was
-  // whichever came later in the bundle, and that order changed in grundtone 3.
-  a:not(.gt-btn) {
+  // Both rules have the same specificity, so without the exclusion the winner
+  // was whichever came later in the bundle, and that order changed in
+  // grundtone 3. `:where()` keeps this rule at (0,1,1): a bare `:not(.gt-btn)`
+  // would raise it to (0,2,1) and also beat `.kh-prose a` on the legal pages.
+  a:where(:not(.gt-btn)) {
     color: var(--color-text);
     text-decoration: underline;
     text-underline-offset: 2px;
