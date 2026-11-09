@@ -14,5 +14,8 @@ staticClients:
   - id: resonans-editor
     name: Resonans editor
     secret: try-local-only-client-secret
+    # 8080 is the README's port. 3010 is for running beside another stack that
+    # holds 8080 (STUDIO_PORT=3010, see Tiltfile).
     redirectURIs:
       - http://localhost:8080/auth/callback
+      - http://localhost:3010/auth/callback
