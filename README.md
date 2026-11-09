@@ -68,6 +68,10 @@ cd resonans
 docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml up -d --build
 ```
 
+That one command starts the whole product from this repository: Postgres, the database
+migrations, the content API on <http://localhost:3000> and the editor on
+<http://localhost:8080>. Nothing else needs to be installed or cloned.
+
 Open <http://localhost:8080> and press log in. You land as an administrator without a
 password: [Dex](https://dexidp.io), an independent OpenID Connect provider, runs alongside
 with a connector that approves everyone. The passwords in `deploy/try/env` are public, so
@@ -368,6 +372,11 @@ metadata over public endpoints, with no token.
 
 `golangci-lint` does not include `gosec`, so running only the former is a green about a
 different set of tools than CI's.
+
+With [Tilt](https://tilt.dev), `tilt up` runs the same stack as [Try it](#try-it), built
+from your checkout. If ports 8080 and 3000 are taken, use
+`STUDIO_PORT=3010 API_PORT=3015 tilt up`. `tilt up -- --dev` runs the development
+stack instead: no login, the editor as a live-reloading dev server, and the examples.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 

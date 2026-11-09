@@ -1,84 +1,56 @@
-# Resonans CMS — local dev (Tilt-on-Compose, Beslutning P).
+# Resonans — run the whole product locally with Tilt.
 #
-# Standalone:            cd resonans && tilt up
-# From central Tiltfile: include('../resonans/Tiltfile')   # adjust relative path
+#   tilt up              the README's "Try it" stack: Postgres, migrations, the
+#                        API, the editor and Dex as the login provider
+#   tilt up -- --dev     the development stack instead (dev.Tiltfile): no login,
+#                        the editor as a live-reloading dev server, the examples
 #
-# Dev-mode needs NO secrets (see docker-compose.tilt.yml): tenant via
-# X-Dev-Tenant (editor) / X-Scope-OrgID (delivery), in-memory storage, boot
-# auto-migrate. Server on http://localhost:3000 (healthz: /healthz).
+# The default runs compose.yml + compose.try.yml with deploy/try/env, the same
+# files and the same command the README gives an installer, so what you see
+# here is what someone who clones the repository gets. Images are built from
+# this checkout.
+#
+# Editor http://localhost:8080 (press log in: Dex approves everyone), API
+# http://localhost:3000. Beside another stack that holds those ports:
+#
+#   STUDIO_PORT=3010 API_PORT=3015 tilt up --port 10351
+#
+# The editor's port is part of its login redirect, which Dex only accepts for
+# the ports registered in deploy/try/dex.yaml: 8080 and 3010.
+#
+# Remove the stack and its data with:
+#   docker compose --env-file deploy/try/env -f compose.yml -f compose.try.yml down -v
 
-# Host ports, overridable so this stack can run beside another one (the
-# platform's Tilt holds 3000 and 5433). Defaults are the ports documented here.
-#   RESONANS_API_PORT=3060 RESONANS_PG_PORT=5434 tilt up --port 10351
-api_port = os.getenv('RESONANS_API_PORT', '3000')
-pg_port = os.getenv('RESONANS_PG_PORT', '5433')
-studio_port = os.getenv('RESONANS_STUDIO_PORT', '3030')
-site_port = os.getenv('RESONANS_SITE_PORT', '3050')
-api_url = 'http://localhost:' + api_port
-studio_url = 'http://localhost:' + studio_port
-site_url = 'http://localhost:' + site_port
-# docker-compose.tilt.yml reads the two it maps.
-os.putenv('RESONANS_API_PORT', api_port)
-os.putenv('RESONANS_PG_PORT', pg_port)
+config.define_bool('dev')
+cfg = config.parse()
 
-docker_compose('docker-compose.tilt.yml')
+if cfg.get('dev', False):
+    include('dev.Tiltfile')
+else:
+    studio_port = os.getenv('STUDIO_PORT', '8080')
+    api_port = os.getenv('API_PORT', '3000')
+    if studio_port not in ['8080', '3010']:
+        fail('STUDIO_PORT=' + studio_port + ': Dex accepts the login redirect on 8080 or 3010 only (deploy/try/dex.yaml).')
+    editor_url = 'http://localhost:' + studio_port
+    api_url = 'http://localhost:' + api_port
+    # Compose reads these from the environment before deploy/try/env, so they
+    # override it, and keep the URLs the stack builds in step with its ports.
+    os.putenv('STUDIO_PORT', studio_port)
+    os.putenv('API_PORT', api_port)
+    os.putenv('EDITOR_URL', editor_url)
+    os.putenv('PUBLIC_URL', api_url)
 
-# Tilt builds the Go image from the compose `build:` context and live-reloads on
-# source changes. Group everything under a 'resonans' label.
-dc_resource('postgres', labels=['resonans'])
-dc_resource('resonans', labels=['resonans'])
+    docker_compose(
+        ['compose.yml', 'compose.try.yml'],
+        env_file='deploy/try/env',
+        project_name='resonans',
+    )
 
-# Manual button: seed the explainers demo course (all block types + quiz + page)
-# for the dev tenant 11111111-1111-1111-1111-111111111111. Run once after up.
-local_resource(
-    'resonans-seed',
-    cmd='docker compose -f docker-compose.tilt.yml --profile seed run --rm resonans-seed',
-    labels=['resonans'],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    resource_deps=['resonans'],
-)
-
-# --- Example: klanghaus.dk on Resonans (examples/klanghaus-site) ---
-# The marketing site, landing pages and blog of klanghaus.dk, with every word and
-# photo served by this Resonans. Press "klanghaus-site-seed" once after
-# "resonans-seed" (the blog posts come from that one), then open
-# http://localhost:3050.
-local_resource(
-    'klanghaus-site-seed',
-    cmd='node seed/seed.mjs',
-    dir='examples/klanghaus-site',
-    env={'RESONANS_URL': api_url, 'RESONANS_TENANT': '11111111-1111-1111-1111-111111111111'},
-    labels=['examples'],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    resource_deps=['resonans'],
-)
-# The editor (Resonans Studio) in dev mode — no login, tenant via X-Dev-Tenant —
-# so live preview works out of the box: open a page and press "Visuel". The
-# site's /preview route accepts frames only from this origin (studioOrigin).
-local_resource(
-    'resonans-studio',
-    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port ' + studio_port,
-    serve_dir='studio',
-    serve_env={
-        'RESONANS_DEV_API': api_url,
-        'NUXT_PUBLIC_DEV_TENANT': '11111111-1111-1111-1111-111111111111',
-    },
-    links=[link(studio_url, 'Resonans editor')],
-    labels=['resonans'],
-    resource_deps=['resonans'],
-)
-local_resource(
-    'klanghaus-site',
-    serve_cmd='pnpm install --frozen-lockfile && pnpm dev --port ' + site_port,
-    serve_dir='examples/klanghaus-site',
-    serve_env={
-        'NUXT_RESONANS_URL': api_url,
-        'NUXT_PUBLIC_RESONANS_PUBLIC_URL': api_url,
-        'NUXT_PUBLIC_STUDIO_ORIGIN': studio_url,
-    },
-    links=[link(site_url, 'klanghaus.dk on Resonans')],
-    labels=['examples'],
-    resource_deps=['resonans'],
-)
+    dc_resource('postgres', new_name='resonans-postgres', labels=['resonans'])
+    dc_resource('migrate', new_name='resonans-migrate', labels=['resonans'])
+    dc_resource('dex', new_name='resonans-dex', labels=['resonans'],
+                links=[link('http://dex.localhost:5556/dex/.well-known/openid-configuration', 'Dex discovery')])
+    dc_resource('api', new_name='resonans-api', labels=['resonans'],
+                links=[link(api_url + '/readyz', 'API'), link(api_url + '/docs/v1/', 'API reference')])
+    dc_resource('studio', new_name='resonans-studio', labels=['resonans'],
+                links=[link(editor_url, 'Resonans editor')])

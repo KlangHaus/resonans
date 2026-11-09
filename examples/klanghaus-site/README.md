@@ -21,7 +21,7 @@ content, and a blog, all edited in Resonans.
 With Tilt, from the repository root:
 
 ```bash
-tilt up
+tilt up -- --dev
 ```
 
 Then press **resonans-seed** (the blog posts) and **klanghaus-site-seed** (the pages and photos) in
