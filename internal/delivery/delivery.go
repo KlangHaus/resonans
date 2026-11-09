@@ -182,7 +182,7 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	etag := etagFor(h.locale(r), d)
+	etag := etagFor(h.locale(r), h.defaultLocale, d)
 	if r.Header.Get("If-None-Match") == etag {
 		w.Header().Set("ETag", etag)
 		w.WriteHeader(http.StatusNotModified)
@@ -205,8 +205,11 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 // (the sanitize-backfill, resonans#53) kept its ETag, so a revalidating cache
 // got 304 and kept the dirty copy. Every write sets updated_at, so any change
 // to the stored body changes the ETag. Etude caches per tenant/doc/locale/ETag.
-func etagFor(locale string, d content.Document) string {
-	return fmt.Sprintf(`"%s.v%d.%d"`, locale, d.Version, d.UpdatedAt.UnixMicro())
+func etagFor(locale, defaultLocale string, d content.Document) string {
+	// The default locale is in it too: it decides every field the requested
+	// locale lacks, so changing RESONANS_DEFAULT_LOCALE changes the body of the
+	// same document, and a cache must not keep the old one on 304.
+	return fmt.Sprintf(`"%s.%s.v%d.%d"`, locale, defaultLocale, d.Version, d.UpdatedAt.UnixMicro())
 }
 
 // expandCourseTree replaces course.data.modules (an array of module refs) with
