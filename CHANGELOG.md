@@ -1,3 +1,10 @@
+## [3.3.1](https://github.com/KlangHaus/resonans/compare/v3.3.0...v3.3.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **auth:** pin and harden the delivery auth gate ([70171ba](https://github.com/KlangHaus/resonans/commit/70171baf6448880af6f6377a9f97e4d52fc54f62))
+
 # [3.3.0](https://github.com/KlangHaus/resonans/compare/v3.2.2...v3.3.0) (2026-11-08)
 
 
