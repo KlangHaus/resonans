@@ -341,7 +341,7 @@ func Run(ctx context.Context) error {
 }
 
 // Seed inserts the explainers demo dataset for the tenant in RESONANS_SEED_TENANT.
-// Run as a one-shot (`resonans seed`) against staging so consumers (Etude M5) can
+// Run as a one-shot (`resonans seed`) against a staging instance so consumers can
 // render real content. Connects as the app role; the stores set the tenant GUC.
 func Seed(ctx context.Context) error {
 	cfg, err := config.Load()

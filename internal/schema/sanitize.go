@@ -85,7 +85,8 @@ func SanitizeRichText(html string) string { return richTextPolicy.Sanitize(html)
 //
 // Everything else stays byte-identical, and that is safe because nothing renders
 // it as HTML unsanitized: the Studio sanitizes at render whatever the format,
-// Etude renders non-html rich text as text, and blog escapes all but "html".
+// and a delivery consumer is expected to render non-html rich text as text or
+// escape it.
 // Structured (portable-text-like) rich text keeps its text; only a `href` that
 // is not http(s)/mailto is removed.
 func SanitizeDocument(r *Registry, docType string, body json.RawMessage) (json.RawMessage, error) {

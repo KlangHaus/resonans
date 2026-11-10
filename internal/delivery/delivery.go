@@ -1,7 +1,6 @@
-// Package delivery is the tenant-scoped, read-only content delivery API
-// consumed server-side by our Nuxt sites (Etude's Nitro + klanghaus.dk) — the
-// Fase 2 surface that lets a tenant's site render its real, published content
-// (Etude M5). It serves ONLY published documents.
+// Package delivery is the tenant-scoped, read-only content delivery API that a
+// tenant's site calls server-side to render its published content. It serves
+// ONLY published documents.
 //
 // It is a trusted service-to-service path: the caller authenticates as a
 // service (auth.ServiceMiddleware) and conveys the tenant via X-Scope-OrgID.
@@ -85,6 +84,11 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("GET /delivery/v1/{type}", h.listPublished)
 	// A single published document by type + slug (e.g. a lesson/page).
 	mux.HandleFunc("GET /delivery/v1/{type}/{slug}", h.getPublished)
+	// The same document by type + id, for a consumer that holds a reference
+	// ({type, id}) and not a slug. by-id comes first, not after {type}: Go's mux
+	// refuses /{type}/by-id/{id} next to /preview/{type}/{slug}, since both
+	// match /preview/by-id/x and neither is more specific.
+	mux.HandleFunc("GET /delivery/v1/by-id/{type}/{id}", h.getPublishedByID)
 
 	return auth.ServiceMiddleware(d.ServiceToken, d.TrustHeaderWithoutToken, d.Logger)(mux)
 }
@@ -280,6 +284,30 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
+	h.writeDocument(w, r, tid, d)
+}
+
+func (h *Handlers) getPublishedByID(w http.ResponseWriter, r *http.Request) {
+	tid, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.publishedByID(r.Context(), tid, r.PathValue("id"))
+	if err == nil && d.Type != r.PathValue("type") {
+		// The id names a document of another type: not this route's document.
+		err = content.ErrNotFound
+	}
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	h.writeDocument(w, r, tid, d)
+}
+
+// writeDocument answers with one published document, or 304 when the request
+// already holds its ETag. Both single-document routes end here, so a document
+// has one ETag and one body whichever key fetched it.
+func (h *Handlers) writeDocument(w http.ResponseWriter, r *http.Request, tid uuid.UUID, d content.Document) {
 	etag := etagFor(h.locale(r), h.defaultLocale, d)
 	if r.Header.Get("If-None-Match") == etag {
 		w.Header().Set("ETag", etag)
@@ -302,7 +330,8 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 // The counter alone was not enough: a body rewritten without a version bump
 // (the sanitize-backfill, resonans#53) kept its ETag, so a revalidating cache
 // got 304 and kept the dirty copy. Every write sets updated_at, so any change
-// to the stored body changes the ETag. Etude caches per tenant/doc/locale/ETag.
+// to the stored body changes the ETag. A consumer caches per tenant, document,
+// locale and ETag.
 func etagFor(locale, defaultLocale string, d content.Document) string {
 	// The default locale is in it too: it decides every field the requested
 	// locale lacks, so changing RESONANS_DEFAULT_LOCALE changes the body of the
@@ -347,8 +376,11 @@ func (h *Handlers) expandCourseTree(ctx context.Context, tid uuid.UUID, env Enve
 	env.Data["modules"] = modules
 }
 
-// publishedByID fetches a published document by id (tenant-scoped). Non-published
-// or malformed ids yield ErrNotFound so the tree simply omits them.
+// publishedByID fetches a published document by id (tenant-scoped). Non-published,
+// binned or malformed ids yield ErrNotFound so the tree simply omits them.
+//
+// It holds the same conditions as GetPublished, because store.Get does not: Get
+// also returns a document in the bin, and binning keeps status "published".
 func (h *Handlers) publishedByID(ctx context.Context, tid uuid.UUID, idStr string) (content.Document, error) {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -358,7 +390,7 @@ func (h *Handlers) publishedByID(ctx context.Context, tid uuid.UUID, idStr strin
 	if err != nil {
 		return content.Document{}, err
 	}
-	if d.Status != content.StatusPublished {
+	if d.Status != content.StatusPublished || d.IsDeleted() || d.Dataset != content.DefaultDataset {
 		return content.Document{}, content.ErrNotFound
 	}
 	return d, nil
