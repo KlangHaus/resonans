@@ -6,7 +6,7 @@
 // success, and both must name exactly the registered post-logout URI:
 //   - a 302 with that Location;
 //   - a 200 with {"redirect": true, "url": <that URI>}, which some providers
-//     (KlangHaus auth among them) send to a request they read as a fetch.
+//     send to a request they read as a fetch.
 //
 // 🔴 ANYTHING ELSE IS AN ERROR, AND THE LOCAL SESSION STAYS. A provider that did
 // not end its session would sign the editor straight back in on the next login,
@@ -17,7 +17,6 @@
 // NUXT_OIDC_REQUIRE_PROVIDER_LOGOUT=1 says the provider must end it. Then a
 // missing endpoint is an error too: a discovery document that lost it would
 // otherwise turn every logout into a local one without anyone noticing.
-// Ported from KlangHaus/backstage web/server/routes/auth/logout.post.ts.
 export default defineEventHandler(async (event) => {
   const s = oidcSettings()
   if (!s) throw createError({ statusCode: 404 })

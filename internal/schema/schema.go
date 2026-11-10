@@ -6,7 +6,7 @@
 // this registry, which is why the registry is the M5 content-enabler and the
 // hard prerequisite for the Fase 4 editor.
 //
-// Resonans is broad and content-type-agnostic: Etude's LMS types (course,
+// Resonans is broad and content-type-agnostic: the course types (course,
 // module, lesson) are one set of schemas; blog (post) + marketing (page) are
 // others. The block library is shared across all doc-types; each doc-type's
 // blocks field declares an `allow` list, so one library yields the right blocks

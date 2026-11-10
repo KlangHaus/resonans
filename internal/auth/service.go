@@ -7,11 +7,11 @@ import (
 )
 
 // ScopeOrgHeader carries the tenant (org) id on a trusted service-to-service
-// call. Per the [review]-endorsed invariant it is server-set by the calling
-// service (e.g. Etude's Nitro, which resolved the tenant from Host→tenant /
-// the end-user's JWT org-claim) and is ONLY honored on a call that is itself
-// authenticated as a trusted service — it is never trusted from an end-user /
-// browser request. ("X-Scope-OrgID SKAL server-sat, aldrig klient-kontrollerbart".)
+// call. It is set server-side by the calling service (for example a site's
+// server, which resolved the tenant from the request's host or the end user's
+// org claim) and is ONLY honored on a call that is itself authenticated as a
+// trusted service — it is never trusted from an end-user / browser request:
+// X-Scope-OrgID is server-set, never client-controllable.
 const ScopeOrgHeader = "X-Scope-OrgID"
 
 // ServiceMiddleware authenticates a trusted upstream service (the content

@@ -104,8 +104,7 @@ export function postLogoutRedirectUri(s: OidcSettings): string {
  *  page. A pattern on the raw string is not enough, because the browser's URL
  *  parser rewrites what it reads. So the value is resolved with the same WHATWG
  *  parser, and the result must have this editor's origin and a path that does
- *  not start with `//` (which a browser reads as a host in a Location header).
- *  Ported from KlangHaus/backstage web/server/utils/oidc.ts. */
+ *  not start with `//` (which a browser reads as a host in a Location header). */
 export function safeNext(raw: unknown, editorUrl: string): string {
   if (typeof raw !== 'string' || raw === '') return '/'
   const origin = new URL(editorUrl).origin

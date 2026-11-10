@@ -11,9 +11,9 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// Default claim names (ADR 0001 §2). `org` is what KlangHaus' own provider
-// issues (Beslutning K — tenant = BetterAuth organization); both are
-// overridable so any provider's tokens can be read without changing it.
+// Default claim names (ADR 0001 §2). `org` carries the tenant, as an
+// organization id; both are overridable so any provider's tokens can be read
+// without changing it.
 const (
 	DefaultTenantClaim = "org"
 	DefaultRoleClaim   = "resonans_role"

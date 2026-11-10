@@ -6,9 +6,7 @@ import (
 )
 
 // fanout is a slog.Handler that dispatches each record to multiple handlers
-// (stdout JSON + OTLP export). Copied from the permissions/notifications
-// services so the dual-export logging behavior is identical across the
-// KlangHaus Go services.
+// (stdout JSON + OTLP export).
 type fanout struct {
 	handlers []slog.Handler
 }
