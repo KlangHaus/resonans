@@ -89,6 +89,63 @@ type ListFilter struct {
 	// deleted documents, so every existing caller keeps its meaning and no
 	// deleted document can appear in a listing by accident.
 	Deleted DeletedFilter
+	// Order chooses the sort. Ties break on id, ascending.
+	Order ListOrder
+	// After, when set, starts the list after this position in Order.
+	After *ListCursor
+	// Limit caps the documents returned; 0 returns all of them.
+	Limit int
+}
+
+// ListOrder is the order of a List. The zero value is the editor's.
+type ListOrder int
+
+const (
+	// OrderCreated lists the newest-created document first.
+	OrderCreated ListOrder = iota
+	// OrderPublished lists the most recently published document first, and a
+	// document without a publish date last.
+	OrderPublished
+)
+
+// ListCursor is the position a page starts after: the sort key and id of the
+// last document of the previous page. At is the zero time for a document that
+// sorts by a publish date it does not have.
+type ListCursor struct {
+	At time.Time
+	ID uuid.UUID
+}
+
+// SortKey is the time d sorts by in order o: the cursor position after d.
+func (d Document) SortKey(o ListOrder) time.Time {
+	if o == OrderPublished {
+		if d.PublishedAt == nil {
+			return time.Time{}
+		}
+		return *d.PublishedAt
+	}
+	return d.CreatedAt
+}
+
+// before reports whether a sorts before b in order o.
+func before(a, b Document, o ListOrder) bool {
+	ka, kb := a.SortKey(o), b.SortKey(o)
+	if !ka.Equal(kb) {
+		return ka.After(kb) // the zero time is the earliest, so it sorts last
+	}
+	return a.ID.String() < b.ID.String()
+}
+
+// startsAfter reports whether d comes after cursor c in order o.
+func startsAfter(d Document, c ListCursor, o ListOrder) bool {
+	return before(Document{ID: c.ID, CreatedAt: c.At, PublishedAt: cursorPublished(c, o)}, d, o)
+}
+
+func cursorPublished(c ListCursor, o ListOrder) *time.Time {
+	if o != OrderPublished || c.At.IsZero() {
+		return nil
+	}
+	return &c.At
 }
 
 // DeletedFilter is a three-state selector; the zero value is the safe one.

@@ -38,37 +38,44 @@ func (s *MemoryStore) List(_ context.Context, tenantID uuid.UUID, f ListFilter) 
 
 	out := make([]Document, 0)
 	for _, d := range s.byID {
-		if d.TenantID != tenantID {
-			continue
+		if d.TenantID == tenantID && f.matches(d) {
+			out = append(out, cloneDoc(d))
 		}
-		if f.Type != "" && d.Type != f.Type {
-			continue
-		}
-		if f.Status != "" && d.Status != f.Status {
-			continue
-		}
-		// The bin is a separate axis from status: a deleted document keeps the
-		// status it had, so filtering on status alone would show it again.
-		switch f.Deleted {
-		case DeletedExclude:
-			if d.DeletedAt != nil {
-				continue
-			}
-		case DeletedOnly:
-			if d.DeletedAt == nil {
-				continue
-			}
-		case DeletedInclude:
-		}
-		out = append(out, cloneDoc(d))
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return out[i].ID.String() < out[j].ID.String()
-		}
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return before(out[i], out[j], f.Order) })
+	return f.page(out), nil
+}
+
+// matches reports whether d passes f's type, status and bin filters.
+func (f ListFilter) matches(d Document) bool {
+	if f.Type != "" && d.Type != f.Type {
+		return false
+	}
+	if f.Status != "" && d.Status != f.Status {
+		return false
+	}
+	// The bin is a separate axis from status: a deleted document keeps the
+	// status it had, so filtering on status alone would show it again.
+	switch f.Deleted {
+	case DeletedExclude:
+		return d.DeletedAt == nil
+	case DeletedOnly:
+		return d.DeletedAt != nil
+	default:
+		return true
+	}
+}
+
+// page cuts sorted documents to the ones after f.After, at most f.Limit of them.
+func (f ListFilter) page(sorted []Document) []Document {
+	if f.After != nil {
+		start := sort.Search(len(sorted), func(i int) bool { return startsAfter(sorted[i], *f.After, f.Order) })
+		sorted = sorted[start:]
+	}
+	if f.Limit > 0 && len(sorted) > f.Limit {
+		sorted = sorted[:f.Limit]
+	}
+	return sorted
 }
 
 func (s *MemoryStore) Get(_ context.Context, tenantID, id uuid.UUID) (Document, error) {

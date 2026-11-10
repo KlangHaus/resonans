@@ -51,6 +51,25 @@ components:
         server rejects any key that path.Clean would rewrite.
       schema:
         type: string
+    CatalogCursor:
+      name: cursor
+      in: query
+      required: false
+      description: The `nextCursor` of the previous page, passed back unchanged. Its form is not part
+        of the API. A value this API did not return is a 400.
+      schema:
+        type: string
+    CatalogLimit:
+      name: limit
+      in: query
+      required: false
+      description: Documents per page, 1 to 200. Omitted, a page holds 200, as every catalog response
+        did before pagination. Anything else is a 400.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 200
     Deleted:
       name: deleted
       in: query
@@ -181,7 +200,13 @@ components:
             $ref: '#/components/schemas/CatalogItem'
         truncated:
           type: boolean
-          description: True when there were more published documents than one response holds (200).
+          description: True when another page follows, the same as `nextCursor` being present. Kept for
+            consumers that read it.
+        nextCursor:
+          type: string
+          description: Present when another page follows. Pass it as `cursor` to get that page. Pages
+            run from the most recently published document; a document without a publish date comes
+            last, and ties are broken by id.
     DeliverySchema:
       type: object
       required: [docTypes, blocks]
@@ -212,6 +237,12 @@ components:
               fields:
                 type: array
   responses:
+    DeliveryBadRequest:
+      description: A query parameter has a value the API cannot honor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     DeliveryUnauthorized:
       description: No or invalid service token
       content:
@@ -657,11 +688,13 @@ paths:
           $ref: '#/components/responses/DeliveryNotFound'
   /delivery/v1/{type}:
     get:
-      summary: Published documents of a type
+      summary: Published documents of a type, one page at a time
       security:
       - deliveryToken: []
       parameters:
       - $ref: '#/components/parameters/ScopeOrgID'
+      - $ref: '#/components/parameters/CatalogLimit'
+      - $ref: '#/components/parameters/CatalogCursor'
       responses:
         '200':
           description: OK
@@ -669,6 +702,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          $ref: '#/components/responses/DeliveryBadRequest'
         '401':
           $ref: '#/components/responses/DeliveryUnauthorized'
         '403':
