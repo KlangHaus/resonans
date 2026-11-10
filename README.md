@@ -355,6 +355,17 @@ Bunny wins when both are configured: a CDN in front beats an origin shipping ima
 `BUNNY_CDN_BASE` defaults to `PUBLIC_URL` + `/_assets`, so leave it empty unless you
 actually use Bunny.
 
+**Asset URLs are for the reader's browser.** Every asset URL in a delivery response is
+built from `BUNNY_CDN_BASE`, which is fixed at startup, so one address goes into every page
+a site renders. Set `PUBLIC_URL` to the address readers reach Resonans at, never to a
+container or internal hostname. A consumer that fetches asset bytes itself, such as a
+server that resizes images inside the same network as Resonans, should not rely on that
+public address resolving there. When Resonans serves the bytes (`disk` or `memory`, with
+the default `BUNNY_CDN_BASE`), such a consumer replaces the `PUBLIC_URL` part of each URL
+with the address it already uses to reach Resonans, and keeps the rest of the URL as it
+is. With `bunny` the URLs point at the CDN, which a server fetches the same way a browser
+does.
+
 Uploads are typed from their **content**, never from the filename or the client's
 `Content-Type`, against a short allowlist (PNG, JPEG, GIF, WebP, PDF, ZIP, MP3). No
 `text/*` type is accepted, because an SVG or HTML file carrying a script sniffs as

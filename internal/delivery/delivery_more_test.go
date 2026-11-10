@@ -3,6 +3,7 @@ package delivery
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -192,72 +193,130 @@ func TestDeliveryPreviewRefusals(t *testing.T) {
 	}
 }
 
-// The catalog orders by publish date, not by what the store returns: a
-// re-published document rises to the top. Ties fall back to creation date and
-// then id, so the order is total and stable across requests.
-func TestDeliveryCatalogOrderAndTruncation(t *testing.T) {
-	t0 := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	at := func(d time.Duration) *time.Time { v := t0.Add(d); return &v }
-	idA := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
-	idB := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
-	doc := func(slug string, id uuid.UUID, pub *time.Time, created time.Duration) content.Document {
-		return content.Document{
-			ID: id, Type: "post", Slug: slug, Status: content.StatusPublished,
-			PublishedAt: pub, CreatedAt: t0.Add(created), Body: json.RawMessage(`{}`),
+// catalogPage is one decoded catalog response.
+type catalogPage struct {
+	Items      []map[string]any `json:"items"`
+	Truncated  bool             `json:"truncated"`
+	NextCursor string           `json:"nextCursor"`
+}
+
+func catalog(t *testing.T, h http.Handler, query string) (int, catalogPage) {
+	t.Helper()
+	rec := get(h, "/delivery/v1/post"+query, "", tenantA.String())
+	var p catalogPage
+	if rec.Code == http.StatusOK {
+		if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
+			t.Fatalf("decode %s: %v", query, err)
 		}
 	}
-	docs := []content.Document{
-		doc("no-date", uuid.New(), nil, 9*time.Hour),
-		doc("tie-b", idB, at(time.Hour), 0),
-		doc("old", uuid.New(), at(0), 0),
-		doc("tie-a", idA, at(time.Hour), 0),
-		doc("same-pub-newer", uuid.New(), at(time.Hour), time.Minute),
-		doc("newest", uuid.New(), at(2*time.Hour), 0),
-	}
-	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: storeStub{
-		MemoryStore: content.NewMemoryStore(),
-		list:        func() ([]content.Document, error) { return append([]content.Document(nil), docs...), nil },
-	}})
-	rec := get(h, "/delivery/v1/post", "", tenantA.String())
-	var resp struct {
-		Items     []map[string]any `json:"items"`
-		Truncated bool             `json:"truncated"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	var got []string
-	for _, it := range resp.Items {
-		got = append(got, fmt.Sprint(it["slug"]))
-	}
-	want := "newest,same-pub-newer,tie-a,tie-b,old,no-date"
-	if strings.Join(got, ",") != want || resp.Truncated {
-		t.Errorf("order = %s truncated=%v; want %s, not truncated", strings.Join(got, ","), resp.Truncated, want)
-	}
+	return rec.Code, p
+}
 
+func pageSlugs(p catalogPage) []string {
+	out := make([]string, len(p.Items))
+	for i, it := range p.Items {
+		out[i] = fmt.Sprint(it["slug"])
+	}
+	return out
+}
+
+// publishedPosts publishes n posts in order, so p<n-1> is the newest, and adds a
+// draft and a published page that the post catalog must never list.
+func publishedPosts(t *testing.T, n int) *content.MemoryStore {
+	t.Helper()
+	ctx := context.Background()
+	s := content.NewMemoryStore()
+	add := func(typ, slug string, publish bool) {
+		d, err := s.Create(ctx, tenantA, content.CreateInput{Type: typ, Slug: slug, Title: slug, Body: json.RawMessage(`{}`)})
+		if err != nil {
+			t.Fatalf("Create %s: %v", slug, err)
+		}
+		if publish {
+			if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+				t.Fatalf("Publish %s: %v", slug, err)
+			}
+		}
+	}
+	for i := 0; i < n; i++ {
+		add("post", fmt.Sprintf("p%d", i), true)
+	}
+	add("post", "draft", false)
+	add("page", "other-type", true)
+	return s
+}
+
+// Walking the pages with nextCursor yields the one-page catalog exactly: every
+// published post once, in the same order, and the last page says it is the last.
+func TestDeliveryCatalogPagesWalkTheWholeCatalog(t *testing.T) {
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: publishedPosts(t, 5)})
+	code, whole := catalog(t, h, "")
+	if code != http.StatusOK || len(whole.Items) != 5 || whole.Truncated || whole.NextCursor != "" {
+		t.Fatalf("one page = %d, %d items, truncated=%v, cursor=%q; want 200, 5, false, none", code, len(whole.Items), whole.Truncated, whole.NextCursor)
+	}
+	var walked []string
+	sizes := []int{}
+	query := "?limit=2"
+	for i := 0; i < 5; i++ {
+		code, p := catalog(t, h, query)
+		if code != http.StatusOK {
+			t.Fatalf("%s = %d", query, code)
+		}
+		walked = append(walked, pageSlugs(p)...)
+		sizes = append(sizes, len(p.Items))
+		if p.Truncated != (p.NextCursor != "") {
+			t.Errorf("%s: truncated=%v but nextCursor=%q", query, p.Truncated, p.NextCursor)
+		}
+		if p.NextCursor == "" {
+			break
+		}
+		query = "?limit=2&cursor=" + p.NextCursor
+	}
+	if fmt.Sprint(sizes) != "[2 2 1]" || strings.Join(walked, ",") != strings.Join(pageSlugs(whole), ",") {
+		t.Errorf("pages %v walk %v; want [2 2 1] walking %v", sizes, walked, pageSlugs(whole))
+	}
+}
+
+// Without ?limit a request gets the 200 documents every response held before
+// pagination, so a consumer that never sends a limit sees no change.
+func TestDeliveryCatalogDefaultPageIsTheOldCap(t *testing.T) {
 	for _, c := range []struct {
 		n         int
-		wantItems int
 		truncated bool
-	}{{maxList, maxList, false}, {maxList + 1, maxList, true}} {
-		many := make([]content.Document, c.n)
-		for i := range many {
-			many[i] = doc(fmt.Sprintf("p%d", i), uuid.New(), at(time.Duration(i)*time.Second), 0)
+	}{{maxList, false}, {maxList + 1, true}} {
+		h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: publishedPosts(t, c.n)})
+		_, p := catalog(t, h, "")
+		if len(p.Items) != maxList || p.Truncated != c.truncated || (p.NextCursor != "") != c.truncated {
+			t.Errorf("%d posts → %d items, truncated=%v, cursor=%q; want %d, %v", c.n, len(p.Items), p.Truncated, p.NextCursor, maxList, c.truncated)
 		}
-		h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: storeStub{
-			MemoryStore: content.NewMemoryStore(),
-			list:        func() ([]content.Document, error) { return many, nil },
-		}})
-		rec := get(h, "/delivery/v1/post", "", tenantA.String())
-		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("decode: %v", err)
+		if p.Items[0]["slug"] != fmt.Sprintf("p%d", c.n-1) {
+			t.Errorf("%d posts: first item %v, want the newest p%d", c.n, p.Items[0]["slug"], c.n-1)
 		}
-		if len(resp.Items) != c.wantItems || resp.Truncated != c.truncated {
-			t.Errorf("%d documents → %d items, truncated=%v; want %d, %v", c.n, len(resp.Items), resp.Truncated, c.wantItems, c.truncated)
+		if c.truncated {
+			_, rest := catalog(t, h, "?cursor="+p.NextCursor)
+			if len(rest.Items) != 1 || rest.Items[0]["slug"] != "p0" || rest.Truncated {
+				t.Errorf("second page = %v truncated=%v; want only p0, last", pageSlugs(rest), rest.Truncated)
+			}
 		}
-		// The cut keeps the most recently published, not the first stored.
-		if c.truncated && resp.Items[0]["slug"] != fmt.Sprintf("p%d", c.n-1) {
-			t.Errorf("first item after truncation = %v, want the newest p%d", resp.Items[0]["slug"], c.n-1)
+	}
+}
+
+// A limit or cursor the API cannot honor is a 400, never a silent default: a
+// consumer whose cursor were ignored would read page one again and again.
+func TestDeliveryCatalogRefusesBadPageParams(t *testing.T) {
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: publishedPosts(t, 3)})
+	b64 := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	for _, q := range []string{
+		"?limit=0", "?limit=-1", "?limit=201", "?limit=abc", "?limit=1.5",
+		"?cursor=not*base64", "?cursor=" + b64("no-separator"), "?cursor=" + b64("|not-a-uuid"),
+		"?cursor=" + b64("yesterday|"+uuid.NewString()),
+	} {
+		if code, _ := catalog(t, h, q); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", q, code)
+		}
+	}
+	for _, q := range []string{"?limit=1", "?limit=200", "?cursor=" + b64("|"+uuid.NewString())} {
+		if code, _ := catalog(t, h, q); code != http.StatusOK {
+			t.Errorf("%s = %d, want 200", q, code)
 		}
 	}
 }
@@ -334,5 +393,45 @@ func TestBuildEnvelopePassthroughs(t *testing.T) {
 	env := BuildEnvelope(context.Background(), uuid.New(), broken, reg(t), "da", "da", nil)
 	if len(env.Data) != 0 || env.Slug != "b" {
 		t.Errorf("unparsable body: data = %v slug %q; want empty data and the metadata kept", env.Data, env.Slug)
+	}
+}
+
+// A value in neither the requested nor the default locale used to come from
+// Go's random map order: one request answered DE, the next FR, under the same
+// ETag (measured: 760 / 126 / 114 of 1000). Every request must now get the
+// same body, the alphabetically first locale, flagged as a fallback.
+func TestDeliveryLastLocaleFallbackIsTheSameOnEveryRequest(t *testing.T) {
+	ctx := context.Background()
+	s := content.NewMemoryStore()
+	d, err := s.Create(ctx, tenantA, content.CreateInput{
+		Type: "post", Slug: "x", Title: "X",
+		Body: json.RawMessage(`{"excerpt":{"sv":"SV","de":"DE","fr":"FR"}}`),
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: s, DefaultLocale: "da"})
+	bodies := map[string]int{}
+	for i := 0; i < 200; i++ {
+		rec := get(h, "/delivery/v1/post/x?locale=en", "", tenantA.String())
+		bodies[rec.Body.String()]++
+	}
+	if len(bodies) != 1 {
+		t.Fatalf("200 requests gave %d different bodies, want 1", len(bodies))
+	}
+	for body := range bodies {
+		var env struct {
+			Data           map[string]any `json:"data"`
+			LocaleFallback bool           `json:"localeFallback"`
+		}
+		if err := json.Unmarshal([]byte(body), &env); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if env.Data["excerpt"] != "DE" || !env.LocaleFallback {
+			t.Errorf("excerpt = %v, localeFallback = %v; want DE, true", env.Data["excerpt"], env.LocaleFallback)
+		}
 	}
 }

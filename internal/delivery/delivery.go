@@ -10,12 +10,13 @@ package delivery
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,7 +28,9 @@ import (
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
-// maxList caps a catalog response until cursor pagination lands (follow-up).
+// maxList is the largest catalog page, and the page a request gets when it
+// names no ?limit: the one page every catalog response was before pagination,
+// so a consumer that never sends a limit sees no change.
 const maxList = 200
 
 // DefaultLocale is the locale used when a request omits ?locale and as the i18n
@@ -130,45 +133,96 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	limit, after, msg := pageParams(r)
+	if msg != "" {
+		writeJSON(w, http.StatusBadRequest, errBody(msg))
+		return
+	}
+	// Editorial order: most recently published first, so a re-published draft
+	// rises to the top (publishedAt = what the reader sees). The store sorts and
+	// pages, so a page is a slice of that order and not of the stored one. One
+	// document more than the page tells whether another page follows.
 	docs, err := h.store.List(r.Context(), tid, content.ListFilter{
 		Type:   r.PathValue("type"),
 		Status: content.StatusPublished,
+		Order:  content.OrderPublished,
+		After:  after,
+		Limit:  limit + 1,
 	})
 	if err != nil {
 		h.writeErr(w, err)
 		return
 	}
-	// Editorial order: most recently published first, so a re-published draft
-	// rises to the top (publishedAt = what the reader sees). The shared store
-	// List returns created_at desc (right for the editor doc-list); the catalog
-	// re-sorts here. Sort BEFORE truncation so the top-N is by publish date, not
-	// creation date. Published docs always carry PublishedAt; nil sorts last.
-	sort.SliceStable(docs, func(i, j int) bool {
-		pi, pj := docs[i].PublishedAt, docs[j].PublishedAt
-		switch {
-		case pi != nil && pj != nil && !pi.Equal(*pj):
-			return pi.After(*pj)
-		case (pi == nil) != (pj == nil):
-			return pj == nil // a document with a publish date precedes one without
-		case !docs[i].CreatedAt.Equal(docs[j].CreatedAt):
-			return docs[i].CreatedAt.After(docs[j].CreatedAt)
-		default:
-			return docs[i].ID.String() < docs[j].ID.String()
-		}
-	})
-	truncated := false
-	if len(docs) > maxList {
-		docs = docs[:maxList]
-		truncated = true
+	resp := map[string]any{}
+	if len(docs) > limit {
+		docs = docs[:limit]
+		resp["nextCursor"] = encodeCursor(docs[len(docs)-1])
 	}
+	// `truncated` predates nextCursor and says the same thing: another page
+	// follows. It stays for consumers that read it.
+	resp["truncated"] = resp["nextCursor"] != nil
 	locale := h.locale(r)
 	items := make([]map[string]any, 0, len(docs))
 	for _, d := range docs {
 		env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, h.defaultLocale, h.assets)
 		items = append(items, summarize(d, env))
 	}
-	// nextCursor omitted in v1 (single page up to maxList); `truncated` signals more.
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "truncated": truncated})
+	resp["items"] = items
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// pageParams reads ?limit and ?cursor. A bad value is a message for a 400, not
+// a silent default: a consumer whose cursor is ignored would read page one again
+// and again.
+func pageParams(r *http.Request) (limit int, after *content.ListCursor, msg string) {
+	q := r.URL.Query()
+	limit = maxList
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > maxList {
+			return 0, nil, fmt.Sprintf("limit must be a whole number from 1 to %d", maxList)
+		}
+		limit = n
+	}
+	if v := q.Get("cursor"); v != "" {
+		c, ok := decodeCursor(v)
+		if !ok {
+			return 0, nil, "cursor is not one this API returned"
+		}
+		after = &c
+	}
+	return limit, after, ""
+}
+
+// encodeCursor is the opaque position after d in the catalog order: its publish
+// time and id. Consumers pass it back unchanged; its form is not part of the API.
+func encodeCursor(d content.Document) string {
+	at := ""
+	if k := d.SortKey(content.OrderPublished); !k.IsZero() {
+		at = k.UTC().Format(time.RFC3339Nano)
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(at + "|" + d.ID.String()))
+}
+
+func decodeCursor(s string) (content.ListCursor, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return content.ListCursor{}, false
+	}
+	at, id, found := strings.Cut(string(raw), "|")
+	if !found {
+		return content.ListCursor{}, false
+	}
+	c := content.ListCursor{}
+	if c.ID, err = uuid.Parse(id); err != nil {
+		return content.ListCursor{}, false
+	}
+	if at != "" {
+		if c.At, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return content.ListCursor{}, false
+		}
+	}
+	return c, true
 }
 
 func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +235,7 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	etag := etagFor(h.locale(r), d)
+	etag := etagFor(h.locale(r), h.defaultLocale, d)
 	if r.Header.Get("If-None-Match") == etag {
 		w.Header().Set("ETag", etag)
 		w.WriteHeader(http.StatusNotModified)
@@ -205,8 +259,11 @@ func (h *Handlers) getPublished(w http.ResponseWriter, r *http.Request) {
 // got 304 and kept the dirty copy. Every write sets updated_at, so any change
 // to the stored body changes the ETag. A consumer caches per tenant, document,
 // locale and ETag.
-func etagFor(locale string, d content.Document) string {
-	return fmt.Sprintf(`"%s.v%d.%d"`, locale, d.Version, d.UpdatedAt.UnixMicro())
+func etagFor(locale, defaultLocale string, d content.Document) string {
+	// The default locale is in it too: it decides every field the requested
+	// locale lacks, so changing RESONANS_DEFAULT_LOCALE changes the body of the
+	// same document, and a cache must not keep the old one on 304.
+	return fmt.Sprintf(`"%s.%s.v%d.%d"`, locale, defaultLocale, d.Version, d.UpdatedAt.UnixMicro())
 }
 
 // expandCourseTree replaces course.data.modules (an array of module refs) with
