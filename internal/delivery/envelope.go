@@ -154,7 +154,7 @@ func (rc *resolveCtx) resolveValue(f schema.Field, v any) any {
 }
 
 // resolveI18n picks the requested locale, falling back to the default (and
-// flagging it) then to any available value.
+// flagging it) then to the alphabetically first locale the value has.
 func (rc *resolveCtx) resolveI18n(v any) any {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -168,10 +168,19 @@ func (rc *resolveCtx) resolveI18n(v any) any {
 		return val
 	}
 	rc.fellBack = true
-	for _, val := range m {
-		return val
+	// Not "any value": Go's map order is random, so that answered one request
+	// in German and the next in French, under one ETag. The first locale in
+	// alphabetical order is the same on every request.
+	first, found := "", false
+	for k := range m {
+		if !found || k < first {
+			first, found = k, true
+		}
 	}
-	return nil
+	if !found {
+		return nil
+	}
+	return m[first]
 }
 
 func (rc *resolveCtx) resolveArray(f schema.Field, v any) any {

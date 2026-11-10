@@ -726,7 +726,8 @@ paths:
           description: OK
           headers:
             ETag:
-              description: Changes with the locale, the document's version and its last write.
+              description: Changes with the locale, the server's default locale, the document's
+                version and its last write.
               schema:
                 type: string
           content:

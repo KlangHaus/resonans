@@ -395,3 +395,43 @@ func TestBuildEnvelopePassthroughs(t *testing.T) {
 		t.Errorf("unparsable body: data = %v slug %q; want empty data and the metadata kept", env.Data, env.Slug)
 	}
 }
+
+// A value in neither the requested nor the default locale used to come from
+// Go's random map order: one request answered DE, the next FR, under the same
+// ETag (measured: 760 / 126 / 114 of 1000). Every request must now get the
+// same body, the alphabetically first locale, flagged as a fallback.
+func TestDeliveryLastLocaleFallbackIsTheSameOnEveryRequest(t *testing.T) {
+	ctx := context.Background()
+	s := content.NewMemoryStore()
+	d, err := s.Create(ctx, tenantA, content.CreateInput{
+		Type: "post", Slug: "x", Title: "X",
+		Body: json.RawMessage(`{"excerpt":{"sv":"SV","de":"DE","fr":"FR"}}`),
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := s.Publish(ctx, tenantA, d.ID); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	h := NewRouter(Deps{TrustHeaderWithoutToken: true, Registry: reg(t), Store: s, DefaultLocale: "da"})
+	bodies := map[string]int{}
+	for i := 0; i < 200; i++ {
+		rec := get(h, "/delivery/v1/post/x?locale=en", "", tenantA.String())
+		bodies[rec.Body.String()]++
+	}
+	if len(bodies) != 1 {
+		t.Fatalf("200 requests gave %d different bodies, want 1", len(bodies))
+	}
+	for body := range bodies {
+		var env struct {
+			Data           map[string]any `json:"data"`
+			LocaleFallback bool           `json:"localeFallback"`
+		}
+		if err := json.Unmarshal([]byte(body), &env); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if env.Data["excerpt"] != "DE" || !env.LocaleFallback {
+			t.Errorf("excerpt = %v, localeFallback = %v; want DE, true", env.Data["excerpt"], env.LocaleFallback)
+		}
+	}
+}
