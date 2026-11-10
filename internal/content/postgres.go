@@ -56,6 +56,31 @@ func (s *PostgresStore) inTx(ctx context.Context, tenantID uuid.UUID, fn func(pg
 }
 
 func (s *PostgresStore) List(ctx context.Context, tenantID uuid.UUID, f ListFilter) ([]Document, error) {
+	q, args := listQuery(f)
+	out := make([]Document, 0)
+	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, q, args...)
+		if err != nil {
+			return fmt.Errorf("content: list: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			d, err := scanDoc(rows)
+			if err != nil {
+				return fmt.Errorf("content: list scan: %w", err)
+			}
+			out = append(out, d)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// listQuery is the SQL and arguments for List(f).
+func listQuery(f ListFilter) (string, []any) {
 	var (
 		conds = []string{"dataset = '" + DefaultDataset + "'"}
 		args  []any
@@ -77,29 +102,44 @@ func (s *PostgresStore) List(ctx context.Context, tenantID uuid.UUID, f ListFilt
 		conds = append(conds, "deleted_at is not null")
 	case DeletedInclude:
 	}
-	q := "select " + documentColumns + " from resonans_app.documents where " +
-		strings.Join(conds, " and ") + " order by created_at desc, id asc"
-
-	out := make([]Document, 0)
-	err := s.inTx(ctx, tenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, q, args...)
-		if err != nil {
-			return fmt.Errorf("content: list: %w", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			d, err := scanDoc(rows)
-			if err != nil {
-				return fmt.Errorf("content: list scan: %w", err)
-			}
-			out = append(out, d)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return nil, err
+	order := "created_at desc, id asc"
+	if f.Order == OrderPublished {
+		order = "published_at desc nulls last, id asc"
 	}
-	return out, nil
+	if f.After != nil {
+		var cond string
+		cond, args = afterCond(f.Order, *f.After, args)
+		conds = append(conds, cond)
+	}
+	q := "select " + documentColumns + " from resonans_app.documents where " +
+		strings.Join(conds, " and ") + " order by " + order
+	if f.Limit > 0 {
+		args = append(args, f.Limit)
+		q += fmt.Sprintf(" limit $%d", len(args))
+	}
+	return q, args
+}
+
+// afterCond is the condition for the rows after cursor c in order o, with its
+// arguments appended to args.
+func afterCond(o ListOrder, c ListCursor, args []any) (string, []any) {
+	args = append(args, c.ID)
+	idArg := len(args)
+	if o == OrderPublished && c.At.IsZero() {
+		// The cursor sits among the documents without a publish date, which
+		// sort last: only those with a greater id remain.
+		return fmt.Sprintf("(published_at is null and id > $%d)", idArg), args
+	}
+	key := "created_at"
+	if o == OrderPublished {
+		key = "published_at"
+	}
+	args = append(args, c.At)
+	cond := fmt.Sprintf("(%[1]s < $%[2]d or (%[1]s = $%[2]d and id > $%[3]d)", key, len(args), idArg)
+	if o == OrderPublished {
+		cond += " or published_at is null"
+	}
+	return cond + ")", args
 }
 
 func (s *PostgresStore) Get(ctx context.Context, tenantID, id uuid.UUID) (Document, error) {

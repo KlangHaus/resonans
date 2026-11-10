@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -253,3 +254,51 @@ func TestPostgresBin(t *testing.T) {
 		t.Errorf("SoftDelete(unknown id) err = %v, want ErrNotFound", err)
 	}
 }
+
+// The catalog order and its pages in SQL: the same documents, publish dates and
+// ids as the memory store's cell, so both stores answer the same walk.
+func TestPostgresListOrderPublishedPages(t *testing.T) {
+	ctx := context.Background()
+	app, migrator := stores(t)
+	tenant := uuid.New()
+	t0 := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		slug string
+		id   string
+		pub  *time.Duration
+	}{
+		{"no-date-b", "00000000-0000-0000-0000-000000000009", nil},
+		{"no-date-a", "00000000-0000-0000-0000-000000000008", nil},
+		{"tie-b", "00000000-0000-0000-0000-000000000002", durPtr(time.Hour)},
+		{"old", "00000000-0000-0000-0000-000000000005", durPtr(0)},
+		{"tie-a", "00000000-0000-0000-0000-000000000001", durPtr(time.Hour)},
+		{"newest", "00000000-0000-0000-0000-000000000003", durPtr(2 * time.Hour)},
+	} {
+		d := pgDraft(t, app, tenant, "post", c.slug)
+		var pub *time.Time
+		if c.pub != nil {
+			v := t0.Add(*c.pub)
+			pub = &v
+		}
+		// Ids and dates the API cannot set, so the order under test is known.
+		if _, err := migrator.pool.Exec(ctx,
+			`update resonans_app.documents set id = $2, status = 'published', published_at = $3 where id = $1`,
+			d.ID, uuid.MustParse(c.id), pub); err != nil {
+			t.Fatalf("set %s: %v", c.slug, err)
+		}
+	}
+	f := ListFilter{Type: "post", Status: StatusPublished, Order: OrderPublished}
+	want := "newest,tie-a,tie-b,old,no-date-a,no-date-b"
+	all, err := app.List(ctx, tenant, f)
+	if err != nil || slugs(all) != want {
+		t.Fatalf("List = %s, %v; want %s", slugs(all), err, want)
+	}
+	for limit := 1; limit <= len(all)+1; limit++ {
+		list := func(f ListFilter) ([]Document, error) { return app.List(ctx, tenant, f) }
+		if got := walkPages(t, list, f, limit, len(all)); got != want {
+			t.Errorf("limit %d: pages walk %s, want %s", limit, got, want)
+		}
+	}
+}
+
+func durPtr(d time.Duration) *time.Duration { return &d }
