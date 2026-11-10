@@ -1,3 +1,10 @@
+# [3.6.0](https://github.com/KlangHaus/resonans/compare/v3.5.0...v3.6.0) (2026-11-10)
+
+
+### Features
+
+* **delivery:** give catalog pages a weak ETag and answer If-None-Match with 304 ([55b22f0](https://github.com/KlangHaus/resonans/commit/55b22f07e2484708715b646ed0e6f1b89257fe0f))
+
 # [3.5.0](https://github.com/KlangHaus/resonans/compare/v3.4.0...v3.5.0) (2026-11-10)
 
 
