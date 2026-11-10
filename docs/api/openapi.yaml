@@ -742,10 +742,20 @@ paths:
       responses:
         '200':
           description: OK
+          headers:
+            ETag:
+              description: Weak. Changes with the locale, the server's default locale, the page
+                parameters, whether another page follows, and the id, version, last write and
+                publish time of every document on the page.
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '304':
+          description: Not modified. A tag in the request's If-None-Match equals the current ETag
+            by weak comparison.
         '400':
           $ref: '#/components/responses/DeliveryBadRequest'
         '401':

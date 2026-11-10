@@ -10,6 +10,7 @@ package delivery
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -158,15 +159,24 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, err)
 		return
 	}
-	resp := map[string]any{}
-	if len(docs) > limit {
+	more := len(docs) > limit
+	if more {
 		docs = docs[:limit]
+	}
+	locale := h.locale(r)
+	etag := catalogETag(r, locale, h.defaultLocale, docs, more)
+	setRevalidate(w, etag)
+	if etagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	resp := map[string]any{}
+	if more {
 		resp["nextCursor"] = encodeCursor(docs[len(docs)-1])
 	}
 	// `truncated` predates nextCursor and says the same thing: another page
 	// follows. It stays for consumers that read it.
-	resp["truncated"] = resp["nextCursor"] != nil
-	locale := h.locale(r)
+	resp["truncated"] = more
 	items := make([]map[string]any, 0, len(docs))
 	for _, d := range docs {
 		env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, h.defaultLocale, h.assets)
@@ -174,6 +184,46 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 	}
 	resp["items"] = items
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// catalogETag is a weak ETag over everything a catalog page's body is built
+// from: the request's locale and page parameters, the default locale, whether
+// another page follows, and each listed document's id, version, last write and
+// publish time, in order. Not the newest write and the row count: a page that
+// loses one document and gains an older one keeps both, and a cache would be
+// told 304 for a different page.
+func catalogETag(r *http.Request, locale, defaultLocale string, docs []content.Document, more bool) string {
+	q := r.URL.Query()
+	key := fmt.Appendf(nil, "%s|%s|%s|%s|%t", locale, defaultLocale, q.Get("limit"), q.Get("cursor"), more)
+	for _, d := range docs {
+		var published int64
+		if d.PublishedAt != nil {
+			published = d.PublishedAt.UnixMicro()
+		}
+		key = fmt.Appendf(key, "|%s.%d.%d.%d", d.ID, d.Version, d.UpdatedAt.UnixMicro(), published)
+	}
+	sum := sha256.Sum256(key)
+	return `W/"` + base64.RawURLEncoding.EncodeToString(sum[:18]) + `"`
+}
+
+// setRevalidate marks a delivery response cacheable only with revalidation: a
+// cache keeps it, and asks again with etag every time.
+func setRevalidate(w http.ResponseWriter, etag string) {
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+}
+
+// etagMatches is If-None-Match's weak comparison (RFC 9110 §13.1.2): any
+// listed tag, or *, matches when it equals etag with any W/ prefix ignored.
+func etagMatches(header, etag string) bool {
+	want := strings.TrimPrefix(etag, "W/")
+	for _, tag := range strings.Split(header, ",") {
+		tag = strings.TrimSpace(tag)
+		if tag == "*" || strings.TrimPrefix(tag, "W/") == want {
+			return true
+		}
+	}
+	return false
 }
 
 // pageParams reads ?limit and ?cursor. A bad value is a message for a 400, not
@@ -277,8 +327,7 @@ func (h *Handlers) writeDocument(w http.ResponseWriter, r *http.Request, tid uui
 	if d.Type == "course" && strings.Contains(r.URL.Query().Get("expand"), "modules") {
 		h.expandCourseTree(r.Context(), tid, env, locale)
 	}
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	setRevalidate(w, etag)
 	writeJSON(w, http.StatusOK, env)
 }
 
