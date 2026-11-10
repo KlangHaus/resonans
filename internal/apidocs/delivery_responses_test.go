@@ -443,6 +443,14 @@ func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
 		}
 		expectDocumented(t, doc, h, deliveryCall{"not modified", documentRoute, documentURL, true, true, map[string]string{"If-None-Match": etag}, 304})
 	})
+	t.Run("catalog, not modified", func(t *testing.T) {
+		_, rec := send(h, calls[1])
+		etag := rec.Header().Get("ETag")
+		if etag == "" {
+			t.Fatal("no ETag from the catalog request, so the 304 cannot be requested")
+		}
+		expectDocumented(t, doc, h, deliveryCall{"catalog, not modified", "/delivery/v1/{type}", "/delivery/v1/course", true, true, map[string]string{"If-None-Match": etag}, 304})
+	})
 	t.Run("CONTROL: an envelope with an extra field is refused", func(t *testing.T) {
 		validatorRefusesAnExtraField(t, doc, h, calls[4])
 	})

@@ -28,7 +28,7 @@ ready when all eight hold:
 | 2 | Editors log in through any standard OpenID Connect provider, with four roles and a single-tenant mode. | **Yes, for two providers.** CI logs in through Dex; ours runs BetterAuth. Others are untested. |
 | 3 | Write in an English editor: rich text, blocks and media, then draft, preview, publish, history, rollback and a bin. | **Partly.** All of it works in English or Danish, but asset and reference fields ask for a raw id, and the rich text editor is an interim one. |
 | 4 | Define your own content types. | **Partly.** YAML, but compiled in, so it takes a rebuild. |
-| 5 | A site or app reads published content over a documented REST API, with locales, ETags and preview. | **Yes, with limits.** Lists stop at 200 documents with no cursor, and nested expansion only works for the `course` type. |
+| 5 | A site or app reads published content over a documented REST API, with locales, ETags and preview. | **Yes, with limits.** Nested expansion only works for the `course` type. Lists page with a cursor, 200 documents at most per page. |
 | 6 | Tenants are isolated by the database, and CI proves it on every change. | **Yes.** See [Tenant isolation](#tenant-isolation). |
 | 7 | The authors run the same public release that you do. | **Not yet.** Our production is on 1.x. |
 | 8 | The basics for trusting a project: licence, security policy, contributor agreement, signed images with an SBOM, and docs that match the code. | **Yes.** The contributor agreement is a required check. |
