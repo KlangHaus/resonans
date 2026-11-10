@@ -1,3 +1,15 @@
+# [3.4.0](https://github.com/KlangHaus/resonans/compare/v3.3.1...v3.4.0) (2026-11-10)
+
+
+### Bug Fixes
+
+* **delivery:** pick the same locale on every request when both are missing ([7fcc975](https://github.com/KlangHaus/resonans/commit/7fcc97545131c9de6de9fe3a4c35c5fef4261d33))
+
+
+### Features
+
+* **delivery:** page the catalog with ?limit and an opaque nextCursor ([347343b](https://github.com/KlangHaus/resonans/commit/347343bdc8e05e53df01d90c7f8e48152e285c96))
+
 ## [3.3.1](https://github.com/KlangHaus/resonans/compare/v3.3.0...v3.3.1) (2026-11-09)
 
 
