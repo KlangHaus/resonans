@@ -1,3 +1,10 @@
+# [3.5.0](https://github.com/KlangHaus/resonans/compare/v3.4.0...v3.5.0) (2026-11-10)
+
+
+### Features
+
+* **delivery:** serve a published document by id at /delivery/v1/by-id/{type}/{id} ([f859956](https://github.com/KlangHaus/resonans/commit/f859956cbc833b0aa3bffcac27745c74220c0e22))
+
 # [3.4.0](https://github.com/KlangHaus/resonans/compare/v3.3.1...v3.4.0) (2026-11-10)
 
 
