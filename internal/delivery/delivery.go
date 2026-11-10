@@ -165,8 +165,7 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 	}
 	locale := h.locale(r)
 	etag := catalogETag(r, locale, h.defaultLocale, docs, more)
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	setRevalidate(w, etag)
 	if etagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -205,6 +204,13 @@ func catalogETag(r *http.Request, locale, defaultLocale string, docs []content.D
 	}
 	sum := sha256.Sum256(key)
 	return `W/"` + base64.RawURLEncoding.EncodeToString(sum[:18]) + `"`
+}
+
+// setRevalidate marks a delivery response cacheable only with revalidation: a
+// cache keeps it, and asks again with etag every time.
+func setRevalidate(w http.ResponseWriter, etag string) {
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 }
 
 // etagMatches is If-None-Match's weak comparison (RFC 9110 §13.1.2): any
@@ -321,8 +327,7 @@ func (h *Handlers) writeDocument(w http.ResponseWriter, r *http.Request, tid uui
 	if d.Type == "course" && strings.Contains(r.URL.Query().Get("expand"), "modules") {
 		h.expandCourseTree(r.Context(), tid, env, locale)
 	}
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	setRevalidate(w, etag)
 	writeJSON(w, http.StatusOK, env)
 }
 
