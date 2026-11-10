@@ -446,6 +446,36 @@ func TestDeliveryResponsesMatchTheSpec(t *testing.T) {
 	t.Run("CONTROL: an envelope with an extra field is refused", func(t *testing.T) {
 		validatorRefusesAnExtraField(t, doc, h, calls[4])
 	})
+	t.Run("one document by id", func(t *testing.T) {
+		url := "/delivery/v1/by-id/course/" + catalogID(t, h, "intro")
+		rec := expectDocumented(t, doc, h, deliveryCall{"by id", byIDRoute, url, true, true, nil, 200})
+		expectDocumented(t, doc, h, deliveryCall{"by id, not modified", byIDRoute, url, true, true, map[string]string{"If-None-Match": rec.Header().Get("ETag")}, 304})
+		expectDocumented(t, doc, h, deliveryCall{"by id, not a uuid", byIDRoute, "/delivery/v1/by-id/course/intro", true, true, nil, 404})
+		expectDocumented(t, doc, h, deliveryCall{"by id, no tenant", byIDRoute, url, true, false, nil, 403})
+		validatorRefusesAnExtraField(t, doc, h, deliveryCall{"by id", byIDRoute, url, true, true, nil, 200})
+	})
+}
+
+const byIDRoute = "/delivery/v1/by-id/{type}/{id}"
+
+// catalogID reads a published course's id from the catalog, the way a consumer
+// learns it.
+func catalogID(t *testing.T, h http.Handler, slug string) string {
+	t.Helper()
+	_, rec := send(h, deliveryCall{url: "/delivery/v1/course", token: true, scope: true})
+	var page struct {
+		Items []struct{ ID, Slug string } `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	for _, it := range page.Items {
+		if it.Slug == slug {
+			return it.ID
+		}
+	}
+	t.Fatalf("no %q in the catalog: %s", slug, rec.Body.String())
+	return ""
 }
 
 // validatorRefusesAnExtraField shows the validator can fail, or the cells above

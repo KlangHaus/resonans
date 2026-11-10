@@ -88,6 +88,15 @@ components:
         a 400.
       schema:
         type: string
+    DeliveryDocumentID:
+      name: id
+      in: path
+      required: true
+      description: Document identifier. Anything that is not the id of a published document of this
+        type in the tenant, a malformed id included, is the same 404 as a missing slug.
+      schema:
+        type: string
+        format: uuid
     DocumentID:
       name: id
       in: path
@@ -631,6 +640,41 @@ paths:
       responses:
         '200':
           description: OK
+  /delivery/v1/by-id/{type}/{id}:
+    get:
+      summary: One published document, by id
+      description: The same document, body and ETag as /delivery/v1/{type}/{slug}, for a caller that
+        holds a reference ({type, id}) rather than a slug.
+      security:
+      - deliveryToken: []
+      parameters:
+      - $ref: '#/components/parameters/ScopeOrgID'
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag:
+              description: Changes with the locale, the server's default locale, the document's
+                version and its last write.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '304':
+          description: Not modified. The request's If-None-Match equals the current ETag.
+        '401':
+          $ref: '#/components/responses/DeliveryUnauthorized'
+        '403':
+          $ref: '#/components/responses/DeliveryForbidden'
+        '404':
+          $ref: '#/components/responses/DeliveryNotFound'
+        '500':
+          $ref: '#/components/responses/DeliveryServerError'
+    parameters:
+    - $ref: '#/components/parameters/DocType'
+    - $ref: '#/components/parameters/DeliveryDocumentID'
   /delivery/v1/preview/{type}/{slug}:
     get:
       summary: One draft, with a preview token

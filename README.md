@@ -307,6 +307,7 @@ from a browser.
 | --- | --- |
 | `GET` | `/delivery/v1/schema` |
 | `GET` | `/delivery/v1/{type}` · `/delivery/v1/{type}/{slug}` |
+| `GET` | `/delivery/v1/by-id/{type}/{id}` |
 | `GET` | `/delivery/v1/preview/{type}/{slug}` |
 
 **API reference** — `/docs/v1/` renders the OpenAPI document, which is served at
