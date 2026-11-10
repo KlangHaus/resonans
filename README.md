@@ -143,7 +143,8 @@ RESONANS_DEV_AUTH=1 go run ./cmd/resonans
 ```
 
 That runs with an in-memory store and no login, taking the tenant from an `X-Dev-Tenant`
-header. It is for development only, and `RESONANS_DEV_AUTH=1` together with
+header in the editor API and from `X-Scope-OrgID` in the delivery API, from any caller.
+It is for development only, and `RESONANS_DEV_AUTH=1` together with
 `NODE_ENV=production` is refused rather than honoured.
 
 ## Configuration
@@ -157,7 +158,7 @@ them with the reasoning. The ones that decide whether the server starts at all:
 | `RESONANS_JWT_ISSUER` + `RESONANS_JWKS_URL` | yes, both, and **https** | Editor login. Either one missing and the server exits rather than exposing the editor API to an unauthenticated header. In production both must be `https`, because the JWKS is the trust anchor — over plain http anyone on the path can substitute the signing keys. `RESONANS_ALLOW_INSECURE_JWKS=1` waives it deliberately, and every boot then logs the URL. |
 | `RESONANS_JWT_AUDIENCE` | yes, with the two above | The `aud` your provider puts in Resonans' access tokens. Without it the server exits: it would otherwise accept a token minted for any other service at the same provider. |
 | `RESONANS_TENANT_MODE` + `RESONANS_TENANT_ID` | for one organisation | `single` with a UUID serves one tenant and never reads a tenant claim. Default `multi` reads the tenant from `RESONANS_TENANT_CLAIM` (`org`). |
-| `RESONANS_DELIVERY_TOKEN` | yes | Authenticates the trusted read surface. Unset, `/delivery` would trust a tenant header from anyone. |
+| `RESONANS_DELIVERY_TOKEN` | yes | Authenticates the trusted read surface. Unset or blank, the server exits: without it `/delivery` would trust a tenant header from anyone. Only `RESONANS_DEV_AUTH=1` outside production starts it without one. |
 | `RESONANS_STORAGE_DIR` *or* all three `BUNNY_STORAGE_*` | yes, one of them | Where asset bytes live. Neither set, the server exits instead of accepting uploads it will drop on restart. |
 | `PUBLIC_URL` | recommended | The API's externally reachable base URL. Asset URLs are built from it, so a wrong value shows up as broken images, not as an error. |
 | `RESONANS_DEV_AUTH` | never | The single value `1` opens the unauthenticated development paths, outside production only. |
