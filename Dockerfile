@@ -36,7 +36,7 @@
 # target, so an arm64 image needs no emulation. CGO is off, so nothing below links
 # target libraries. The runtime stage only copies files, so nothing executes for the
 # target at all.
-FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS build
 ARG VERSION=dev
 # REVISION = full git sha. Stamped into the binary so /healthz can report which
 # build is running — the OCI label alone is invisible to a running process.
@@ -81,7 +81,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
 # decompressed size (4 381 105). Both are verified in the build: the digest by
 # sha256sum, which logs `/tmp/renderer.js: OK`, and the archive by `gzip -t`.
 # Downloads a JavaScript bundle: the same bytes for every target.
-FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS apidocs
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS apidocs
 ARG SCALAR_VERSION=1.72.4
 ARG SCALAR_SHA256=f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
 # 🔴 THE PIN'S FORMAT IS ASSERTED BEFORE IT IS USED, and that is not belt and
