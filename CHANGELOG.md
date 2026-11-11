@@ -1,3 +1,10 @@
+## [3.6.1](https://github.com/KlangHaus/resonans/compare/v3.6.0...v3.6.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** build on go 1.26.11 for the net/http fix in GO-2026-6859 ([45b444c](https://github.com/KlangHaus/resonans/commit/45b444c239b6cacbbcd030a919f7a966439f4b49))
+
 # [3.6.0](https://github.com/KlangHaus/resonans/compare/v3.5.0...v3.6.0) (2026-11-10)
 
 
