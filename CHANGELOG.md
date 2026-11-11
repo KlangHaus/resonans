@@ -1,3 +1,10 @@
+## [3.6.2](https://github.com/KlangHaus/resonans/compare/v3.6.1...v3.6.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **delivery:** hash the served body into the ETag, so a binned or restored asset revalidates ([cb00d0d](https://github.com/KlangHaus/resonans/commit/cb00d0db37c3765d557eaeb0c6c6d18e4f6028c7))
+
 ## [3.6.1](https://github.com/KlangHaus/resonans/compare/v3.6.0...v3.6.1) (2026-11-11)
 
 
