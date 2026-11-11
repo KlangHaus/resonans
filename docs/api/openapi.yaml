@@ -654,8 +654,9 @@ paths:
           description: OK
           headers:
             ETag:
-              description: Changes with the locale, the server's default locale, the document's
-                version and its last write.
+              description: Weak. A hash of the body sent, the locale and the server's default
+                locale, so it changes with anything the body shows, including an asset put in or
+                taken out of the bin.
               schema:
                 type: string
           content:
@@ -663,7 +664,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Envelope'
         '304':
-          description: Not modified. The request's If-None-Match equals the current ETag.
+          description: Not modified. A tag in the request's If-None-Match equals the current ETag
+            by weak comparison.
         '401':
           $ref: '#/components/responses/DeliveryUnauthorized'
         '403':
@@ -744,9 +746,9 @@ paths:
           description: OK
           headers:
             ETag:
-              description: Weak. Changes with the locale, the server's default locale, the page
-                parameters, whether another page follows, and the id, version, last write and
-                publish time of every document on the page.
+              description: Weak. A hash of the body sent, the locale, the server's default locale
+                and the page parameters, so it changes with anything the page shows, including an
+                asset put in or taken out of the bin.
               schema:
                 type: string
           content:
@@ -780,8 +782,9 @@ paths:
           description: OK
           headers:
             ETag:
-              description: Changes with the locale, the server's default locale, the document's
-                version and its last write.
+              description: Weak. A hash of the body sent, the locale and the server's default
+                locale, so it changes with anything the body shows, including an asset put in or
+                taken out of the bin.
               schema:
                 type: string
           content:
@@ -789,7 +792,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Envelope'
         '304':
-          description: Not modified. The request's If-None-Match equals the current ETag.
+          description: Not modified. A tag in the request's If-None-Match equals the current ETag
+            by weak comparison.
         '401':
           $ref: '#/components/responses/DeliveryUnauthorized'
         '403':
