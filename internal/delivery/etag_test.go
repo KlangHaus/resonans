@@ -1,31 +1,26 @@
 package delivery
 
-import (
-	"testing"
-	"time"
-
-	"github.com/KlangHaus/resonans/internal/content"
-)
+import "testing"
 
 // A body rewritten without a version bump (the sanitize-backfill) must still
-// change the ETag, or a revalidating cache keeps the old copy on 304.
-func TestETagChangesWithUpdatedAtAtSameVersion(t *testing.T) {
-	t0 := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)
-	before := content.Document{Version: 3, UpdatedAt: t0}
-	after := content.Document{Version: 3, UpdatedAt: t0.Add(time.Second)}
-	if etagFor("da", "da", before) == etagFor("da", "da", after) {
-		t.Fatalf("ETag unchanged across a write at the same version: %s", etagFor("da", "da", before))
+// change the ETag, or a revalidating cache keeps the old copy on 304. The ETag
+// is over the bytes, so any rewrite of them moves it.
+func TestBodyETag(t *testing.T) {
+	base := bodyETag([]byte(`{"v":3}`), "da", "da")
+	if base != bodyETag([]byte(`{"v":3}`), "da", "da") {
+		t.Fatal("ETag not stable for an unchanged body")
 	}
-	same := content.Document{Version: 3, UpdatedAt: t0}
-	if etagFor("da", "da", before) != etagFor("da", "da", same) {
-		t.Fatal("ETag not stable for an unchanged document")
+	if len(base) < 4 || base[:3] != `W/"` {
+		t.Fatalf("ETag %q is not weak", base)
 	}
-	if etagFor("da", "da", before) == etagFor("en", "da", before) {
-		t.Fatal("ETag must differ per locale")
-	}
-	// The default locale fills every field the requested one lacks, so another
-	// default is another body.
-	if etagFor("en", "da", before) == etagFor("en", "sv", before) {
-		t.Fatal("ETag must differ per default locale")
+	for name, other := range map[string]string{
+		"another body":           bodyETag([]byte(`{"v":3} `), "da", "da"),
+		"another locale":         bodyETag([]byte(`{"v":3}`), "en", "da"),
+		"another default locale": bodyETag([]byte(`{"v":3}`), "da", "sv"),
+		"values moved across":    bodyETag([]byte(`{"v":3}`), "dad", "a"),
+	} {
+		if other == base {
+			t.Errorf("%s: same ETag %s", name, base)
+		}
 	}
 }

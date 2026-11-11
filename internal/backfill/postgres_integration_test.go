@@ -127,9 +127,8 @@ func TestPostgresUpdateStaysOnItsTenant(t *testing.T) {
 	}
 }
 
-// Cleaning a document bumps updated_at (the delivery ETag includes it, so a
-// revalidating cache gets the clean body), and NOT the version counter, which
-// numbers the history snapshots.
+// Cleaning a document bumps updated_at (it is a write), and NOT the version
+// counter, which numbers the history snapshots.
 func TestPostgresUpdateBumpsUpdatedAtNotVersion(t *testing.T) {
 	ctx := context.Background()
 	pool := migrated(t)

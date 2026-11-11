@@ -9,6 +9,7 @@
 package delivery
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -164,12 +165,6 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 		docs = docs[:limit]
 	}
 	locale := h.locale(r)
-	etag := catalogETag(r, locale, h.defaultLocale, docs, more)
-	setRevalidate(w, etag)
-	if etagMatches(r.Header.Get("If-None-Match"), etag) {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
 	resp := map[string]any{}
 	if more {
 		resp["nextCursor"] = encodeCursor(docs[len(docs)-1])
@@ -183,26 +178,43 @@ func (h *Handlers) listPublished(w http.ResponseWriter, r *http.Request) {
 		items = append(items, summarize(d, env))
 	}
 	resp["items"] = items
-	writeJSON(w, http.StatusOK, resp)
+	q := r.URL.Query()
+	h.writeRevalidated(w, r, resp, locale, h.defaultLocale, q.Get("limit"), q.Get("cursor"))
 }
 
-// catalogETag is a weak ETag over everything a catalog page's body is built
-// from: the request's locale and page parameters, the default locale, whether
-// another page follows, and each listed document's id, version, last write and
-// publish time, in order. Not the newest write and the row count: a page that
-// loses one document and gains an older one keeps both, and a cache would be
-// told 304 for a different page.
-func catalogETag(r *http.Request, locale, defaultLocale string, docs []content.Document, more bool) string {
-	q := r.URL.Query()
-	key := fmt.Appendf(nil, "%s|%s|%s|%s|%t", locale, defaultLocale, q.Get("limit"), q.Get("cursor"), more)
-	for _, d := range docs {
-		var published int64
-		if d.PublishedAt != nil {
-			published = d.PublishedAt.UnixMicro()
-		}
-		key = fmt.Appendf(key, "|%s.%d.%d.%d", d.ID, d.Version, d.UpdatedAt.UnixMicro(), published)
+// writeRevalidated answers with v, or 304 when the request already holds its
+// ETag. The ETag is a hash of the exact bytes sent and of the request values
+// they were built for. A hash of the stored rows could not see what the body
+// takes from elsewhere: an asset binned or restored changes the body while the
+// document row stays the same, and a cache would be told 304 for the old body.
+// The price is that a 304 builds the whole body before it answers.
+func (h *Handlers) writeRevalidated(w http.ResponseWriter, r *http.Request, v any, request ...string) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		h.writeErr(w, err)
+		return
 	}
-	sum := sha256.Sum256(key)
+	etag := bodyETag(buf.Bytes(), request...)
+	setRevalidate(w, etag)
+	if etagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// bodyETag is a weak ETag over body and the request values it was built for.
+// The request values keep two representations apart even when their bytes are
+// equal, for example two locales of a document with no translated field.
+func bodyETag(body []byte, request ...string) string {
+	key := make([]byte, 0, len(body)+64)
+	for _, v := range request {
+		key = append(key, v...)
+		key = append(key, 0)
+	}
+	sum := sha256.Sum256(append(key, body...))
 	return `W/"` + base64.RawURLEncoding.EncodeToString(sum[:18]) + `"`
 }
 
@@ -314,12 +326,6 @@ func (h *Handlers) getPublishedByID(w http.ResponseWriter, r *http.Request) {
 // already holds its ETag. Both single-document routes end here, so a document
 // has one ETag and one body whichever key fetched it.
 func (h *Handlers) writeDocument(w http.ResponseWriter, r *http.Request, tid uuid.UUID, d content.Document) {
-	etag := etagFor(h.locale(r), h.defaultLocale, d)
-	if r.Header.Get("If-None-Match") == etag {
-		w.Header().Set("ETag", etag)
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
 	locale := h.locale(r)
 	env := BuildEnvelope(r.Context(), tid, d, h.registry, locale, h.defaultLocale, h.assets)
 	// ?expand=modules.lessons: replace a course's module refs with a nested tree
@@ -327,21 +333,7 @@ func (h *Handlers) writeDocument(w http.ResponseWriter, r *http.Request, tid uui
 	if d.Type == "course" && strings.Contains(r.URL.Query().Get("expand"), "modules") {
 		h.expandCourseTree(r.Context(), tid, env, locale)
 	}
-	setRevalidate(w, etag)
-	writeJSON(w, http.StatusOK, env)
-}
-
-// etagFor is the delivery ETag: locale, revision counter AND last-write time.
-// The counter alone was not enough: a body rewritten without a version bump
-// (the sanitize-backfill, resonans#53) kept its ETag, so a revalidating cache
-// got 304 and kept the dirty copy. Every write sets updated_at, so any change
-// to the stored body changes the ETag. A consumer caches per tenant, document,
-// locale and ETag.
-func etagFor(locale, defaultLocale string, d content.Document) string {
-	// The default locale is in it too: it decides every field the requested
-	// locale lacks, so changing RESONANS_DEFAULT_LOCALE changes the body of the
-	// same document, and a cache must not keep the old one on 304.
-	return fmt.Sprintf(`"%s.%s.v%d.%d"`, locale, defaultLocale, d.Version, d.UpdatedAt.UnixMicro())
+	h.writeRevalidated(w, r, env, locale, h.defaultLocale)
 }
 
 // expandCourseTree replaces course.data.modules (an array of module refs) with
