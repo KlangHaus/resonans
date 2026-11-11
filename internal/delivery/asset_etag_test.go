@@ -73,31 +73,36 @@ func (c *assetCase) fetch(path, inm string) (int, string, string) {
 func TestDeliveryETagMovesWhenAnAssetIsBinnedAndRestored(t *testing.T) {
 	for _, path := range []string{courseURL, courseCat} {
 		t.Run(strings.TrimPrefix(path, "/delivery/v1/"), func(t *testing.T) {
-			c := newAssetCase(t)
-			code, live, body := c.fetch(path, "")
-			if code != http.StatusOK || live == "" || !strings.Contains(body, coverURL) {
-				t.Fatalf("live cover: %d ETag %q, cover in body %t; want 200, an ETag, true", code, live, strings.Contains(body, coverURL))
-			}
-			if code, _, _ := c.fetch(path, live); code != http.StatusNotModified {
-				t.Fatalf("unchanged body revalidated = %d, want 304", code)
-			}
-
-			c.assets.binned = true
-			code, binned, body := c.fetch(path, live)
-			if code != http.StatusOK || strings.Contains(body, coverURL) {
-				t.Fatalf("binned cover revalidated with the live ETag = %d, cover in body %t; want 200, false", code, strings.Contains(body, coverURL))
-			}
-			if binned == live {
-				t.Fatalf("ETag %q did not move when the body lost the cover", live)
-			}
-
-			c.assets.binned = false
-			if code, _, _ := c.fetch(path, binned); code != http.StatusOK {
-				t.Fatalf("restored cover revalidated with the binned ETag = %d, want 200", code)
-			}
-			if code, _, _ := c.fetch(path, live); code != http.StatusNotModified {
-				t.Fatalf("restored cover revalidated with the live ETag = %d, want 304", code)
-			}
+			newAssetCase(t).binAndRestore(path)
 		})
+	}
+}
+
+func (c *assetCase) binAndRestore(path string) {
+	t := c.t
+	t.Helper()
+	code, live, body := c.fetch(path, "")
+	if code != http.StatusOK || live == "" || !strings.Contains(body, coverURL) {
+		t.Fatalf("live cover: %d ETag %q, cover in body %t; want 200, an ETag, true", code, live, strings.Contains(body, coverURL))
+	}
+	if code, _, _ := c.fetch(path, live); code != http.StatusNotModified {
+		t.Fatalf("unchanged body revalidated = %d, want 304", code)
+	}
+
+	c.assets.binned = true
+	code, binned, body := c.fetch(path, live)
+	if code != http.StatusOK || strings.Contains(body, coverURL) {
+		t.Fatalf("binned cover revalidated with the live ETag = %d, cover in body %t; want 200, false", code, strings.Contains(body, coverURL))
+	}
+	if binned == live {
+		t.Fatalf("ETag %q did not move when the body lost the cover", live)
+	}
+
+	c.assets.binned = false
+	if code, _, _ := c.fetch(path, binned); code != http.StatusOK {
+		t.Fatalf("restored cover revalidated with the binned ETag = %d, want 200", code)
+	}
+	if code, _, _ := c.fetch(path, live); code != http.StatusNotModified {
+		t.Fatalf("restored cover revalidated with the live ETag = %d, want 304", code)
 	}
 }
