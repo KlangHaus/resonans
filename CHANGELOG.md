@@ -1,3 +1,10 @@
+## [3.6.3](https://github.com/KlangHaus/resonans/compare/v3.6.2...v3.6.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* **seed:** reuse assets on re-run and store sanitized bodies ([31ce866](https://github.com/KlangHaus/resonans/commit/31ce866266193b09ca7248cdc2695319dcf54faf))
+
 ## [3.6.2](https://github.com/KlangHaus/resonans/compare/v3.6.1...v3.6.2) (2026-11-11)
 
 
