@@ -154,14 +154,6 @@ func TestSeedStopsOnEveryFailure(t *testing.T) {
 		}
 	}
 
-	// The asset lookup by storage key can fail too; the run must stop, not
-	// create a duplicate.
-	failing := &faultyMedia{MemoryStore: media.NewMemoryStore(), failList: true}
-	err := Run(ctx, content.NewMemoryStore(), failing, reg, uuid.New())
-	if !errors.Is(err, errInjected) || !strings.Contains(err.Error(), "seed list assets") || failing.creates != 0 {
-		t.Errorf("asset lookup failing: Run = %v after %d creates, want a wrapped 'seed list assets' error and 0", err, failing.creates)
-	}
-
 	// A re-run whose lookup of the existing document fails must not carry on
 	// with a nil id.
 	tenant := uuid.New()
@@ -170,9 +162,19 @@ func TestSeedStopsOnEveryFailure(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 	cs.failGetBySlug = 1
-	err = Run(ctx, cs, media.NewMemoryStore(), reg, tenant)
+	err := Run(ctx, cs, media.NewMemoryStore(), reg, tenant)
 	if !errors.Is(err, errInjected) || !strings.Contains(err.Error(), "seed lookup existing") {
 		t.Errorf("re-run with a failing lookup: Run = %v, want a wrapped 'seed lookup existing' error", err)
+	}
+}
+
+// The asset lookup by storage key can fail too; the run must stop, not create
+// a duplicate.
+func TestSeedStopsWhenTheAssetLookupFails(t *testing.T) {
+	failing := &faultyMedia{MemoryStore: media.NewMemoryStore(), failList: true}
+	err := Run(context.Background(), content.NewMemoryStore(), failing, registry(t), uuid.New())
+	if !errors.Is(err, errInjected) || !strings.Contains(err.Error(), "seed list assets") || failing.creates != 0 {
+		t.Errorf("asset lookup failing: Run = %v after %d creates, want a wrapped 'seed list assets' error and 0", err, failing.creates)
 	}
 }
 
