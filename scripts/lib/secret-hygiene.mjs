@@ -771,6 +771,9 @@ export function readWorkflows() {
 
 // ───────────────────────────────────────────── self-test
 
+/** How many cells secret-hygiene.cells.json must hold. */
+const TABLE_CELLS = 25
+
 /**
  * The table-shaped self-test cells. Read when the cells are built, not at import, so a missing or
  * broken file fails the self-test loudly instead of the guard's live run.
@@ -885,12 +888,22 @@ export function selfTestCells() {
   // beside `bare`) checked by surface A against an allowlist, with the colour it must give. The
   // groups and their reasons are grundtone's (2026-10-22 provoked holes, the folded expression,
   // Bugbot on #291 and #293); the cells are the same, only moved out of code.
-  for (const group of readCellTable()) {
+  const table = readCellTable()
+  for (const group of table) {
     for (const c of group.cells) {
       const files = c.besideBare ? [['a.yml', c.workflow], ['b.yml', bare]] : wf(c.workflow)
       cell(c.label, () => surfaceA(files, c.allow ?? {}), c.expect)
     }
   }
+  // Pinned: a JSON edit that drops a cell would otherwise lower the count and still pass. Changing
+  // the table means changing this number in the same diff.
+  cell(`the cell table holds exactly ${TABLE_CELLS} distinct cells`, () => {
+    const labels = table.flatMap((g) => g.cells.map((c) => c.label))
+    if (labels.length !== TABLE_CELLS || new Set(labels).size !== TABLE_CELLS) {
+      throw new Instrument(`${labels.length} cells, ${new Set(labels).size} distinct; pinned ${TABLE_CELLS}`)
+    }
+    return []
+  }, 'GREEN')
 
   // 🔴 THE REAL-CORPUS CELL. The lesson of v3: 32 synthetic cells could not find the prose false
   // positive, because every fixture was written by the author of the parser. A test suite with no
