@@ -154,7 +154,7 @@ jobs:
       # fork, or Dependabot, whose runs read a different secret scope): a
       # skipped JOB reports no status, and should this check ever become
       # required, those PRs would wait forever for it.
-      - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0 → sonar-scanner 8.1.0.6389
+      - uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.3.0 → sonar-scanner 8.1.0.6389
         if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
 
       # The gate says HOW MANY findings, not WHICH; the detail is behind the
