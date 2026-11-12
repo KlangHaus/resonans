@@ -1,3 +1,10 @@
+## [3.6.5](https://github.com/KlangHaus/resonans/compare/v3.6.4...v3.6.5) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** bump golang.org/x/crypto to v0.59.0 ([#208](https://github.com/KlangHaus/resonans/issues/208)) ([6b0dc00](https://github.com/KlangHaus/resonans/commit/6b0dc00275b25f767c423fcb0fde16e8b8a94c3d))
+
 ## [3.6.4](https://github.com/KlangHaus/resonans/compare/v3.6.3...v3.6.4) (2026-11-12)
 
 
