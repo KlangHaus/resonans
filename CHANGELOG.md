@@ -1,3 +1,10 @@
+## [3.6.4](https://github.com/KlangHaus/resonans/compare/v3.6.3...v3.6.4) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** pin build images to golang 1.27.4-alpine ([c5378f4](https://github.com/KlangHaus/resonans/commit/c5378f4117f448c599065056bbadf3690fae8706))
+
 ## [3.6.3](https://github.com/KlangHaus/resonans/compare/v3.6.2...v3.6.3) (2026-11-12)
 
 
