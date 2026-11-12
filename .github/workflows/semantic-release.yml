@@ -275,4 +275,5 @@ jobs:
       contents: read
       packages: write
       id-token: write # cosign keyless OIDC
-    secrets: inherit
+    # No `secrets:` key: release.yml consumes only secrets.GITHUB_TOKEN, which a called workflow
+    # receives without being passed. `secrets: inherit` handed it every secret the caller can see.
