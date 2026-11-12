@@ -48,6 +48,14 @@ func (f *faultyContent) GetBySlug(ctx context.Context, tid uuid.UUID, typ, slug 
 type faultyMedia struct {
 	*media.MemoryStore
 	failCreate, creates int
+	failList            bool
+}
+
+func (f *faultyMedia) List(ctx context.Context, tid uuid.UUID, lf media.ListFilter) ([]media.Asset, error) {
+	if f.failList {
+		return nil, errInjected
+	}
+	return f.MemoryStore.List(ctx, tid, lf)
 }
 
 func (f *faultyMedia) Create(ctx context.Context, tid uuid.UUID, a media.Asset) (media.Asset, error) {
@@ -157,6 +165,32 @@ func TestSeedStopsOnEveryFailure(t *testing.T) {
 	err := Run(ctx, cs, media.NewMemoryStore(), reg, tenant)
 	if !errors.Is(err, errInjected) || !strings.Contains(err.Error(), "seed lookup existing") {
 		t.Errorf("re-run with a failing lookup: Run = %v, want a wrapped 'seed lookup existing' error", err)
+	}
+}
+
+// The asset lookup by storage key can fail too; the run must stop, not create
+// a duplicate.
+func TestSeedStopsWhenTheAssetLookupFails(t *testing.T) {
+	failing := &faultyMedia{MemoryStore: media.NewMemoryStore(), failList: true}
+	err := Run(context.Background(), content.NewMemoryStore(), failing, registry(t), uuid.New())
+	if !errors.Is(err, errInjected) || !strings.Contains(err.Error(), "seed list assets") || failing.creates != 0 {
+		t.Errorf("asset lookup failing: Run = %v after %d creates, want a wrapped 'seed list assets' error and 0", err, failing.creates)
+	}
+}
+
+// A body the schema accepts but the sanitizer refuses (HTML rich text that is
+// not a string) is refused as a save would refuse it, and never reaches the store.
+func TestSeedRefusesABodyTheSanitizerRefuses(t *testing.T) {
+	cs := content.NewMemoryStore()
+	s := &seeder{ctx: context.Background(), store: cs, assets: media.NewMemoryStore(), reg: registry(t), tenant: uuid.New()}
+	_, err := s.doc("post", "broken", "Broken", map[string]any{
+		"body": []any{block("rich_text", map[string]any{"format": "html", "value": map[string]any{"da": 42}})},
+	})
+	if err == nil || !strings.Contains(err.Error(), "seed sanitize post/broken") {
+		t.Fatalf("doc(non-string HTML) err = %v, want a 'seed sanitize' error", err)
+	}
+	if docs := allDocs(t, cs, s.tenant); len(docs) != 0 {
+		t.Fatalf("a refused document was written anyway: %d documents", len(docs))
 	}
 }
 

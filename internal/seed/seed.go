@@ -18,8 +18,8 @@ import (
 	"github.com/KlangHaus/resonans/internal/schema"
 )
 
-// Run seeds the explainers demo course (+ assets) for a tenant. Idempotent-ish:
-// re-running conflicts on slugs — intended for a fresh tenant/dataset.
+// Run seeds the explainers demo course (+ assets) for a tenant. Re-running is
+// safe: existing documents (by slug) and assets (by storage key) are reused.
 func Run(ctx context.Context, store content.Store, assets media.Store, reg *schema.Registry, tenantID uuid.UUID) error {
 	s := &seeder{ctx: ctx, store: store, assets: assets, reg: reg, tenant: tenantID}
 	return s.run()
@@ -259,8 +259,30 @@ func (s *seeder) seedBlog() error {
 	return nil
 }
 
-// asset creates + returns a media asset id.
+// asset returns the id of the tenant's live asset with this storage key, or
+// creates one. Assets have no unique field, so without the lookup every re-run
+// would add a row that no document points at: the re-run reuses the documents
+// of the first run, and those reference the first run's assets. When earlier
+// runs left duplicates, the oldest is the one those documents reference.
 func (s *seeder) asset(a media.Asset) (uuid.UUID, error) {
+	live, err := s.assets.List(s.ctx, s.tenant, media.ListFilter{})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("seed list assets: %w", err)
+	}
+	var found *media.Asset
+	for i := range live {
+		c := &live[i]
+		if c.StorageKey != a.StorageKey {
+			continue
+		}
+		if found == nil || c.CreatedAt.Before(found.CreatedAt) ||
+			(c.CreatedAt.Equal(found.CreatedAt) && c.ID.String() < found.ID.String()) {
+			found = c
+		}
+	}
+	if found != nil {
+		return found.ID, nil
+	}
 	created, err := s.assets.Create(s.ctx, s.tenant, a)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("seed asset %s: %w", a.Filename, err)
@@ -268,7 +290,8 @@ func (s *seeder) asset(a media.Asset) (uuid.UUID, error) {
 	return created.ID, nil
 }
 
-// doc validates a body against its schema, creates + publishes it, returns its id.
+// doc validates a body against its schema, sanitizes it as a save through the
+// editor API would, creates + publishes it, and returns its id.
 func (s *seeder) doc(typ, slug, title string, body map[string]any) (uuid.UUID, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -276,6 +299,10 @@ func (s *seeder) doc(typ, slug, title string, body map[string]any) (uuid.UUID, e
 	}
 	if err := schema.ValidateDocument(s.reg, typ, raw); err != nil {
 		return uuid.Nil, fmt.Errorf("seed %s/%s invalid: %w", typ, slug, err)
+	}
+	raw, err = schema.SanitizeDocument(s.reg, typ, raw)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("seed sanitize %s/%s: %w", typ, slug, err)
 	}
 	d, err := s.store.Create(s.ctx, s.tenant, content.CreateInput{Type: typ, Slug: slug, Title: title, Body: raw})
 	if errors.Is(err, content.ErrSlugConflict) {
