@@ -93,11 +93,11 @@ export function classify(line) {
 
   // `secrets.NAME`
   for (const m of rest.matchAll(/secrets\.(\w+)/g)) named.push(m[1] ?? '')
-  rest = rest.replace(/secrets\.\w+/g, '')
+  rest = rest.replaceAll(/secrets\.\w+/g, '')
 
   // `secrets['NAME']` / `secrets["NAME"]` — valid expression syntax that v2 could not see.
   for (const m of rest.matchAll(/secrets\[\s*['"](\w+)['"]\s*\]/g)) named.push(m[1] ?? '')
-  rest = rest.replace(/secrets\[\s*['"]\w+['"]\s*\]/g, '')
+  rest = rest.replaceAll(/secrets\[\s*['"]\w+['"]\s*\]/g, '')
 
   // Anything left is a `secrets` token in a form this guard does not understand — `toJSON(secrets)`
   // being the obvious one. Flagging the unknown beats trying to parse it.
@@ -131,7 +131,7 @@ function firstKeyIndent(body, pattern, stopAtTopLevel) {
 /** @param {string} line an `on: ...` line with its value inline */
 function inlineTriggers(line) {
   const rest = line.replace(/^on:\s*/, '').trim()
-  const names = rest.replace(/[[\]]/g, '').split(',').map((x) => x.trim()).filter(Boolean)
+  const names = rest.replaceAll(/[[\]]/g, '').split(',').map((x) => x.trim()).filter(Boolean)
   return names.length > 0 ? new Set(names) : null
 }
 
@@ -184,7 +184,7 @@ export function triggers(text) {
  * @param {string} text
  */
 export function foldExpressions(text) {
-  return text.replace(/\$\{\{[\s\S]*?\}\}/g, (m) => m.replace(/\n\s*/g, ' '))
+  return text.replaceAll(/\$\{\{[\s\S]*?\}\}/g, (m) => m.replaceAll(/\n\s*/g, ' '))
 }
 
 /**
@@ -224,7 +224,7 @@ function environmentName(raw) {
   // Unquote BEFORE the emptiness check (Bugbot on #293): `environment: ""` was a non-empty
   // string until the quotes came off, so it resolved to the name '' and counted as a gate. GitHub
   // reads an empty name as no environment at all.
-  v = v.replace(/^['"]|['"]$/g, '').trim()
+  v = v.replaceAll(/^['"]|['"]$/g, '').trim()
   if (!v || v.includes('${{')) return null
   return v
 }
@@ -428,7 +428,7 @@ function gateGap(job, ungatedEnvs) {
  */
 function lineOf(rawText, job, hit) {
   const lines = rawText.split('\n')
-  const key = new RegExp(String.raw`^ +${job.replace(/[^A-Za-z0-9_-]/g, '')}:\s*(#.*)?$`)
+  const key = new RegExp(String.raw`^ +${job.replaceAll(/[^A-Za-z0-9_-]/g, '')}:\s*(#.*)?$`)
   const at = job === '<file-level>' ? -1 : lines.findIndex((l) => key.test(l))
   for (let i = at + 1; i < lines.length; i += 1) {
     if (!isComment(lines[i]) && hit(lines[i])) return i + 1
@@ -719,7 +719,9 @@ export function applyExemptions(findings, exemptions = EXEMPTIONS, today = isoDa
     const defect = exemptionDefect(e)
     if (defect) {
       violations.push({ rule: 'SH-X3', file: '', line: 0, job: '', secret: e.secret, text: `SH-X3 ${where} ${defect}` })
-    } else if (!findings.some((f) => matches(f, e))) {
+    } else if (findings.some((f) => matches(f, e))) {
+      usable.push(e)
+    } else {
       violations.push({
         rule: 'SH-X2',
         file: '',
@@ -728,8 +730,6 @@ export function applyExemptions(findings, exemptions = EXEMPTIONS, today = isoDa
         secret: e.secret,
         text: `SH-X2 ${where} matches no finding — drop it (tracked in ClickUp ${e.task})`,
       })
-    } else {
-      usable.push(e)
     }
   }
   for (const f of findings) {
@@ -770,6 +770,16 @@ export function readWorkflows() {
 }
 
 // ───────────────────────────────────────────── self-test
+
+/**
+ * The table-shaped self-test cells. Read when the cells are built, not at import, so a missing or
+ * broken file fails the self-test loudly instead of the guard's live run.
+ * @returns {{why: string, cells: {label: string, workflow: string, expect: string,
+ *   besideBare?: boolean, allow?: Record<string,string>}[]}[]}
+ */
+function readCellTable() {
+  return JSON.parse(readFileSync(new URL('./secret-hygiene.cells.json', import.meta.url), 'utf8'))
+}
 
 /**
  * The self-test cells, one axis per cell. Run by `--self-test` in CI (no install) and by
@@ -871,79 +881,16 @@ export function selfTestCells() {
     return []
   }, 'GREEN')
 
-  // 🔴 [grundtone]'s three provoked holes, 2026-10-22. v2 answered "passed", exit 0, on all three.
-  cell('(a) secrets: inherit without environment', () =>
-    surfaceA(wf('jobs:\n  call:\n    uses: ./.github/workflows/deploy.yml\n    secrets: inherit\n'), {}), 'RED')
-  cell('(a) secrets: inherit WITH environment is not flagged', () =>
-    surfaceA([
-      ['a.yml', 'jobs:\n  call:\n    environment:\n      name: x\n    uses: ./x.yml\n    secrets: inherit\n'],
-      ['b.yml', bare],
-    ], { MY_KEY: 'r' }), 'GREEN')
-  cell("(b) secrets['NAME'] bracket form is seen", () =>
-    surfaceA(wf("jobs:\n  a:\n    env:\n      K: ${{ secrets['LEAKY_KEY'] }}\n"), {}), 'RED')
-  cell('(b) bracket form with double quotes', () =>
-    surfaceA(wf('jobs:\n  a:\n    env:\n      K: ${{ secrets["LEAKY_KEY"] }}\n'), {}), 'RED')
-  cell('(b) bracket form inside a gated job is fine', () =>
-    surfaceA(wf("jobs:\n  a:\n    environment:\n      name: x\n    env:\n      K: ${{ secrets['K'] }}\n"), {}), 'GREEN')
-  cell('(c) toJSON(secrets) -> instrument, not a pass', () =>
-    surfaceA(wf('jobs:\n  a:\n    env:\n      ALL: ${{ toJSON(secrets) }}\n'), {}), 'INSTRUMENT')
-  cell('(c) an unknown form is loud even next to a known one', () =>
-    surfaceA([
-      ['a.yml', 'jobs:\n  a:\n    env:\n      ALL: ${{ toJSON(secrets) }}\n'],
-      ['b.yml', bare],
-    ], { MY_KEY: 'r' }), 'INSTRUMENT')
-  // 🔴 The regression that the synthetic fixtures could not show: prose is not a reference.
-  cell('a step NAME mentioning deploy-secrets is not a reference', () =>
-    surfaceA([
-      ['a.yml', 'jobs:\n  a:\n    steps:\n      - name: Assert that deploy-secrets exist (fail-loud)\n        run: echo ok\n'],
-      ['b.yml', bare],
-    ], { MY_KEY: 'r' }), 'GREEN')
-  cell('prose plus a real reference still reports the reference', () =>
-    surfaceA(wf('jobs:\n  a:\n    steps:\n      - name: check deploy-secrets\n        env:\n          K: ${{ secrets.MY_KEY }}\n'), {}), 'RED')
-  cell('explicit secrets: mapping is structural, not unknown', () =>
-    surfaceA(wf('jobs:\n  call:\n    environment:\n      name: x\n    uses: ./x.yml\n    secrets:\n      INNER: ${{ secrets.MY_KEY }}\n'), { MY_KEY: 'r' }), 'GREEN')
-
-  // 🔴 [grundtone]'s fourth fixture: an expression folded across two lines. v3 said "passed".
-  cell('(d) ${{ opened on one line, closed on the next', () =>
-    surfaceA(wf('jobs:\n  a:\n    env:\n      K: ${{\n        secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell('(d) folded expression inside a gated job is fine', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment:\n      name: x\n    env:\n      K: ${{\n        secrets.MY_KEY }}\n'), {}), 'GREEN')
-  cell('(d) an UNCLOSED ${{ must not let the fold eat job keys', () =>
-    surfaceA(wf('jobs:\n  a:\n    env:\n      K: ${{ secrets.MY_KEY\n  b:\n    env:\n      L: ${{ secrets.OTHER }}\n'), {}), 'INSTRUMENT')
-  // [grundtone]'s own negative control: a reusable workflow DECLARES the secrets it accepts under
-  // `on: workflow_call:`. A declaration is not a consumption and must not be counted as one.
-  cell('workflow_call secret DECLARATION is not consumption', () =>
-    surfaceA([
-      ['a.yml', 'on:\n  workflow_call:\n    secrets:\n      DEPLOY_KEY:\n        required: true\njobs:\n  a:\n    environment:\n      name: x\n    env:\n      K: ${{ secrets.DEPLOY_KEY }}\n'],
-      ['b.yml', bare],
-    ], { MY_KEY: 'r' }), 'GREEN')
-
-  // 🔴 Cursor Bugbot's review of #291, 2026-10-26: five shapes that v4 answered GREEN. Each cell is
-  // the shape that passed; every one was provoked against v4 before it was fixed.
-  cell('Bugbot: a step input named environment: is not the gate', () =>
-    surfaceA(wf('jobs:\n  a:\n    steps:\n      - uses: x/y@v1\n        with:\n          environment: prod\n        env:\n          K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell('Bugbot: a matrix key named environment: is not the gate', () =>
-    surfaceA(wf('jobs:\n  a:\n    strategy:\n      matrix:\n        environment: [a, b]\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell('Bugbot: a job key with an inline comment starts its own job', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment: prod\n  b: # deploy job\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell('an unknown line at job indentation -> instrument, not guessed', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment: prod\n  b: { runs-on: x }\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'INSTRUMENT')
-  cell('Bugbot: an environment with no branch policy gates nothing', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment: copilot\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell('an environment named by an expression cannot be confirmed', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment: ${{ inputs.target }}\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell('Bugbot: secrets: inherit with an inline comment is still inherit', () =>
-    surfaceA(wf('jobs:\n  call:\n    uses: ./x.yml\n    secrets: inherit # all of them\n'), {}), 'RED')
-  cell('Bugbot (#293): environment: "" is no environment', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment: ""\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n'), {}), 'RED')
-  cell("Bugbot (#293): environment: { name: '' } is no environment", () =>
-    surfaceA(wf("jobs:\n  a:\n    environment: { name: '' }\n    env:\n      K: ${{ secrets.LEAKY_KEY }}\n"), {}), 'RED')
-  // The repairs must not turn the valid forms red: the inline name with a comment, the mapping
-  // form deploy-web.yml uses, and the flow mapping.
-  cell('environment: NAME # comment still gates', () =>
-    surfaceA(wf('jobs:\n  a:\n    environment: prod # gated\n    env:\n      K: ${{ secrets.MY_KEY }}\n'), {}), 'GREEN')
-  cell('environment: { name: NAME } still gates', () =>
-    surfaceA(wf("jobs:\n  a:\n    environment: { name: 'prod', url: x }\n    env:\n      K: ${{ secrets.MY_KEY }}\n"), {}), 'GREEN')
+  // Table-shaped cells, kept as data in secret-hygiene.cells.json: each is one workflow (alone, or
+  // beside `bare`) checked by surface A against an allowlist, with the colour it must give. The
+  // groups and their reasons are grundtone's (2026-10-22 provoked holes, the folded expression,
+  // Bugbot on #291 and #293); the cells are the same, only moved out of code.
+  for (const group of readCellTable()) {
+    for (const c of group.cells) {
+      const files = c.besideBare ? [['a.yml', c.workflow], ['b.yml', bare]] : wf(c.workflow)
+      cell(c.label, () => surfaceA(files, c.allow ?? {}), c.expect)
+    }
+  }
 
   // 🔴 THE REAL-CORPUS CELL. The lesson of v3: 32 synthetic cells could not find the prose false
   // positive, because every fixture was written by the author of the parser. A test suite with no

@@ -107,13 +107,28 @@ describe('secret-hygiene.mjs exit codes', () => {
   })
 
   const failures = [
-    ['an empty token', '', { status: 200, body: GOOD }, /GITHUB_TOKEN is empty/],
-    ['HTTP 403', 't', { status: 403, body: {} }, /answered HTTP 403/],
-    ['a response with no array', 't', { status: 200, body: { total_count: 1 } }, /carries no array/],
-    ['0 environments', 't', { status: 200, body: { total_count: 0, environments: [] } }, /0 environments returned/],
-    ['total_count 31 with only 30 served', 't', { status: 200, body: thirtyOfThirtyOne }, /read 30 but total_count says 31/],
+    { label: 'an empty token', token: '', served: { status: 200, body: GOOD }, message: /GITHUB_TOKEN is empty/ },
+    { label: 'HTTP 403', token: 't', served: { status: 403, body: {} }, message: /answered HTTP 403/ },
+    {
+      label: 'a response with no array',
+      token: 't',
+      served: { status: 200, body: { total_count: 1 } },
+      message: /carries no array/,
+    },
+    {
+      label: '0 environments',
+      token: 't',
+      served: { status: 200, body: { total_count: 0, environments: [] } },
+      message: /0 environments returned/,
+    },
+    {
+      label: 'total_count 31 with only 30 served',
+      token: 't',
+      served: { status: 200, body: thirtyOfThirtyOne },
+      message: /read 30 but total_count says 31/,
+    },
   ]
-  for (const [label, token, served, message] of failures) {
+  for (const { label, token, served, message } of failures) {
     it(`exits 2 with a message on ${label}`, async () => {
       reply = served
       const r = await run(token)

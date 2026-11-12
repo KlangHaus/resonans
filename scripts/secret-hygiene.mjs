@@ -141,4 +141,4 @@ async function main(argv) {
   return EXIT_OK
 }
 
-main(process.argv.slice(2)).then((c) => process.exit(c))
+process.exit(await main(process.argv.slice(2)))
